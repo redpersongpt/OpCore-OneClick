@@ -9,16 +9,11 @@ on:
       tag:
         description: 'Release tag (e.g. v2.1.3-beta)'
         required: true
-        default: 'v2.2.0'
-      windows_only:
-        description: 'Build Windows only (hotfix pass)'
-        type: boolean
-        default: false
+        default: 'v2.2.2'
 
 jobs:
-  build-mac:
-    if: ${{ github.event.inputs.windows_only != 'true' }}
-    runs-on: macos-latest
+  verify:
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -26,17 +21,17 @@ jobs:
           node-version: 20
           cache: npm
       - run: npm ci
-      - name: Build (Vite + TS + electron-builder macOS)
-        run: npx tsc && npx tsc -p electron/tsconfig.json && npx vite build && npx electron-builder --mac dmg --x64 --arm64 --publish never
-        env:
-          CSC_IDENTITY_AUTO_DISCOVERY: false
-      - uses: actions/upload-artifact@v4
-        with:
-          name: mac-dmg
-          path: release/*.dmg
+      - name: Verify renderer types
+        run: npm run lint
+      - name: Verify Electron types
+        run: npx tsc -p electron/tsconfig.json --noEmit
+      - name: Run tests
+        run: npm test
+      - name: Build application bundles
+        run: npm run build
 
   build-linux:
-    if: ${{ github.event.inputs.windows_only != 'true' }}
+    needs: verify
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -47,8 +42,8 @@ jobs:
       - run: npm ci
       - name: Install Linux build dependencies
         run: sudo apt-get install -y rpm fakeroot dpkg
-      - name: Build (Vite + TS)
-        run: npx tsc && npx tsc -p electron/tsconfig.json && npx vite build
+      - name: Build application bundles
+        run: npm run build
       - name: Package Linux targets
         run: npx electron-builder --linux AppImage deb --x64 --publish never
       - uses: actions/upload-artifact@v4
@@ -59,6 +54,7 @@ jobs:
             release/*.deb
 
   build-windows:
+    needs: verify
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
@@ -67,8 +63,8 @@ jobs:
           node-version: 20
           cache: npm
       - run: npm ci
-      - name: Build (Vite + TS)
-        run: npx tsc && npx tsc -p electron/tsconfig.json && npx vite build
+      - name: Build application bundles
+        run: npm run build
       - name: Package Windows
         run: npx electron-builder --win nsis --x64 --publish never
       - uses: actions/upload-artifact@v4
@@ -77,8 +73,8 @@ jobs:
           path: release/*.exe
 
   publish-release:
-    needs: [build-mac, build-linux, build-windows]
-    if: always() && needs.build-windows.result == 'success'
+    needs: [build-linux, build-windows]
+    if: needs.build-linux.result == 'success' && needs.build-windows.result == 'success'
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -101,42 +97,23 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ steps.tag.outputs.name }}
-          name: "v2.2.0 — EFI Intelligence & Community Knowledge"
+          name: "${{ steps.tag.outputs.name }}"
           body: |
-            macOS One-Click v2.2.0
+            macOS One-Click ${{ steps.tag.outputs.name }}
 
-            Major feature release — the app now understands your hardware and explains every decision it makes.
+            This release publishes verified Windows and Linux packages only.
 
-            **New: EFI Intelligence Report**
-            - Confidence score (0–100) based on CPU maturity, GPU driver support, kext complexity, and known quirks
-            - SMBIOS selection reasoning — why this Mac identity was chosen and what the alternatives are
-            - Every kext explained with context-specific reasoning
-            - Every boot argument documented with impact level
-            - Known limitations surfaced with workarounds (DRM, sleep, Wi-Fi, GPU ceiling)
+            Included assets:
+            - Windows NSIS installer
+            - Linux AppImage
+            - Linux Debian package
 
-            **New: Community Knowledge Panel**
-            - 15 curated issues covering AMD, Intel, NVIDIA, audio, USB, Wi-Fi, and boot troubleshooting
-            - Hardware-aware filtering — only shows issues relevant to your specific configuration
-            - Expandable fix/workaround cards with source citations
+            Not included:
+            - macOS packaged build
 
-            **New: Failure Explainer Engine**
-            - Translates raw validation codes into human-readable explanations
-            - What happened, why it matters, and what to do about it
-
-            **New: EFI Diff System & Build Timeline**
-            - Track what changed between EFI rebuilds (kexts, SMBIOS, boot args, SSDTs)
-            - Vercel-style build log with live elapsed timer and step status
-
-            **Polish**
-            - Hardware verdict sentence on scan results ("Coffee Lake with UHD 630 targeting Sonoma — well-proven configuration")
-            - System summary line on completion screen
-            - Staggered card animations on hardware report
-            - Human-readable confidence labels in compatibility summary
-            - Richer build stage descriptions with live hardware context
-
-            ⚠ Important:
-            - The app erases the selected USB drive — use a non-critical drive.
-            - Manual BIOS configuration is still required on the target machine.
+            Notes:
+            - The app's destructive flash safety, BIOS gating, EFI validation, and tokenized authorization are unchanged.
+            - This release fixes the Electron package entry so published Windows/Linux packages contain the correct main-process bootstrap.
           files: release-artifacts/**/*
           draft: false
           prerelease: false

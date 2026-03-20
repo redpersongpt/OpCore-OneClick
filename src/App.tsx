@@ -2909,7 +2909,7 @@ export default function App() {
       <AnimatePresence>
         {debugOpen && (
           <DebugOverlay
-            appVersion="2.2.1"
+            appVersion="2.2.2"
             platform={platform}
             sessionId={debugSessionId}
             currentStep={step}
