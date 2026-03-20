@@ -23,14 +23,9 @@ export type ConfigStrategy =
   | 'conservative'
   | 'blocked';
 
-export type CompatibilityPlanningMode = 'safe' | 'exploratory';
 export type CompatibilityGuidanceSource = 'rule' | 'community' | 'fallback';
 export type CompatibilityGuidanceConfidence = 'high' | 'medium' | 'low';
 export type CompatibilityFailureLikelihood = 'very likely' | 'likely' | 'possible';
-
-export interface CompatibilityOptions {
-  planningMode?: CompatibilityPlanningMode;
-}
 
 export interface CompatibilityNextAction {
   title: string;
@@ -211,7 +206,6 @@ function buildCompatibilityNextActions(
   targetVersion: number,
   bestDisplayPathName: string | null,
   bestSelectedDisplayPathName: string | null,
-  planningMode: CompatibilityPlanningMode,
 ): CompatibilityNextAction[] {
   const actions: CompatibilityNextAction[] = [];
   const addAction = (action: CompatibilityNextAction): void => {
@@ -233,7 +227,7 @@ function buildCompatibilityNextActions(
     });
 
     addAction({
-      title: 'Run Safe Simulation before building for real hardware',
+      title: 'Run Simulation before testing real hardware',
       detail: 'Use Safe Simulation to preview the generated EFI, validation findings, and resource plan before you spend time troubleshooting a manual install path.',
       source: 'rule',
       confidence: 'high',
@@ -323,10 +317,10 @@ function buildCompatibilityNextActions(
     });
   }
 
-  if (planningMode === 'exploratory') {
+  if (report.level === 'experimental' || report.level === 'risky') {
     addAction({
       title: 'Change one variable at a time once the conservative base boots',
-      detail: 'Exploratory mode is for stretch targets, not random churn. Stabilize the conservative target first, then test one change at a time: newer macOS, alternate SMBIOS, alternate layout-id, or a different input stack.',
+      detail: 'Stabilize the conservative target first, then test one change at a time: newer macOS, alternate SMBIOS, alternate layout-id, or a different input stack.',
       source: 'fallback',
       confidence: report.level === 'risky' ? 'low' : 'medium',
     });
@@ -341,7 +335,7 @@ function buildCompatibilityNextActions(
     }
   }
 
-  return actions.slice(0, planningMode === 'exploratory' ? 6 : 5);
+  return actions.slice(0, 6);
 }
 
 interface FailurePointCandidate extends CompatibilityFailurePoint {
@@ -360,7 +354,6 @@ function buildMostLikelyFailurePoints(
   targetVersion: number,
   bestDisplayPathName: string | null,
   bestSelectedDisplayPathName: string | null,
-  planningMode: CompatibilityPlanningMode,
 ): CompatibilityFailurePoint[] {
   const candidates = new Map<string, FailurePointCandidate>();
   const addCandidate = (
@@ -458,7 +451,7 @@ function buildMostLikelyFailurePoints(
       title: 'Selected macOS version is above the community comfort zone',
       detail: `Similar hardware is documented most strongly around ${report.communityEvidence.highestReportedVersion}. Newer versions may still boot, but they are the first place to expect breakage.`,
       source: 'community',
-      weight: planningMode === 'exploratory' ? 7 : 9,
+      weight: 8,
     });
   } else if (report.level === 'risky' && isOlderIntelLaptop(profile)) {
     addCandidate('older-platform', {
@@ -482,9 +475,7 @@ function hasLegacyIntelPlanningValue(profile: HardwareProfile): boolean {
 
 export function checkCompatibility(
   profile: HardwareProfile,
-  options: CompatibilityOptions = {},
 ): CompatibilityReport {
-  const planningMode = options.planningMode ?? 'safe';
   const report: CompatibilityReport = {
     level: 'supported',
     strategy: 'canonical',
@@ -813,7 +804,6 @@ export function checkCompatibility(
     targetVersion,
     bestAnyDisplayPath?.name ?? null,
     bestSelectedDisplayPath?.name ?? null,
-    planningMode,
   );
   report.advisoryConfidence = buildCompatibilityAdvisoryConfidence(profile, report, targetVersion);
   report.mostLikelyFailurePoints = buildMostLikelyFailurePoints(
@@ -822,7 +812,6 @@ export function checkCompatibility(
     targetVersion,
     bestAnyDisplayPath?.name ?? null,
     bestSelectedDisplayPath?.name ?? null,
-    planningMode,
   );
 
   return report;

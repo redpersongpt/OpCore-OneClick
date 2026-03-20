@@ -1,13 +1,12 @@
 import React from 'react';
-import { AlertTriangle, CheckCircle, ChevronRight, Info, ShieldAlert } from 'lucide-react';
+import { AlertTriangle, CheckCircle, ChevronRight, Info, ShieldAlert, Sparkles } from 'lucide-react';
 import type { CompatibilityMatrixRow } from '../../electron/compatibilityMatrix';
-import type { CompatibilityPlanningMode } from '../../electron/compatibility';
+import { getMacOSPalette } from '../lib/macosPalette';
 
 interface CompatibilityMatrixProps {
   rows: CompatibilityMatrixRow[];
   selectedVersion?: string | null;
   onSelect?: (version: string) => void;
-  planningMode?: CompatibilityPlanningMode;
 }
 
 const STATUS_STYLE: Record<CompatibilityMatrixRow['status'], {
@@ -47,155 +46,73 @@ const STATUS_STYLE: Record<CompatibilityMatrixRow['status'], {
   },
 };
 
-function getVersionVisual(versionName: string): {
-  gradient: string;
-  accent: string;
-  label: string;
-} {
-  const normalized = versionName.toLowerCase();
-  if (normalized.includes('tahoe')) {
-    return {
-      gradient: 'from-[#1c3b70] via-[#2f74c0] to-[#b1d9ff]',
-      accent: 'bg-blue-300/70',
-      label: 'Tahoe',
-    };
-  }
-  if (normalized.includes('sequoia')) {
-    return {
-      gradient: 'from-[#16305a] via-[#3f6fb3] to-[#8cc7ff]',
-      accent: 'bg-cyan-200/75',
-      label: 'Sequoia',
-    };
-  }
-  if (normalized.includes('sonoma')) {
-    return {
-      gradient: 'from-[#41175c] via-[#9153d4] to-[#f3a4d5]',
-      accent: 'bg-fuchsia-200/75',
-      label: 'Sonoma',
-    };
-  }
-  if (normalized.includes('ventura')) {
-    return {
-      gradient: 'from-[#371d6a] via-[#4b7fd9] to-[#ff9bc2]',
-      accent: 'bg-indigo-200/75',
-      label: 'Ventura',
-    };
-  }
-  if (normalized.includes('monterey')) {
-    return {
-      gradient: 'from-[#62214d] via-[#d5678b] to-[#ffcf95]',
-      accent: 'bg-rose-200/75',
-      label: 'Monterey',
-    };
-  }
-  if (normalized.includes('big sur')) {
-    return {
-      gradient: 'from-[#144175] via-[#31a1d5] to-[#7df2ff]',
-      accent: 'bg-sky-200/75',
-      label: 'Big Sur',
-    };
-  }
-  return {
-    gradient: 'from-[#2c3142] via-[#5c6784] to-[#d8dde8]',
-    accent: 'bg-slate-200/70',
-    label: 'macOS',
-  };
-}
-
 export default function CompatibilityMatrix({
   rows,
   selectedVersion,
   onSelect,
-  planningMode = 'safe',
 }: CompatibilityMatrixProps) {
   return (
-    <div className="space-y-3">
+    <div className="grid gap-3 lg:grid-cols-2">
       {rows.map((row) => {
         const style = STATUS_STYLE[row.status];
-        const visual = getVersionVisual(row.versionName);
+        const palette = getMacOSPalette(row.versionName);
         const selected = selectedVersion === row.versionName;
         const interactive = !!onSelect && !style.disabled;
         const content = (
-          <div className={`rounded-[28px] border p-4 md:p-5 transition-all ${style.cardClassName} ${row.recommended ? 'shadow-[0_18px_50px_rgba(37,99,235,0.12)]' : ''} ${selected ? 'ring-1 ring-blue-400/40 border-blue-400/35 shadow-[0_0_0_1px_rgba(96,165,250,0.15)]' : 'border-white/8'} ${interactive ? 'hover:border-white/20 hover:bg-white/6' : ''}`}>
-            <div className="grid gap-4 md:grid-cols-[220px,1fr] md:items-center">
-              <div className={`relative overflow-hidden rounded-[22px] border border-white/10 p-3 ${row.status === 'blocked' ? 'opacity-75 saturate-50' : ''}`}>
-                <div className={`absolute inset-0 bg-gradient-to-br ${visual.gradient}`} />
-                <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_left,rgba(255,255,255,0.26),transparent_38%)]" />
-                <div className="absolute inset-x-0 top-0 h-1.5 bg-white/12" />
-                <div className="relative flex h-full min-h-[156px] flex-col justify-between rounded-[18px] border border-white/10 bg-black/12 p-4">
-                  <div className="flex items-center justify-between">
-                    <div className="text-[10px] font-bold uppercase tracking-[0.24em] text-white/70">macOS</div>
-                    <div className={`h-2.5 w-2.5 rounded-full ${visual.accent}`} />
+          <div className={`group relative min-h-[212px] overflow-hidden rounded-[26px] border p-5 text-left transition-all ${row.recommended ? `${palette.heroClassName} shadow-[0_18px_60px_rgba(37,99,235,0.14)]` : 'bg-white/[0.045]'} ${style.cardClassName} ${selected ? 'ring-1 ring-blue-400/40 border-blue-400/35 shadow-[0_0_0_1px_rgba(96,165,250,0.12)]' : 'border-white/8'} ${interactive ? 'hover:border-white/18 hover:bg-white/[0.065]' : ''} ${row.status === 'blocked' ? 'opacity-80' : ''}`}>
+            <div className={`pointer-events-none absolute inset-x-0 top-0 h-28 bg-gradient-to-br ${palette.fieldClassName}`} />
+            <div className={`pointer-events-none absolute -right-12 top-[-42px] h-36 w-36 rounded-full blur-3xl ${palette.glowClassName}`} />
+            <div className="pointer-events-none absolute inset-x-0 top-0 h-px bg-white/20" />
+            <div className="flex h-full flex-col gap-4">
+              <div className="flex items-start justify-between gap-3">
+                <div className="space-y-2">
+                  <div className="text-[10px] font-bold uppercase tracking-[0.2em] text-white/38">
+                    {palette.tone}
                   </div>
-                  <div>
-                    <div className="text-2xl font-black tracking-tight text-white">
-                      {row.versionName.replace(/^macOS\s+/i, '')}
-                    </div>
-                    <div className="mt-1 text-[11px] font-semibold uppercase tracking-[0.18em] text-white/70">
-                      {visual.label}
-                    </div>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <div className="text-xl font-black tracking-tight text-white">{row.versionName}</div>
+                    {row.recommended && (
+                      <span className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[10px] font-black uppercase tracking-[0.18em] ${palette.badgeClassName}`}>
+                        <Sparkles className="h-3.5 w-3.5" />
+                        Recommended
+                      </span>
+                    )}
+                    {selected && (
+                      <span className="rounded-full border border-white/10 bg-white/10 px-2 py-1 text-[9px] font-bold uppercase tracking-[0.16em] text-white/75">
+                        Selected
+                      </span>
+                    )}
                   </div>
-                  <div className="text-[11px] text-white/70">
-                    {row.status === 'supported'
-                      ? 'Best first build'
-                      : row.status === 'experimental'
-                      ? 'Tweak-aware path'
-                      : row.status === 'risky'
-                      ? 'Manual fixes likely'
-                      : 'Readable but unavailable'}
+                  <div className="flex flex-wrap gap-2">
+                    <div className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.16em] ${style.badgeClassName}`}>
+                      {style.icon}
+                      {style.label}
+                    </div>
+                    <div className="rounded-full border border-white/10 bg-black/18 px-2.5 py-1 text-[10px] font-medium text-white/48">
+                      {row.status === 'supported'
+                        ? 'Cleanest first pass'
+                        : row.status === 'experimental'
+                        ? 'Community-proven with extra tuning'
+                        : row.status === 'risky'
+                        ? 'Manual fixes likely'
+                        : 'Visible for reference only'}
+                    </div>
                   </div>
                 </div>
               </div>
 
-              <div className="flex-1">
-                <div className="flex flex-wrap items-center gap-2">
-                  <div className="text-lg font-bold text-white">{row.versionName}</div>
-                  {row.recommended && (
-                    <span className="px-2.5 py-1 rounded-full bg-blue-500/18 border border-blue-400/28 text-[10px] font-black uppercase tracking-[0.18em] text-blue-200">
-                      {planningMode === 'safe' ? 'Recommended' : 'Best Exploratory Start'}
-                    </span>
-                  )}
-                  {row.status === 'risky' && (
-                    <span className={`px-2 py-0.5 rounded-full border text-[9px] font-bold uppercase tracking-widest ${
-                      planningMode === 'exploratory'
-                        ? 'bg-amber-500/15 border-amber-500/25 text-amber-200'
-                        : 'bg-white/6 border-white/10 text-white/55'
-                    }`}>
-                      {planningMode === 'exploratory' ? 'Exploratory Candidate' : 'Advanced Only'}
-                    </span>
-                  )}
-                  {selected && (
-                    <span className="px-2 py-0.5 rounded-full bg-white/10 border border-white/10 text-[9px] font-bold uppercase tracking-widest text-white/70">
-                      Selected
-                    </span>
-                  )}
-                </div>
+              <div className="text-sm leading-relaxed text-white/72">
+                {row.reason}
+              </div>
 
-                <div className="mt-3 flex flex-wrap gap-2">
-                  <div className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full border text-[10px] font-bold uppercase tracking-widest ${style.badgeClassName}`}>
-                    {style.icon}
-                    {style.label}
-                  </div>
-                  {row.recommended && (
-                    <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full border border-white/10 bg-white/6 text-[10px] font-bold uppercase tracking-widest text-white/55">
-                      Start Here
-                    </div>
-                  )}
-                </div>
-
-                <div className="mt-4 text-sm leading-relaxed text-white/72">
-                  {row.reason}
-                </div>
-
-                <div className="mt-3 text-[11px] leading-relaxed text-white/45">
-                  {row.status === 'blocked'
-                    ? 'This target remains blocked. Pick the recommended alternative instead of forcing this version.'
-                    : row.status === 'supported'
-                    ? 'This is the cleanest path for a first build on this hardware.'
-                    : row.status === 'experimental'
-                    ? 'This path is community-realistic, but it may want older macOS ceilings or extra firmware tuning.'
-                    : 'This path is for advanced users. Expect manual fixes before it feels reliable.'}
-                </div>
+              <div className="mt-auto border-t border-white/8 pt-3 text-[11px] leading-relaxed text-white/46">
+                {row.status === 'blocked'
+                  ? 'Not available for build. Use the recommended version instead of forcing this target.'
+                  : row.status === 'supported'
+                  ? 'Best starting point if you want the least friction during the first build.'
+                  : row.status === 'experimental'
+                  ? 'Reasonable real-world path, but expect firmware tuning, older ceilings, or one or two manual fixes.'
+                  : 'Worth trying only if you are prepared to troubleshoot audio, sleep, graphics, or input issues yourself.'}
               </div>
             </div>
           </div>

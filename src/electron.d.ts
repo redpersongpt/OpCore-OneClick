@@ -62,7 +62,7 @@ declare global {
       getOpsTail: (n: number) => Promise<any[]>;
       logClear: () => Promise<boolean>;
       getSessionId: () => Promise<string>;
-      reportIssue: () => Promise<{ success: boolean; body: string; baseUrl: string }>;
+      reportIssue: (extraContext?: string | null) => Promise<{ success: boolean; body: string; baseUrl: string }>;
       importRecovery: (targetPath: string, macOSVersion: string) => Promise<{ dmgPath: string; recoveryDir: string } | null>;
       getCachedRecoveryInfo: (version: string) => Promise<any>;
       clearRecoveryCache: (version: string) => Promise<boolean>;

@@ -274,7 +274,7 @@ function triggerLabel(trigger: IssueReportTrigger): string {
   }
 }
 
-export function buildIssueReportDraft(snapshot: PublicDiagnosticsSnapshot): IssueReportDraft {
+export function buildIssueReportDraft(snapshot: PublicDiagnosticsSnapshot, extraContext?: string | null): IssueReportDraft {
   const triggerCode = triggerLabel(snapshot.trigger);
   const summary = snapshot.lastFailure?.message
     ?? snapshot.lastError
@@ -350,6 +350,9 @@ export function buildIssueReportDraft(snapshot: PublicDiagnosticsSnapshot): Issu
       ? snapshot.recentLogs.map((entry) => `${entry.at} [${entry.level}] ${entry.ctx}: ${entry.message}`).join('\n')
       : 'No recent WARN/ERROR logs captured.',
     '```',
+    ...(extraContext?.trim()
+      ? ['', '## Extra Context', redactSensitiveText(extraContext)]
+      : []),
   ].join('\n');
 
   return { title, body, trigger: snapshot.trigger };

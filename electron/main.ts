@@ -3592,9 +3592,9 @@ app.whenReady().then(async () => {
   });
 
   // Issue reporter
-  ipcHandle('report-issue', async () => {
+  ipcHandle('report-issue', async (_event: Electron.IpcMainInvokeEvent, extraContext?: string | null) => {
     const snapshot = buildCurrentDiagnosticsSnapshot();
-    const draft = buildIssueReportDraft(snapshot);
+    const draft = buildIssueReportDraft(snapshot, extraContext ?? null);
     const baseUrl = 'https://github.com/redpersongpt/macOS-One-Click/issues/new';
     // Only put the short title in the URL — body goes to clipboard to avoid
     // URL-length truncation issues across platforms/browsers.

@@ -9,7 +9,6 @@ import BrandIcon from './components/BrandIcon';
 import { getBIOSSettings, getRequiredResources, getSMBIOSForProfile, type HardwareProfile, type BIOSConfig } from '../electron/configGenerator';
 import {
   checkCompatibility,
-  type CompatibilityPlanningMode,
   type CompatibilityReport,
 } from '../electron/compatibility';
 import { buildCompatibilityMatrix } from '../electron/compatibilityMatrix';
@@ -42,6 +41,7 @@ import type { ValidationResult } from '../electron/configValidator';
 import { generateEfiReport, type EfiReport } from './lib/efiReport';
 import { getRelevantIssues, type CommunityIssue } from './data/communityKnowledge';
 import { useTaskManager } from './hooks/useTaskManager';
+import type { TaskKind, TaskState } from '../electron/taskManager';
 import { BEGINNER_SAFETY_MODE } from './config';
 import { getSuggestionPayload, type Suggestion } from './lib/suggestionEngine';
 import { buildFailureRecoveryViewModel, parseFailureRecoveryPayload } from './lib/failureRecovery.js';
@@ -60,7 +60,14 @@ import {
   evaluateDeployGuard,
   type FlowGuardResult,
 } from './lib/stateMachine.js';
-import { evaluateStepTransition, type StepId } from './lib/installStepGuards.js';
+import type { StepGuardState, StepId } from './lib/installStepGuards.js';
+import {
+  buildBuildFlowContext,
+  evaluateBuildFlowStall,
+  evaluateStepTransitionWithOverrides,
+  latestTaskByKind,
+  type BuildFlowSnapshot,
+} from './lib/buildFlowMonitor.js';
 import type { PreflightReport, ConfidenceLevel } from '../electron/preventionLayer';
 import type { BuildPlan, RecoveryDryRun, Certainty } from '../electron/deterministicLayer';
 import type {
@@ -126,7 +133,7 @@ declare global {
       logClear: () => Promise<boolean>;
       getSessionId: () => Promise<string>;
       // Issue reporter
-      reportIssue: () => Promise<{ success: boolean; body: string; baseUrl: string }>;
+      reportIssue: (extraContext?: string | null) => Promise<{ success: boolean; body: string; baseUrl: string }>;
       // Recovery Cache & Import
       importRecovery: (targetPath: string, macOSVersion: string) => Promise<{ dmgPath: string; recoveryDir: string } | null>;
       getCachedRecoveryInfo: (version: string) => Promise<any>;
@@ -294,7 +301,14 @@ export default function App() {
   const [resourcePlan, setResourcePlan] = useState<ResourcePlan | null>(null);
   const [safeSimulationResult, setSafeSimulationResult] = useState<SafeSimulationResult | null>(null);
   const [simulationRunning, setSimulationRunning] = useState(false);
-  const [planningMode, setPlanningMode] = useState<CompatibilityPlanningMode>('safe');
+  const [buildFlow, setBuildFlow] = useState<BuildFlowSnapshot | null>(null);
+  const [buildFlowAlert, setBuildFlowAlert] = useState<{
+    level: 'taking_longer' | 'stalled';
+    reason: string;
+    pendingCondition: string | null;
+  } | null>(null);
+  const buildFlowRef = useRef<BuildFlowSnapshot | null>(null);
+  const buildRunIdRef = useRef(0);
 
   // ── Debug Overlay ──────────────────────────────────────────────
   const [debugOpen, setDebugOpen] = useState(false);
@@ -326,8 +340,8 @@ export default function App() {
     [biosFlowState, buildReady, compatibilityBlocked, efiPath, profile, step, validationBlocked],
   );
   const compatibilityMatrix = useMemo(
-    () => (profile ? buildCompatibilityMatrix(profile, { planningMode }) : null),
-    [planningMode, profile],
+    () => (profile ? buildCompatibilityMatrix(profile) : null),
+    [profile],
   );
   const localBuildGuard = useMemo(
     () => evaluateBuildGuard({
@@ -351,29 +365,42 @@ export default function App() {
 
   useEffect(() => {
     if (!profile) return;
-    const nextCompat = checkCompatibility(profile, { planningMode });
+    const nextCompat = checkCompatibility(profile);
     setCompat(nextCompat);
     setProfile((currentProfile) => {
       if (!currentProfile || currentProfile.strategy === nextCompat.strategy) return currentProfile;
       return { ...currentProfile, strategy: nextCompat.strategy };
     });
-  }, [planningMode, profile]);
+  }, [profile]);
 
   useEffect(() => {
     if (!profile || !compat || !validationResult || !buildReady) return;
     try {
       setEfiReport(generateEfiReport(profile, compat, kextResults, validationResult));
     } catch (error) {
-      debugWarn('[efi-report] Failed to refresh report after planning mode change:', error);
+      debugWarn('[efi-report] Failed to refresh report after compatibility refresh:', error);
     }
-  }, [buildReady, compat, kextResults, planningMode, profile, validationResult]);
+  }, [buildReady, compat, kextResults, profile, validationResult]);
 
   // ── Task Manager ────────────────────────────────────────────────
   const { tasks, activeTask, cancelTask } = useTaskManager();
+  const latestTasks = useMemo(() => {
+    const latest = new Map<TaskKind, TaskState>();
+    for (const task of tasks.values()) {
+      const current = latest.get(task.kind);
+      if (!current || task.startedAt > current.startedAt || task.lastUpdateAt > current.lastUpdateAt) {
+        latest.set(task.kind, task);
+      }
+    }
+    return latest;
+  }, [tasks]);
   const recovTask = activeTask('recovery-download');
   const kextTask  = activeTask('kext-fetch');
   const efiTask   = activeTask('efi-build');
   const flashTask = activeTask('usb-flash');
+  const latestEfiTask = latestTaskByKind(tasks.values(), 'efi-build') ?? latestTasks.get('efi-build');
+  const latestKextTask = latestTaskByKind(tasks.values(), 'kext-fetch') ?? latestTasks.get('kext-fetch');
+  const latestRecoveryTask = latestTaskByKind(tasks.values(), 'recovery-download') ?? latestTasks.get('recovery-download');
 
   const isImportingRef = useRef(false);
   const isRetryingRecovRef = useRef(false);
@@ -381,6 +408,92 @@ export default function App() {
   const lastRuntimeErrorRef = useRef<string | null>(null);
   const logUiEvent = (eventName: string, detail?: Record<string, unknown> | null) => {
     window.electron?.logUiEvent?.(eventName, detail ?? null).catch(() => {});
+  };
+  const updateBuildFlow = (
+    updater: BuildFlowSnapshot | null | ((current: BuildFlowSnapshot | null) => BuildFlowSnapshot | null),
+  ) => {
+    setBuildFlow((current) => {
+      const next = typeof updater === 'function'
+        ? updater(current)
+        : updater;
+      buildFlowRef.current = next;
+      return next;
+    });
+  };
+  const buildStepGuardState = (overrides?: Partial<StepGuardState>): StepGuardState => ({
+    profile,
+    compat,
+    hasLiveHardwareContext,
+    biosReady,
+    buildReady,
+    efiPath,
+    biosConf,
+    selectedUsb,
+    compatibilityBlocked,
+    validationBlocked,
+    postBuildReady,
+    localBuildGuard,
+    localDeployGuard,
+    ...(overrides ?? {}),
+  });
+  const describeBuildFlowFailure = (reason: string, targetStep?: StepId) => {
+    const snapshot = buildFlowRef.current;
+    const pending = snapshot?.pendingRendererExpectation
+      ? `The app was still waiting for ${snapshot.pendingRendererExpectation}.`
+      : 'The app did not receive the terminal build signal it expected.';
+    return JSON.stringify({
+      message: snapshot?.phase === 'stalled' ? 'Build stalled' : 'Build interrupted',
+      explanation: reason,
+      decisionSummary: pending,
+      suggestion: 'Retry the build. If it stalls again, copy the report and include the saved support log.',
+      contextNote: buildBuildFlowContext(snapshot),
+      code: 'build_flow_stalled',
+      severity: 'error',
+      targetStep: targetStep ?? snapshot?.uiStep ?? step,
+      rawMessage: reason,
+    });
+  };
+  const triggerBuildFlowRecovery = (reason: string, pendingCondition?: string | null, targetStep?: StepId) => {
+    const snapshot = buildFlowRef.current;
+    logUiEvent('build_flow_stalled', {
+      phase: snapshot?.phase ?? 'unknown',
+      uiStep: snapshot?.uiStep ?? step,
+      activeTaskKind: snapshot?.activeTaskKind ?? null,
+      activeTaskStatus: snapshot?.activeTaskStatus ?? null,
+      pendingRendererExpectation: pendingCondition ?? snapshot?.pendingRendererExpectation ?? null,
+      reason,
+    });
+    buildRunIdRef.current += 1;
+    isDeployingRef.current = false;
+    updateBuildFlow((current) => current ? {
+      ...current,
+      active: false,
+      phase: 'stalled',
+      stalledReason: reason,
+    } : current);
+    setBuildFlowAlert({
+      level: 'stalled',
+      reason,
+      pendingCondition: pendingCondition ?? snapshot?.pendingRendererExpectation ?? null,
+    });
+    setGlobalError(describeBuildFlowFailure(reason, targetStep));
+  };
+  const advanceToMethodSelect = (resolvedEfiPath?: string | null) => {
+    const nextEfiPath = resolvedEfiPath ?? efiPath;
+    const transition = attemptStepTransition('method-select', {
+      buildReady: true,
+      efiPath: nextEfiPath,
+      validationBlocked: false,
+      postBuildReady: Boolean(nextEfiPath) && !compatibilityBlocked && biosReady,
+    });
+    if (!transition?.ok) {
+      setGlobalError(describeBuildFlowFailure(
+        transition?.reason ?? 'The build completed, but the next installation step could not open.',
+        transition?.redirect ?? 'report',
+      ));
+      return false;
+    }
+    return true;
   };
   const handleImportRecovery = async () => {
     if (!efiPath || !profile?.targetOS || isImportingRef.current) return;
@@ -391,7 +504,7 @@ export default function App() {
       if (res) {
         setRecovPct(100);
         setRecovStatus('Recovery imported manually.');
-        setStep('method-select');
+        advanceToMethodSelect(efiPath);
       } else {
         setRecovError('Import returned no result — the file may be invalid or missing.');
       }
@@ -470,7 +583,17 @@ export default function App() {
     logUiEvent('step_changed', { step });
   }, [step]);
 
+  useEffect(() => {
+    if (step !== 'building' && step !== 'kext-fetch' && step !== 'recovery-download') {
+      setBuildFlowAlert((current) => current?.level === 'taking_longer' ? null : current);
+    }
+  }, [step]);
+
   const invalidateGeneratedBuild = () => {
+    buildRunIdRef.current += 1;
+    buildFlowRef.current = null;
+    setBuildFlow(null);
+    setBuildFlowAlert(null);
     setEfiPath(null);
     setBuildReady(false);
     setValidationResult(null);
@@ -525,7 +648,7 @@ export default function App() {
     activeProfile: HardwareProfile,
     options?: { surfaceError?: boolean },
   ): Promise<FlowGuardResult> => {
-    const activeCompat = checkCompatibility(activeProfile, { planningMode });
+    const activeCompat = checkCompatibility(activeProfile);
     setCompat(activeCompat);
 
     if (!hasLiveHardwareContext) {
@@ -556,7 +679,7 @@ export default function App() {
     activeEfiPath: string,
     options?: { surfaceError?: boolean; reasonSuffix?: string },
   ): Promise<{ guard: FlowGuardResult; validation: ValidationResult | null }> => {
-    const activeCompat = checkCompatibility(activeProfile, { planningMode });
+    const activeCompat = checkCompatibility(activeProfile);
     setCompat(activeCompat);
 
     if (!hasLiveHardwareContext) {
@@ -606,30 +729,24 @@ export default function App() {
   // ── Guarded step transition ─────────────────────────────────────
   // Validates prerequisites before allowing navigation to a new step.
   // If prerequisites fail, shows an error and redirects to a safe earlier step.
-  const setStep = (target: StepId) => {
-    const result = evaluateStepTransition(target, {
-      profile,
-      compat,
-      hasLiveHardwareContext,
-      biosReady,
-      buildReady,
-      efiPath,
-      biosConf,
-      selectedUsb,
-      compatibilityBlocked,
-      validationBlocked,
-      postBuildReady,
-      localBuildGuard,
-      localDeployGuard,
-    });
+  const attemptStepTransition = (target: StepId, overrides?: Partial<StepGuardState>) => {
+    const result = evaluateStepTransitionWithOverrides(target, buildStepGuardState(), overrides);
     if (!result.ok) {
       debugWarn(`[guard] Blocked transition to "${target}": ${result.reason}`);
       logUiEvent('step_transition_blocked', { target, redirect: result.redirect ?? null, reason: result.reason ?? 'blocked' });
       if (result.redirect) _setStepRaw(result.redirect);
-      return;
+      return result;
     }
     logUiEvent('step_transition_allowed', { target });
     _setStepRaw(target);
+    return result;
+  };
+
+  const setStep = (target: StepId) => {
+    const result = attemptStepTransition(target);
+    if (!result?.ok) {
+      return;
+    }
   };
 
   const refreshBiosState = async (activeProfile: HardwareProfile, options?: { redirectIfBlocked?: boolean }) => {
@@ -792,6 +909,17 @@ export default function App() {
         } catch {}
       }
     }
+    updateBuildFlow((current) => {
+      if (!current?.active || current.activeTaskKind !== 'recovery-download') return current;
+      return {
+        ...current,
+        activeTaskStatus: recovTask?.status ?? current.activeTaskStatus,
+        lastProgressAt: Date.now(),
+        lastTaskPhase: p.status ?? current.lastTaskPhase,
+        taskCompleteEventFired: recovTask?.status === 'complete',
+        stalledReason: null,
+      };
+    });
   }, [recovTask?.progress, recovClDest, recovDmgDest, recovOffset]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Drive kextResults / progress from the live kext task state
@@ -804,6 +932,17 @@ export default function App() {
     if (p.index !== undefined && p.total) {
       setProgress(Math.round((p.index / p.total) * 100));
     }
+    updateBuildFlow((current) => {
+      if (!current?.active || current.activeTaskKind !== 'kext-fetch') return current;
+      return {
+        ...current,
+        activeTaskStatus: kextTask?.status ?? current.activeTaskStatus,
+        lastProgressAt: Date.now(),
+        lastTaskPhase: p.kextName ? `${p.kextName} ${p.version ?? ''}`.trim() : current.lastTaskPhase,
+        taskCompleteEventFired: kextTask?.status === 'complete',
+        stalledReason: null,
+      };
+    });
   }, [kextTask?.progress]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Drive building progress from the live EFI build task state
@@ -811,7 +950,18 @@ export default function App() {
     const p = efiTask?.progress as { kind: string; phase?: string; detail?: string } | null | undefined;
     if (!p) return;
     if (p.phase) setStatus(p.phase);
-  }, [efiTask?.progress]);
+    updateBuildFlow((current) => {
+      if (!current?.active || current.activeTaskKind !== 'efi-build') return current;
+      return {
+        ...current,
+        activeTaskStatus: efiTask?.status ?? current.activeTaskStatus,
+        lastProgressAt: Date.now(),
+        lastTaskPhase: p.phase ?? current.lastTaskPhase,
+        taskCompleteEventFired: efiTask?.status === 'complete',
+        stalledReason: null,
+      };
+    });
+  }, [efiTask?.progress, efiTask?.status]);
 
   // Drive flash progress from the live usb-flash task state
   useEffect(() => {
@@ -824,6 +974,27 @@ export default function App() {
     else if (phase === 'eject') setProgress(95);
   }, [flashTask?.progress]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  useEffect(() => {
+    const task = buildFlowRef.current?.activeTaskKind === 'efi-build'
+      ? latestEfiTask
+      : buildFlowRef.current?.activeTaskKind === 'kext-fetch'
+      ? latestKextTask
+      : buildFlowRef.current?.activeTaskKind === 'recovery-download'
+      ? latestRecoveryTask
+      : null;
+    if (!task) return;
+    updateBuildFlow((current) => {
+      if (!current?.active || current.activeTaskKind !== task.kind) return current;
+      return {
+        ...current,
+        activeTaskStatus: task.status,
+        lastProgressAt: task.lastUpdateAt,
+        taskCompleteEventFired: task.status === 'complete',
+        stalledReason: task.status === 'failed' ? task.error ?? current.stalledReason : current.stalledReason,
+      };
+    });
+  }, [latestEfiTask, latestKextTask, latestRecoveryTask]);
+
   const filteredIssues = useMemo(() =>
     troubleshootingData.filter(it => {
       const matchCat = cat === 'All' || it.category === cat;
@@ -831,6 +1002,40 @@ export default function App() {
       const matchQ = !q || it.error.toLowerCase().includes(q) || it.fix.toLowerCase().includes(q) || it.category.toLowerCase().includes(q);
       return matchCat && matchQ;
     }), [search, cat]);
+
+  useEffect(() => {
+    const interval = window.setInterval(() => {
+      const snapshot = buildFlowRef.current;
+      const decision = evaluateBuildFlowStall(snapshot, Date.now());
+      if (!snapshot?.active) {
+        setBuildFlowAlert(null);
+        return;
+      }
+
+      if (decision.level === 'healthy') {
+        setBuildFlowAlert((current) => current?.level === 'taking_longer' ? null : current);
+        return;
+      }
+
+      if (decision.level === 'taking_longer') {
+        setBuildFlowAlert({
+          level: 'taking_longer',
+          reason: decision.reason ?? 'This step is taking longer than expected.',
+          pendingCondition: decision.pendingCondition,
+        });
+        return;
+      }
+
+      if (decision.level === 'stalled' && buildFlowRef.current?.phase !== 'stalled') {
+        triggerBuildFlowRecovery(
+          decision.reason ?? 'The EFI build did not reach a terminal state.',
+          decision.pendingCondition,
+        );
+      }
+    }, 5_000);
+
+    return () => window.clearInterval(interval);
+  }, []);
 
   const getStatus = (id: string): 'active' | 'complete' | 'pending' => {
     if (id === step || (id === 'scanning' && step === 'version-select')) return 'active';
@@ -891,7 +1096,7 @@ export default function App() {
     let restoredBiosReady = true;
     let restoredBuildReady = false;
     if (s && s.profile && s.currentStep && Date.now() - s.timestamp < 4 * 3600 * 1000) {
-      const restore = restoreFlowDecision(s.profile, s.currentStep, planningMode);
+      const restore = restoreFlowDecision(s.profile, s.currentStep);
       restoredCompatibilityBlocked = isCompatibilityBlocked(restore.compatibility);
       const latestArtifact = s.profileArtifactDigest
         ? await window.electron.getLatestHardwareProfile().catch(() => null)
@@ -987,7 +1192,7 @@ export default function App() {
       if (fw.ok && fw.data) setFirmwareInfo(fw.data);
       setProgress(85);
       
-      const report = checkCompatibility(hw, { planningMode });
+      const report = checkCompatibility(hw);
       // Inject strategy into profile for config generation
       hw.strategy = report.strategy;
       
@@ -1022,7 +1227,7 @@ export default function App() {
     setRecovDmgDest(null);
     setRecovClDest(null);
     const nextProfile = { ...artifact.profile };
-    const nextCompat = checkCompatibility(nextProfile, { planningMode });
+    const nextCompat = checkCompatibility(nextProfile);
     nextProfile.strategy = nextCompat.strategy;
     setCompat(nextCompat);
     setProfile(nextProfile);
@@ -1093,7 +1298,22 @@ export default function App() {
     if (!guard.allowed) {
       return false;
     }
-    setStep('building');
+    const transition = attemptStepTransition('building', {
+      biosReady: true,
+      localBuildGuard: {
+        allowed: true,
+        reason: null,
+        currentState: 'build',
+        biosState: 'complete',
+      },
+    });
+    if (!transition?.ok) {
+      setGlobalError(describeBuildFlowFailure(
+        transition?.reason ?? 'The app could not enter the EFI build step after BIOS verification succeeded.',
+        transition?.redirect ?? 'bios',
+      ));
+      return false;
+    }
     return true;
   };
 
@@ -1122,16 +1342,56 @@ export default function App() {
     invalidateGeneratedBuild();
     setBuildPlan(null);
     setRecoveryDryRun(null);
+    setBuildFlowAlert(null);
+    const runId = buildRunIdRef.current + 1;
+    buildRunIdRef.current = runId;
+    const isCurrentRun = () => buildRunIdRef.current === runId;
+    const applyBuildFlowSnapshot = (patch: Partial<BuildFlowSnapshot>) => {
+      updateBuildFlow((current) => {
+        const base: BuildFlowSnapshot = current && current.runId === runId
+          ? current
+          : {
+              active: true,
+              runId,
+              phase: 'preflight',
+              uiStep: 'building',
+              startedAt: Date.now(),
+              lastProgressAt: Date.now(),
+              activeTaskKind: null,
+              activeTaskStatus: null,
+              lastTaskPhase: null,
+              taskCompleteEventFired: false,
+              validationStarted: false,
+              validationFinished: false,
+              pendingRendererExpectation: null,
+              transitionGuardBlocked: null,
+              stalledReason: null,
+            };
+        return {
+          ...base,
+          ...patch,
+        };
+      });
+    };
     try {
       setStep('building'); setProgress(0);
+      applyBuildFlowSnapshot({
+        phase: 'preflight',
+        uiStep: 'building',
+        lastProgressAt: Date.now(),
+        pendingRendererExpectation: 'the pre-build environment checks to finish',
+        transitionGuardBlocked: null,
+        stalledReason: null,
+      });
 
       // Stage 0a: Prevention Layer — preflight environment check
-      setStatus('Running pre-build environment checks…');
+      setStatus('Checking your build environment…');
       setProgress(1);
       try {
         const { kexts: requiredKexts } = getRequiredResources(profile);
         setPreflightRunning(true);
         const report = await (window.electron as any).runPreflightChecks(requiredKexts);
+        if (!isCurrentRun()) return;
         setPreflightReport(report);
         setConfidence(report.confidence);
         setPreflightRunning(false);
@@ -1150,14 +1410,21 @@ export default function App() {
         if (preflightErr.message?.startsWith('Pre-build check failed:')) throw preflightErr;
         debugWarn('[preflight] Preflight check itself failed, proceeding:', preflightErr);
       }
+      if (!isCurrentRun()) return;
       setProgress(3);
 
       // Stage 0b: Deterministic Layer — build dry-run simulation
       // Verifies every kext URL, OpenCore URL, and disk BEFORE real build
-      setStatus('Simulating build — verifying all dependencies…');
+      applyBuildFlowSnapshot({
+        phase: 'simulation',
+        lastProgressAt: Date.now(),
+        pendingRendererExpectation: 'the dependency simulation to finish',
+      });
+      setStatus('Verifying downloads and dependencies…');
       try {
         const { kexts: requiredKexts, ssdts: requiredSSDTs } = getRequiredResources(profile);
         const plan = await (window.electron as any).simulateBuild(requiredKexts, requiredSSDTs, profile.smbios);
+        if (!isCurrentRun()) return;
         setBuildPlan(plan);
         setCertainty(plan.certainty);
 
@@ -1169,44 +1436,94 @@ export default function App() {
         if (simErr.message?.startsWith('Build will fail:')) throw simErr;
         debugWarn('[deterministic] Build simulation failed, proceeding:', simErr);
       }
+      if (!isCurrentRun()) return;
       setProgress(5);
 
       // Stage 1: build EFI
+      applyBuildFlowSnapshot({
+        phase: 'efi-build',
+        activeTaskKind: 'efi-build',
+        activeTaskStatus: 'running',
+        lastProgressAt: Date.now(),
+        pendingRendererExpectation: 'the EFI build task to complete',
+        taskCompleteEventFired: false,
+        lastTaskPhase: 'initialising',
+      });
       setStatus('Generating OpenCore configuration…');
       setProgress(10);
       await new Promise(r => setTimeout(r, 800));
       const built = await window.electron.buildEFI(profile);
-      setEfiPath(built); setProgress(45);
-      setStatus('Injecting ACPI SSDTs…');
+      if (!isCurrentRun()) return;
+      setEfiPath(built);
+      setProgress(55);
+      setStatus('Preparing the generated EFI for validation…');
       await new Promise(r => setTimeout(r, 600));
-      setProgress(100);
-      await new Promise(r => setTimeout(r, 800));
+      if (!isCurrentRun()) return;
+      setProgress(65);
 
       // Stage 2: kexts — progress is driven by kextTask useEffect above
-      setStep('kext-fetch'); setProgress(0);
+      applyBuildFlowSnapshot({
+        phase: 'kext-fetch',
+        uiStep: 'kext-fetch',
+        activeTaskKind: 'kext-fetch',
+        activeTaskStatus: 'running',
+        lastProgressAt: Date.now(),
+        pendingRendererExpectation: 'the kext download task to complete',
+        taskCompleteEventFired: false,
+        lastTaskPhase: null,
+      });
+      _setStepRaw('kext-fetch');
+      setProgress(0);
       setKextResults([]);
       const { kexts } = getRequiredResources(profile);
       let fetchedKextResults: KextFetchResult[] = [];
       try {
         fetchedKextResults = await window.electron.fetchLatestKexts(built, kexts);
+        if (!isCurrentRun()) return;
         setKextResults(fetchedKextResults);
         for (const k of fetchedKextResults.filter(k => k.version === 'offline')) {
           (window.electron as any).recordFailure(`kext_${k.name}`, 'Download failed').catch(() => {});
         }
       } catch (e) {
+        if (!isCurrentRun()) return;
         fetchedKextResults = kexts.map(k => ({ name: k, version: 'offline', source: 'failed' }));
         setKextResults(fetchedKextResults);
         (window.electron as any).recordFailure('kext_batch', String((e as Error)?.message || 'Batch kext fetch failed')).catch(() => {});
       }
+      if (!isCurrentRun()) return;
       setProgress(100);
-      await new Promise(r => setTimeout(r, 800));
+      await new Promise(r => setTimeout(r, 400));
+      if (!isCurrentRun()) return;
 
       // Stage 3: Build Integrity Check — existing configValidator + deterministic hard contract
-      setStatus('Verifying EFI structure…');
+      applyBuildFlowSnapshot({
+        phase: 'validation',
+        uiStep: 'building',
+        activeTaskKind: null,
+        activeTaskStatus: null,
+        lastProgressAt: Date.now(),
+        pendingRendererExpectation: 'EFI validation to finish',
+        taskCompleteEventFired: false,
+        validationStarted: true,
+      });
+      _setStepRaw('building');
+      setStatus('Validating the generated EFI…');
+      setProgress(78);
       const validation = await window.electron.validateEfi(built, profile);
+      if (!isCurrentRun()) return;
       setValidationResult(validation);
+      applyBuildFlowSnapshot({
+        lastProgressAt: Date.now(),
+        validationFinished: true,
+      });
       if (validation.overall === 'blocked') {
         setBuildReady(false);
+        applyBuildFlowSnapshot({
+          active: false,
+          phase: 'failed',
+          stalledReason: describeValidationFailure(validation),
+          pendingRendererExpectation: null,
+        });
         setErrorWithSuggestion(describeValidationFailure(validation), 'building', {
           validationResult: validation,
           kextSources: buildKextSourceMap(fetchedKextResults),
@@ -1218,6 +1535,7 @@ export default function App() {
       // Phase 4: Hard success contract — verify from disk, not flags
       try {
         const contract = await (window.electron as any).verifyEfiBuildSuccess(built, kexts);
+        if (!isCurrentRun()) return;
         if (!contract.passed) {
           const failed = contract.checks.filter((c: any) => !c.passed);
           throw new Error(`EFI build contract failed: ${failed.map((c: any) => `${c.name}: ${c.detail}`).join('; ')}`);
@@ -1228,6 +1546,13 @@ export default function App() {
       }
 
       setBuildReady(true); // BUILD IS NOW VERIFIED READY (by disk, not trust)
+      applyBuildFlowSnapshot({
+        phase: 'finalizing',
+        lastProgressAt: Date.now(),
+        pendingRendererExpectation: 'the recovery preparation step to open',
+      });
+      setProgress(92);
+      setStatus('Finalizing the EFI build…');
 
       // Generate EFI Intelligence Report + Community Knowledge
       try {
@@ -1246,7 +1571,38 @@ export default function App() {
       }
 
       // Stage 4: recovery — progress is driven by recovTask useEffect above
-      setStep('recovery-download'); setRecovPct(0); setRecovError(null); setRecovOffset(0); setRecovDmgDest(null); setRecovClDest(null);
+      const recoveryTransition = attemptStepTransition('recovery-download', {
+        buildReady: true,
+        efiPath: built,
+        validationBlocked: false,
+        postBuildReady: true,
+      });
+      if (!recoveryTransition?.ok) {
+        applyBuildFlowSnapshot({
+          active: false,
+          phase: 'failed',
+          transitionGuardBlocked: recoveryTransition?.reason ?? 'the next build phase could not open',
+          stalledReason: recoveryTransition?.reason ?? 'The next build phase could not open.',
+          pendingRendererExpectation: 'the recovery preparation step to open',
+        });
+        triggerBuildFlowRecovery(
+          recoveryTransition?.reason ?? 'The renderer could not leave the validated build phase.',
+          'the recovery preparation step to open',
+          recoveryTransition?.redirect ?? 'report',
+        );
+        return;
+      }
+      applyBuildFlowSnapshot({
+        phase: 'recovery-dry-run',
+        uiStep: 'recovery-download',
+        activeTaskKind: null,
+        activeTaskStatus: null,
+        lastProgressAt: Date.now(),
+        pendingRendererExpectation: 'the recovery source checks to finish',
+        taskCompleteEventFired: false,
+        transitionGuardBlocked: null,
+      });
+      setRecovPct(0); setRecovError(null); setRecovOffset(0); setRecovDmgDest(null); setRecovClDest(null);
       lastRecovSaveRef.current = 0;
 
       // Prevention: Check if Apple endpoint is known-bad before downloading
@@ -1260,6 +1616,7 @@ export default function App() {
       try {
         setStatus('Testing Apple recovery endpoint…');
         const dryRun = await (window.electron as any).dryRunRecovery(profile.targetOS || 'macOS Sequoia 15', profile.smbios);
+        if (!isCurrentRun()) return;
         setRecoveryDryRun(dryRun);
 
         // Phase 5: Failure impossibility zone — block recovery if test request was rejected
@@ -1274,7 +1631,16 @@ export default function App() {
       }
 
       try {
+        applyBuildFlowSnapshot({
+          phase: 'recovery-download',
+          activeTaskKind: 'recovery-download',
+          activeTaskStatus: 'running',
+          lastProgressAt: Date.now(),
+          pendingRendererExpectation: 'the recovery download task to complete',
+          taskCompleteEventFired: false,
+        });
         await window.electron.downloadRecovery(built, profile.targetOS || 'macOS Sequoia 15');
+        if (!isCurrentRun()) return;
       } catch (e: any) {
         const msg = e.message || 'Unknown error';
         const failCode = msg.includes('401') || msg.includes('403') ? 'recovery_auth' : 'recovery_dl';
@@ -1286,7 +1652,16 @@ export default function App() {
 
       // Phase 4: Hard success contract — verify recovery from disk
       try {
+        applyBuildFlowSnapshot({
+          phase: 'finalizing',
+          activeTaskKind: null,
+          activeTaskStatus: null,
+          lastProgressAt: Date.now(),
+          pendingRendererExpectation: 'the installer method screen to open',
+          taskCompleteEventFired: false,
+        });
         const recovContract = await (window.electron as any).verifyRecoverySuccess(built);
+        if (!isCurrentRun()) return;
         if (!recovContract.passed) {
           const failed = recovContract.checks.filter((c: any) => !c.passed);
           setRecovError(`Recovery verification failed: ${failed.map((c: any) => `${c.name}: ${c.detail}`).join('; ')}`);
@@ -1298,14 +1673,61 @@ export default function App() {
       }
 
       await new Promise(r => setTimeout(r, 1000));
+      if (!isCurrentRun()) return;
 
       // Stage 5: Method select
-      setStep('method-select');
+      const methodTransition = attemptStepTransition('method-select', {
+        buildReady: true,
+        efiPath: built,
+        validationBlocked: false,
+        postBuildReady: true,
+      });
+      if (!methodTransition?.ok) {
+        applyBuildFlowSnapshot({
+          active: false,
+          phase: 'failed',
+          transitionGuardBlocked: methodTransition?.reason ?? 'the build did not advance to method selection',
+          stalledReason: methodTransition?.reason ?? 'The build did not advance to method selection.',
+          pendingRendererExpectation: 'the installer method screen to open',
+        });
+        triggerBuildFlowRecovery(
+          methodTransition?.reason ?? 'The build completed, but the app could not advance to the next screen.',
+          'the installer method screen to open',
+          methodTransition?.redirect ?? 'report',
+        );
+        return;
+      }
+      applyBuildFlowSnapshot({
+        active: false,
+        phase: 'complete',
+        uiStep: 'method-select',
+        activeTaskKind: null,
+        activeTaskStatus: null,
+        lastProgressAt: Date.now(),
+        pendingRendererExpectation: null,
+        taskCompleteEventFired: false,
+        stalledReason: null,
+        transitionGuardBlocked: null,
+      });
+      setBuildFlowAlert(null);
     } catch (e: any) {
+      if (!isCurrentRun()) {
+        return;
+      }
       setBuildReady(false);
+      applyBuildFlowSnapshot({
+        active: false,
+        phase: 'failed',
+        pendingRendererExpectation: null,
+        stalledReason: e.message || 'Build failed',
+      });
       setErrorWithSuggestion(e.message || 'Build failed. Please check the hardware compatibility.', 'building');
       setStep('report');
-    } finally { isDeployingRef.current = false; }
+    } finally {
+      if (isCurrentRun()) {
+        isDeployingRef.current = false;
+      }
+    }
   };
 
   /** Enrich a raw drive list with disk info (isSystemDisk, partitionTable, etc.)
@@ -1648,6 +2070,13 @@ export default function App() {
     const target = recoveryPayload?.targetStep ?? step;
     logUiEvent('recovery_retry_clicked', { targetStep: target });
     setGlobalError(null);
+    if (target === 'building' || target === 'kext-fetch' || target === 'recovery-download') {
+      buildRunIdRef.current += 1;
+      buildFlowRef.current = null;
+      setBuildFlow(null);
+      setBuildFlowAlert(null);
+      isDeployingRef.current = false;
+    }
     switch (resolveRecoveryRetryAction({
       targetStep: target,
       hasProfile: Boolean(profile),
@@ -1681,6 +2110,11 @@ export default function App() {
     const target = recoveryPayload?.targetStep;
     logUiEvent('recovery_back_to_safety_clicked', { targetStep: target ?? step });
     setGlobalError(null);
+    buildRunIdRef.current += 1;
+    buildFlowRef.current = null;
+    setBuildFlow(null);
+    setBuildFlowAlert(null);
+    isDeployingRef.current = false;
     const destination = resolveBackToSafetyStep({ hasProfile: Boolean(profile) });
     setStep(destination);
   };
@@ -1688,7 +2122,8 @@ export default function App() {
   const handleOpenIssueReport = async () => {
     try {
       logUiEvent('issue_report_open_requested', { targetStep: recoveryPayload?.targetStep ?? step });
-      const res = await window.electron.reportIssue();
+      const reportContext = recoveryPayload?.contextNote ?? (typeof globalError === 'string' ? globalError : null);
+      const res = await window.electron.reportIssue(reportContext);
       try {
         await navigator.clipboard.writeText(res.body);
       } catch {
@@ -1707,7 +2142,8 @@ export default function App() {
   const handleSaveSupportLog = async () => {
     try {
       logUiEvent('support_log_save_requested', { targetStep: recoveryPayload?.targetStep ?? step });
-      const result = await window.electron.saveSupportLog(typeof globalError === 'string' ? globalError : null);
+      const supportContext = recoveryPayload?.contextNote ?? (typeof globalError === 'string' ? globalError : null);
+      const result = await window.electron.saveSupportLog(supportContext);
       setGlobalNotice(`Sanitized log saved to your ${result.savedTo} as ${result.fileName}.`);
     } catch (error: any) {
       setErrorWithSuggestion(error?.message || 'Could not save the support log to the Desktop.', recoveryPayload?.targetStep ?? step);
@@ -1733,8 +2169,9 @@ export default function App() {
   const buildStages = [
     { label: 'Environment preflight', sublabel: preflightReport ? (preflightReport.confidence === 'green' ? 'All dependencies confirmed' : `${preflightReport.warnings.length} warning(s) — proceeding`) : 'Checking network, disk space, kext sources…', done: progress >= 3, active: progress > 0 && progress < 3 },
     { label: 'Dry-run simulation', sublabel: buildPlan ? (buildPlan.certainty === 'will_succeed' ? `${buildPlan.verifiedComponents}/${buildPlan.totalComponents} components reachable` : `${buildPlan.failedComponents} component(s) unverified`) : 'Testing every download URL before committing…', done: progress >= 5, active: progress >= 3 && progress < 5 },
-    { label: 'Generate config.plist', sublabel: profile ? `${profile.generation} · ${profile.smbios} · ${profile.kexts.length} kexts` : '550+ options for your hardware', done: progress >= 45, active: progress >= 5 && progress < 45 },
-    { label: 'Inject ACPI tables', sublabel: profile ? `${profile.ssdts.length} SSDTs — power management, EC, USB` : 'Platform-specific ACPI patches', done: progress >= 100, active: progress >= 45 && progress < 100 },
+    { label: 'Generate EFI structure', sublabel: profile ? `${profile.generation} · ${profile.smbios} · ${profile.kexts.length} kexts` : 'Generating OpenCore, ACPI, and boot files', done: progress >= 65, active: progress >= 5 && progress < 65 },
+    { label: 'Validate generated EFI', sublabel: validationRunning ? 'Validation is running…' : 'Checking config, drivers, and required files on disk', done: progress >= 92, active: progress >= 65 && progress < 92 },
+    { label: 'Finalize next step', sublabel: 'Preparing kext download and recovery flow', done: progress >= 100, active: progress >= 92 && progress < 100 },
   ];
   const kextStages = kextResults.map((k: any) => {
     const src = k.source === 'embedded' ? 'embedded fallback' : k.source === 'failed' ? 'FAILED' : 'GitHub';
@@ -1755,6 +2192,15 @@ export default function App() {
     { label: 'Write recovery image', sublabel: 'com.apple.recovery.boot', done: progress >= 90, active: progress >= 80 && progress < 90 },
     { label: 'Verify write integrity', sublabel: 'Confirming all files were written correctly', done: statusText === 'flash_complete', active: statusText === 'flash_verify' },
   ];
+  const buildProgressNotice = buildFlowAlert
+    ? {
+        tone: buildFlowAlert.level === 'stalled' ? 'critical' as const : 'warning' as const,
+        title: buildFlowAlert.level === 'stalled' ? 'Build needs attention' : 'Taking longer than expected',
+        message: buildFlowAlert.pendingCondition
+          ? `${buildFlowAlert.reason} Still waiting for ${buildFlowAlert.pendingCondition}.`
+          : buildFlowAlert.reason,
+      }
+    : null;
 
   // ── Render ──────────────────────────────────────────────────
 
@@ -2032,13 +2478,11 @@ export default function App() {
                   <motion.div key="ver" initial={stepEnter} animate={stepActive} exit={stepExit} transition={STEP_TRANSITION}>
                     <VersionStep
                       report={compat}
-                      matrix={compatibilityMatrix ?? buildCompatibilityMatrix(profile!, { planningMode })}
+                      matrix={compatibilityMatrix ?? buildCompatibilityMatrix(profile!)}
                       selectedVersion={profile?.targetOS ?? compat.recommendedVersion}
-                      planningMode={planningMode}
-                      onPlanningModeChange={setPlanningMode}
                       onUseRecommendedVersion={() => {
                         if (!profile || !compat.recommendedVersion) return;
-                        const selection = targetSelectionDecision(profile, compat.recommendedVersion, planningMode);
+                        const selection = targetSelectionDecision(profile, compat.recommendedVersion);
                         setProfile(selection.profile);
                         setCompat(selection.compatibility);
                         setBiosConf(selection.biosConfig);
@@ -2048,7 +2492,7 @@ export default function App() {
                       }}
                       onSelect={v => {
                         if (!profile) return;
-                        const selection = targetSelectionDecision(profile, v, planningMode);
+                        const selection = targetSelectionDecision(profile, v);
                         setProfile(selection.profile);
                         setCompat(selection.compatibility);
                         setBiosConf(selection.biosConfig);
@@ -2066,9 +2510,7 @@ export default function App() {
                     <ReportStep
                       profile={profile}
                       report={compat}
-                      matrix={compatibilityMatrix ?? buildCompatibilityMatrix(profile, { planningMode })}
-                      planningMode={planningMode}
-                      onPlanningModeChange={setPlanningMode}
+                      matrix={compatibilityMatrix ?? buildCompatibilityMatrix(profile)}
                       interpretation={hwInterpretation}
                       profileArtifact={profileArtifact}
                       resourcePlan={resourcePlan}
@@ -2112,6 +2554,7 @@ export default function App() {
                       icon={Box}
                       progress={progress}
                       statusText={statusText}
+                      notice={step === 'building' ? buildProgressNotice : null}
                       stages={buildStages}
                       onBegin={startDeploy}
                       briefing={{
@@ -2132,7 +2575,7 @@ export default function App() {
                 {/* KEXT FETCH */}
                 {step === 'kext-fetch' && (
                   <motion.div key="kext" initial={stepEnter} animate={stepActive} exit={stepExit} transition={STEP_TRANSITION} className="h-full">
-                    <ProgressStep title="Downloading Kexts" subtitle="Fetching the latest stable versions from GitHub." icon={Package} progress={progress} statusText={kextResults.length ? `${kextResults.length} downloaded` : 'Querying GitHub releases…'} stages={kextStages.length ? kextStages : [{ label: 'Connecting to GitHub…', sublabel: '', done: false, active: true }]} />
+                    <ProgressStep title="Downloading Kexts" subtitle="Fetching the latest stable versions from GitHub." icon={Package} progress={progress} statusText={kextResults.length ? `${kextResults.length} downloaded` : 'Querying GitHub releases…'} notice={step === 'kext-fetch' ? buildProgressNotice : null} stages={kextStages.length ? kextStages : [{ label: 'Connecting to GitHub…', sublabel: '', done: false, active: true }]} />
                   </motion.div>
                 )}
 
@@ -2193,7 +2636,7 @@ export default function App() {
                           <p className="text-xs font-bold text-[#aaa]">What you can do:</p>
 
                           {/* Option 1: Retry */}
-                          <button disabled={isRetryingRecovRef.current} onClick={async () => { if (isRetryingRecovRef.current) return; isRetryingRecovRef.current = true; setRecovError(null); setRecovPct(0); try { await window.electron.downloadRecovery(efiPath!, profile?.targetOS || 'macOS Sequoia 15'); try { const c = await (window.electron as any).verifyRecoverySuccess(efiPath!); if (!c.passed) { const failed = c.checks.filter((x: any) => !x.passed); setRecovError(`Recovery verification failed: ${failed.map((x: any) => `${x.name}: ${x.detail}`).join('; ')}`); setErrorWithSuggestion('Recovery download completed but verification failed. File may be incomplete.', 'recovery-download'); return; } } catch {} setStep('method-select'); } catch (e: any) { const msg = e.message || 'Retry failed'; const code = msg.includes('401') || msg.includes('403') || msg.includes('rejected') ? 'recovery_auth' : 'recovery_dl'; (window.electron as any).recordFailure(code, msg).catch(() => {}); setRecovError(msg); setErrorWithSuggestion(msg, 'recovery-download'); } finally { isRetryingRecovRef.current = false; } }}
+                          <button disabled={isRetryingRecovRef.current} onClick={async () => { if (isRetryingRecovRef.current) return; isRetryingRecovRef.current = true; setRecovError(null); setRecovPct(0); try { await window.electron.downloadRecovery(efiPath!, profile?.targetOS || 'macOS Sequoia 15'); try { const c = await (window.electron as any).verifyRecoverySuccess(efiPath!); if (!c.passed) { const failed = c.checks.filter((x: any) => !x.passed); setRecovError(`Recovery verification failed: ${failed.map((x: any) => `${x.name}: ${x.detail}`).join('; ')}`); setErrorWithSuggestion('Recovery download completed but verification failed. File may be incomplete.', 'recovery-download'); return; } } catch {} advanceToMethodSelect(efiPath!); } catch (e: any) { const msg = e.message || 'Retry failed'; const code = msg.includes('401') || msg.includes('403') || msg.includes('rejected') ? 'recovery_auth' : 'recovery_dl'; (window.electron as any).recordFailure(code, msg).catch(() => {}); setRecovError(msg); setErrorWithSuggestion(msg, 'recovery-download'); } finally { isRetryingRecovRef.current = false; } }}
                             className="w-full text-left p-4 bg-white/4 border border-white/8 rounded-xl hover:bg-white/8 transition-all cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed flex items-center gap-4">
                             <RefreshCcw className="w-5 h-5 text-white/60 shrink-0" />
                             <div>
@@ -2204,7 +2647,7 @@ export default function App() {
 
                           {/* Option 2: Use cached recovery */}
                           {cachedRecovInfo && !cachedRecovInfo.isPartial && (
-                            <button onClick={async () => { setRecovError(null); setRecovPct(0); try { await window.electron.downloadRecovery(efiPath!, profile?.targetOS || 'macOS Sequoia 15'); try { const c = await (window.electron as any).verifyRecoverySuccess(efiPath!); if (!c.passed) { const failed = c.checks.filter((x: any) => !x.passed); setRecovError(`Cached recovery verification failed: ${failed.map((x: any) => `${x.name}: ${x.detail}`).join('; ')}`); return; } } catch {} setStep('method-select'); } catch (e: any) { setRecovError(e.message || 'Cache retrieval failed'); } }}
+                            <button onClick={async () => { setRecovError(null); setRecovPct(0); try { await window.electron.downloadRecovery(efiPath!, profile?.targetOS || 'macOS Sequoia 15'); try { const c = await (window.electron as any).verifyRecoverySuccess(efiPath!); if (!c.passed) { const failed = c.checks.filter((x: any) => !x.passed); setRecovError(`Cached recovery verification failed: ${failed.map((x: any) => `${x.name}: ${x.detail}`).join('; ')}`); return; } } catch {} advanceToMethodSelect(efiPath!); } catch (e: any) { setRecovError(e.message || 'Cache retrieval failed'); } }}
                               className="w-full text-left p-4 bg-emerald-500/8 border border-emerald-500/20 rounded-xl hover:bg-emerald-500/15 transition-all cursor-pointer flex items-center gap-4">
                               <HardDrive className="w-5 h-5 text-emerald-400 shrink-0" />
                               <div>
@@ -2239,7 +2682,7 @@ export default function App() {
                           </button>
 
                           {/* Option 5: EFI only */}
-                          <button onClick={() => setStep('method-select')}
+                          <button onClick={() => { advanceToMethodSelect(efiPath); }}
                             className="w-full text-left p-4 bg-white/4 border border-white/8 rounded-xl hover:bg-white/8 transition-all cursor-pointer flex items-center gap-4">
                             <Box className="w-5 h-5 text-amber-400/60 shrink-0" />
                             <div>
@@ -2250,7 +2693,7 @@ export default function App() {
                         </div>
                       </div>
                     ) : (
-                      <ProgressStep native title="Preparing Installation" subtitle={`Setting up ${profile?.targetOS || 'the OS'} for your hardware.`} icon={Package} progress={recovPct} statusText={recovStatus || 'Connecting…'} stages={recovStages} />
+                      <ProgressStep native title="Preparing Installation" subtitle={`Setting up ${profile?.targetOS || 'the OS'} for your hardware.`} icon={Package} progress={recovPct} statusText={recovStatus || 'Connecting…'} notice={step === 'recovery-download' ? buildProgressNotice : null} stages={recovStages} />
                     )}
                   </motion.div>
                 )}
@@ -2915,7 +3358,7 @@ export default function App() {
               extra={(
                 <div className="grid gap-3 md:grid-cols-3">
                   <CopyDiagnosticsButton
-                    extraContext={typeof globalError === 'string' ? globalError : JSON.stringify(globalError)}
+                    extraContext={recoveryPayload?.contextNote ?? (typeof globalError === 'string' ? globalError : JSON.stringify(globalError))}
                     className="w-full justify-center rounded-2xl border border-white/10 bg-white/5 py-3 text-sm"
                   />
                   <button
@@ -2940,7 +3383,7 @@ export default function App() {
       <AnimatePresence>
         {debugOpen && (
           <DebugOverlay
-            appVersion="2.3.1"
+            appVersion="2.3.2"
             platform={platform}
             sessionId={debugSessionId}
             currentStep={step}

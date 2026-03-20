@@ -230,7 +230,7 @@ describe('Hackintosh compatibility logic', () => {
     assert.ok(report.mostLikelyFailurePoints.length > 0);
   });
 
-  test('exploratory mode adds more aggressive next actions without changing the compatibility level', () => {
+  test('risky laptop paths still include aggressive next-action guidance without a planning-mode toggle', () => {
     const profile = makeProfile({
       cpu: 'Intel Core i5-4300M',
       generation: 'Haswell',
@@ -244,12 +244,10 @@ describe('Hackintosh compatibility logic', () => {
       bootArgs: '-v alcid=11',
     });
 
-    const safeReport = checkCompatibility(profile, { planningMode: 'safe' });
-    const exploratoryReport = checkCompatibility(profile, { planningMode: 'exploratory' });
+    const report = checkCompatibility(profile);
 
-    assert.equal(exploratoryReport.level, safeReport.level);
-    assert.ok(exploratoryReport.nextActions.length >= safeReport.nextActions.length);
-    assert.ok(exploratoryReport.nextActions.some((action) => /one variable at a time|alternative laptop tuning/i.test(`${action.title} ${action.detail}`)));
+    assert.equal(report.level, 'experimental');
+    assert.ok(report.nextActions.some((action) => /one variable at a time|alternative laptop tuning/i.test(`${action.title} ${action.detail}`)));
   });
 
   test('Intel GT1 / UHD 610-only systems are rejected', () => {

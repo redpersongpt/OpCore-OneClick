@@ -1,7 +1,6 @@
 import type { HardwareProfile } from './configGenerator.js';
 import {
   checkCompatibility,
-  type CompatibilityPlanningMode,
   type CompatibilityLevel,
   type CompatibilityReport,
 } from './compatibility.js';
@@ -23,10 +22,6 @@ export interface CompatibilityMatrixRow {
 export interface CompatibilityMatrix {
   rows: CompatibilityMatrixRow[];
   recommendedVersion: string;
-}
-
-export interface CompatibilityMatrixOptions {
-  planningMode?: CompatibilityPlanningMode;
 }
 
 export function classifyCompatibilityMatrixStatus(report: CompatibilityReport): CompatibilityMatrixStatus {
@@ -62,12 +57,7 @@ function summarizeCompatibilityReason(report: CompatibilityReport): string {
 function choosePlanningRecommendation(
   rows: CompatibilityMatrixRow[],
   baselineRecommendedVersion: string,
-  planningMode: CompatibilityPlanningMode,
 ): string {
-  if (planningMode === 'exploratory') {
-    return rows.find((row) => row.status !== 'blocked')?.versionName ?? baselineRecommendedVersion;
-  }
-
   return baselineRecommendedVersion
     || rows.find((row) => row.status === 'supported' || row.status === 'experimental')?.versionName
     || rows.find((row) => row.status !== 'blocked')?.versionName
@@ -76,15 +66,13 @@ function choosePlanningRecommendation(
 
 export function buildCompatibilityMatrix(
   profile: HardwareProfile,
-  options: CompatibilityMatrixOptions = {},
 ): CompatibilityMatrix {
-  const planningMode = options.planningMode ?? 'safe';
-  const baseline = checkCompatibility(profile, { planningMode });
+  const baseline = checkCompatibility(profile);
   const rows = MACOS_VERSIONS.map((version) => {
     const report = checkCompatibility({
       ...profile,
       targetOS: version.name,
-    }, { planningMode });
+    });
 
     return {
       versionId: version.id,
@@ -97,7 +85,7 @@ export function buildCompatibilityMatrix(
       reportLevel: report.level,
     } satisfies CompatibilityMatrixRow;
   });
-  const recommendedVersion = choosePlanningRecommendation(rows, baseline.recommendedVersion, planningMode);
+  const recommendedVersion = choosePlanningRecommendation(rows, baseline.recommendedVersion);
 
   for (const row of rows) {
     row.recommended = row.versionName === recommendedVersion;

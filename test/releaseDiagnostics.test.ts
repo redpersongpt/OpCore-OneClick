@@ -120,7 +120,10 @@ describe('release diagnostics', () => {
     assert.equal(snapshot.diskContext.selectedDevice, 'disk4');
     assert.ok(snapshot.diskContext.identityFingerprint);
 
-    const draft = buildIssueReportDraft(snapshot);
+    const draft = buildIssueReportDraft(
+      snapshot,
+      'Current phase: validation\nPending renderer expectation: the installer method screen to open\nLocal path: /Users/alice/Desktop/test.txt',
+    );
     assert.match(draft.title, /\[BUG\]\[EFI_VALIDATION_FAILURE\]/);
     assert.equal(draft.body.includes('/Users/alice'), false);
     assert.equal(draft.body.includes('alice@example.com'), false);
@@ -129,6 +132,8 @@ describe('release diagnostics', () => {
     assert.match(draft.body, /disk4/);
     assert.match(draft.body, /OpenRuntime\.efi/);
     assert.match(draft.body, /Selected target exceeds the supported GPU ceiling\./);
+    assert.match(draft.body, /Extra Context/);
+    assert.match(draft.body, /Pending renderer expectation/);
   });
 
   test('prefers explicit runtime failure context when present', () => {

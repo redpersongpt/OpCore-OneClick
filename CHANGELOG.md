@@ -1,5 +1,12 @@
 # Changelog
 
+## 2.3.2 - 2026-03-20
+
+- Fixed a release-blocking EFI build pipeline bug where renderer-side step transitions could read stale state after a successful build and leave the app looking stuck instead of moving forward or failing clearly.
+- Added build-flow stall detection, clearer recovery context, and richer issue-report diagnostics for stuck build, kext, and recovery phases without weakening any destructive safety checks.
+- Removed the Safe / Exploratory planning-mode split and collapsed the app onto one clearer compatibility guidance path.
+- Reworked macOS version selection into a calmer, more professional recommendation layout with a stronger featured starting point and cleaner state presentation.
+
 ## 2.3.1 - 2026-03-20
 
 - Hardened packaged startup recovery so renderer/load failures surface a clean recovery path instead of raw diagnostics or blank-screen dead ends.

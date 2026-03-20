@@ -2,10 +2,7 @@ import React, { useState } from 'react';
 import { motion } from 'motion/react';
 import { AlertTriangle, CheckCircle, XCircle, Info, ChevronDown, ChevronRight, Eye, Download, Save, Upload, FlaskConical } from 'lucide-react';
 import { HardwareProfile } from '../../../electron/configGenerator';
-import type {
-  CompatibilityPlanningMode,
-  CompatibilityReport,
-} from '../../../electron/compatibility';
+import type { CompatibilityReport } from '../../../electron/compatibility';
 import {
   getBestSupportedGpuPath,
   getProfileGpuDevices,
@@ -19,7 +16,6 @@ import type { ResourcePlan } from '../../../electron/resourcePlanner';
 import type { SafeSimulationResult } from '../../../electron/safeSimulation';
 import CompatibilitySummary from '../CompatibilitySummary';
 import CompatibilityMatrixView from '../CompatibilityMatrix';
-import PlanningModeToggle from '../PlanningModeToggle';
 import ResourcePlanPanel from '../ResourcePlanPanel';
 import SimulationPreview from '../SimulationPreview';
 
@@ -27,8 +23,6 @@ interface ReportStepProps {
   profile: HardwareProfile;
   report: CompatibilityReport;
   matrix: CompatibilityMatrix;
-  planningMode: CompatibilityPlanningMode;
-  onPlanningModeChange: (mode: CompatibilityPlanningMode) => void;
   interpretation: HardwareInterpretation | null;
   profileArtifact: HardwareProfileArtifact | null;
   resourcePlan: ResourcePlan | null;
@@ -92,8 +86,6 @@ export default function ReportStep({
   profile,
   report,
   matrix,
-  planningMode,
-  onPlanningModeChange,
   interpretation,
   profileArtifact,
   resourcePlan,
@@ -227,10 +219,6 @@ export default function ReportStep({
         )}
       </div>
 
-      <div className="flex-shrink-0">
-        <PlanningModeToggle mode={planningMode} onChange={onPlanningModeChange} />
-      </div>
-
       {/* Unified Compatibility Summary (Task 4) */}
       <div className="flex-shrink-0">
         <CompatibilitySummary report={report} />
@@ -243,7 +231,6 @@ export default function ReportStep({
         <CompatibilityMatrixView
           rows={matrix.rows}
           selectedVersion={profile.targetOS}
-          planningMode={planningMode}
         />
       </div>
 
@@ -253,7 +240,7 @@ export default function ReportStep({
 
       {simulationResult && (
         <div className="flex-shrink-0">
-          <SimulationPreview result={simulationResult} report={report} planningMode={planningMode} />
+          <SimulationPreview result={simulationResult} report={report} />
         </div>
       )}
 

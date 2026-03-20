@@ -113,17 +113,16 @@ describe('planning guidance ui', () => {
     assert.match(html, /Sleep instability/);
   });
 
-  test('renders likely failure points and planning-mode copy in simulation preview', () => {
+  test('renders likely failure points and concise compatibility framing in simulation preview', () => {
     const html = renderToStaticMarkup(
       React.createElement(SimulationPreview, {
         result: makeSimulationResult(),
         report: makeCompatibilityReport(),
-        planningMode: 'exploratory',
       }),
     );
 
     assert.match(html, /Most Likely Failure Points/);
-    assert.match(html, /Exploratory Mode keeps risky non-blocked targets visible as stretch paths\./);
+    assert.match(html, /Versions stay visible by confidence level so you can see the best starting point and the stretch targets side by side\./);
     assert.match(html, /Audio layout still needs tuning\./);
   });
 });

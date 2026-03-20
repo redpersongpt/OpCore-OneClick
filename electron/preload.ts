@@ -130,7 +130,8 @@ try {
     getSessionId: () => ipcRenderer.invoke('log:get-session-id'),
 
     // Issue reporter
-    reportIssue: (): Promise<{ success: boolean; body: string; baseUrl: string }> => ipcRenderer.invoke('report-issue'),
+    reportIssue: (extraContext?: string | null): Promise<{ success: boolean; body: string; baseUrl: string }> =>
+      ipcRenderer.invoke('report-issue', extraContext ?? null),
 
     // Recovery Cache & Import
     importRecovery: (targetPath: string, macOSVersion: string) => ipcRenderer.invoke('recovery:import', targetPath, macOSVersion),

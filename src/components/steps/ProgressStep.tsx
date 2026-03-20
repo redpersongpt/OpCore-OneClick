@@ -174,7 +174,7 @@ function BriefingCard({
 export default function ProgressStep({
   title, subtitle, icon: Icon, progress, statusText, stages,
   onCancel, onTroubleshoot, native = false,
-  milestones = [], onBegin, briefing,
+  milestones = [], onBegin, briefing, notice,
 }: {
   title: string; subtitle: string; icon: React.ElementType;
   progress: number; statusText?: string; stages: Stage[];
@@ -186,6 +186,11 @@ export default function ProgressStep({
   /** When provided, shown as a pre-task briefing card before the task starts (progress === 0). */
   onBegin?: () => void;
   briefing?: BriefingConfig;
+  notice?: {
+    tone: 'warning' | 'critical';
+    title: string;
+    message: string;
+  } | null;
 }) {
   // Translate raw phase string to plain English if possible
   const displayStatus = statusText
@@ -206,6 +211,17 @@ export default function ProgressStep({
           <h2 className="text-4xl font-black text-white tracking-tight">{title}</h2>
           <p className="text-[#888] text-sm font-medium">{subtitle}</p>
         </div>
+
+        {notice && (
+          <div className={`w-full max-w-md rounded-2xl border px-4 py-3 text-left ${
+            notice.tone === 'critical'
+              ? 'border-rose-500/25 bg-rose-500/10 text-rose-100'
+              : 'border-amber-500/25 bg-amber-500/10 text-amber-100'
+          }`}>
+            <div className="text-[11px] font-black uppercase tracking-[0.2em]">{notice.title}</div>
+            <p className="mt-1 text-sm leading-relaxed text-white/80">{notice.message}</p>
+          </div>
+        )}
 
         <div className="w-full max-w-sm space-y-4">
           <div className="w-full h-[6px] bg-white/5 rounded-full overflow-hidden">
@@ -276,6 +292,22 @@ export default function ProgressStep({
           </motion.div>
         )}
       </AnimatePresence>
+
+      {notice && (
+        <div className={`flex items-start gap-3 rounded-2xl border px-4 py-3 text-sm ${
+          notice.tone === 'critical'
+            ? 'border-rose-500/25 bg-rose-500/10 text-rose-100'
+            : 'border-amber-500/25 bg-amber-500/10 text-amber-100'
+        }`}>
+          <AlertTriangle className={`mt-0.5 h-4 w-4 flex-shrink-0 ${notice.tone === 'critical' ? 'text-rose-300' : 'text-amber-300'}`} />
+          <div className="space-y-1">
+            <div className="text-[11px] font-black uppercase tracking-[0.2em]">
+              {notice.title}
+            </div>
+            <p className="leading-relaxed text-white/80">{notice.message}</p>
+          </div>
+        </div>
+      )}
 
       {/* Progress bar */}
       <div className="space-y-2">

@@ -1,18 +1,14 @@
 import React from 'react';
 import { AlertTriangle, CheckCircle, FlaskConical, ShieldAlert } from 'lucide-react';
 import type { SafeSimulationResult } from '../../electron/safeSimulation';
-import type {
-  CompatibilityPlanningMode,
-  CompatibilityReport,
-} from '../../electron/compatibility';
+import type { CompatibilityReport } from '../../electron/compatibility';
 
 interface SimulationPreviewProps {
   result: SafeSimulationResult;
   report: CompatibilityReport;
-  planningMode: CompatibilityPlanningMode;
 }
 
-export default function SimulationPreview({ result, report, planningMode }: SimulationPreviewProps) {
+export default function SimulationPreview({ result, report }: SimulationPreviewProps) {
   const supportedCount = result.compatibilityMatrixSnapshot.filter((row) => row.status === 'supported').length;
   const experimentalCount = result.compatibilityMatrixSnapshot.filter((row) => row.status === 'experimental').length;
   const riskyCount = result.compatibilityMatrixSnapshot.filter((row) => row.status === 'risky').length;
@@ -64,7 +60,7 @@ export default function SimulationPreview({ result, report, planningMode }: Simu
         <div className="rounded-xl border border-white/8 bg-white/4 p-3">
           <div className="text-white/45 uppercase tracking-widest text-[10px] font-bold mb-1">Compatibility Snapshot</div>
           <div className="text-white/75">{supportedCount} supported, {experimentalCount} experimental, {riskyCount} risky, {blockedCount} blocked</div>
-          <div className="text-white/45 mt-1">{planningMode === 'safe' ? 'Safe Mode keeps the recommendation on the highest-confidence path.' : 'Exploratory Mode keeps risky non-blocked targets visible as stretch paths.'}</div>
+          <div className="text-white/45 mt-1">Versions stay visible by confidence level so you can see the best starting point and the stretch targets side by side.</div>
         </div>
         <div className="rounded-xl border border-white/8 bg-white/4 p-3">
           <div className="text-white/45 uppercase tracking-widest text-[10px] font-bold mb-1">Recovery Readiness</div>

@@ -59,7 +59,7 @@ describe('compatibility matrix', () => {
     assert.equal(matrix.rows.filter((row) => row.recommended).length, report.recommendedVersion ? 1 : 0);
   });
 
-  test('uses a more conservative recommended row in safe mode than exploratory mode', () => {
+  test('keeps the recommended row anchored to the compatibility report for older laptops', () => {
     const profile = makeProfile({
       cpu: 'Intel Core i5-4300M',
       generation: 'Haswell',
@@ -71,11 +71,9 @@ describe('compatibility matrix', () => {
       smbios: 'MacBookPro11,1',
     });
 
-    const safeMatrix = buildCompatibilityMatrix(profile, { planningMode: 'safe' });
-    const exploratoryMatrix = buildCompatibilityMatrix(profile, { planningMode: 'exploratory' });
+    const matrix = buildCompatibilityMatrix(profile);
 
-    assert.equal(safeMatrix.recommendedVersion, 'macOS Big Sur 11');
-    assert.equal(exploratoryMatrix.recommendedVersion, 'macOS Monterey 12');
+    assert.equal(matrix.recommendedVersion, 'macOS Big Sur 11');
   });
 
   test('preserves blocked version ceilings from existing compatibility logic', () => {
@@ -146,7 +144,6 @@ describe('compatibility matrix', () => {
       React.createElement(CompatibilityMatrix, {
         rows,
         selectedVersion: 'macOS Sonoma 14',
-        planningMode: 'safe',
       }),
     );
 
@@ -160,28 +157,6 @@ describe('compatibility matrix', () => {
     assert.match(html, /Selected target exceeds the supported GPU ceiling\./);
     assert.match(html, /Recommended/);
     assert.match(html, /Selected/);
-    assert.match(html, /Advanced Only/);
-  });
-
-  test('renders exploratory candidate language in exploratory mode', () => {
-    const html = renderToStaticMarkup(
-      React.createElement(CompatibilityMatrix, {
-        rows: [{
-          versionId: '12',
-          versionName: 'macOS Monterey 12',
-          icon: 'monterey',
-          numeric: 12,
-          status: 'risky',
-          reason: 'Manual fixes are likely.',
-          recommended: true,
-          reportLevel: 'risky',
-        }],
-        selectedVersion: 'macOS Monterey 12',
-        planningMode: 'exploratory',
-      }),
-    );
-
-    assert.match(html, /Best Exploratory Start/);
-    assert.match(html, /Exploratory Candidate/);
+    assert.match(html, /Manual fixes likely/);
   });
 });
