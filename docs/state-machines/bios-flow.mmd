@@ -1,0 +1,65 @@
+stateDiagram-v2
+    [*] --> idle
+
+    idle --> planned : PLAN
+
+    planned --> auto_applying : START_AUTO_APPLY
+    planned --> ready_for_reboot : REQUEST_REBOOT
+    planned --> verifying : MARK_MANUAL_COMPLETE
+    planned --> verifying : START_VERIFY
+    planned --> idle : RESET
+
+    auto_applying --> planned : AUTO_APPLY_DONE
+    auto_applying --> idle : RESET
+
+    ready_for_reboot --> rebooting_to_firmware : REBOOT_ACCEPTED
+    ready_for_reboot --> planned : REBOOT_REJECTED
+    ready_for_reboot --> unsupported_host : REBOOT_UNSUPPORTED
+    ready_for_reboot --> idle : RESET
+
+    rebooting_to_firmware --> awaiting_return : USER_RETURNED
+
+    awaiting_return --> resumed_from_firmware : START_VERIFY
+    awaiting_return --> idle : RESET
+
+    resumed_from_firmware --> verifying : START_VERIFY
+    resumed_from_firmware --> complete : VERIFY_COMPLETE
+    resumed_from_firmware --> partially_verified : VERIFY_PARTIAL
+    resumed_from_firmware --> blocked : VERIFY_BLOCKED
+    resumed_from_firmware --> idle : RESET
+
+    verifying --> complete : VERIFY_COMPLETE
+    verifying --> partially_verified : VERIFY_PARTIAL
+    verifying --> blocked : VERIFY_BLOCKED
+    verifying --> idle : RESET
+
+    partially_verified --> verifying : START_VERIFY
+    partially_verified --> verifying : MARK_MANUAL_COMPLETE
+    partially_verified --> ready_for_reboot : REQUEST_REBOOT
+    partially_verified --> idle : RESET
+
+    complete --> idle : RESET
+
+    blocked --> verifying : START_VERIFY
+    blocked --> verifying : MARK_MANUAL_COMPLETE
+    blocked --> idle : RESET
+
+    unsupported_host --> verifying : MARK_MANUAL_COMPLETE
+    unsupported_host --> planned : PLAN
+    unsupported_host --> idle : RESET
+
+    note right of complete
+        Build step is now unlocked.
+        readyToBuild = true
+    end note
+
+    note right of blocked
+        Required settings could not be verified.
+        Build step remains locked.
+    end note
+
+    note right of unsupported_host
+        Firmware restart not supported.
+        User must configure manually
+        and mark as verified.
+    end note

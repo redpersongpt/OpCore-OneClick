@@ -1,0 +1,259 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap');
+@import "tailwindcss";
+
+@theme {
+  --font-sans: "Inter", -apple-system, BlinkMacSystemFont, "SF Pro Display", "SF Pro Text", "Helvetica Neue", sans-serif;
+  --font-mono: "SF Mono", "Menlo", "Monaco", "Courier New", monospace;
+}
+
+/* --- Design Tokens --- */
+:root {
+  --glass-bg: rgba(26, 26, 26, 0.55);
+  --glass-border: rgba(255, 255, 255, 0.08);
+  --glass-glow: rgba(59, 130, 246, 0.08);
+  --accent-blue: #3b82f6;
+  --accent-purple: #8b5cf6;
+  --accent-green: #22c55e;
+  --accent-red: #ef4444;
+  --accent-amber: #f59e0b;
+  --text-primary: #EDEDED;
+  --text-secondary: #888888;
+  --text-tertiary: #555555;
+  --radius-card: 2rem;
+  --radius-button: 1rem;
+  --bg-surface: #0a0a0a;
+  --bg-deep: #050505;
+}
+
+/* --- Base --- */
+body {
+  background-color: var(--bg-deep);
+  color: var(--text-primary);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  overflow: hidden;
+}
+
+/* --- Custom Scrollbar --- */
+.custom-scrollbar::-webkit-scrollbar {
+  width: 6px;
+}
+
+.custom-scrollbar::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.custom-scrollbar::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.08);
+  border-radius: 10px;
+}
+
+.custom-scrollbar::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.15);
+}
+
+/* --- Glass Card --- */
+.glass-card {
+  background: var(--glass-bg);
+  backdrop-filter: blur(80px);
+  -webkit-backdrop-filter: blur(80px);
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius-card);
+  box-shadow: 
+    0 25px 50px -12px rgba(0, 0, 0, 0.5),
+    inset 0 1px 0 rgba(255, 255, 255, 0.05);
+}
+
+/* --- Radar Animation (Scanning Step) --- */
+@keyframes radar-pulse {
+  0% {
+    transform: scale(0.3);
+    opacity: 0.8;
+    border-color: rgba(59, 130, 246, 0.6);
+  }
+  100% {
+    transform: scale(2.5);
+    opacity: 0;
+    border-color: rgba(59, 130, 246, 0);
+  }
+}
+
+.radar-ring {
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  border: 2px solid rgba(59, 130, 246, 0.4);
+  animation: radar-pulse 2s ease-out infinite;
+}
+
+.radar-ring:nth-child(2) {
+  animation-delay: 0.5s;
+}
+
+.radar-ring:nth-child(3) {
+  animation-delay: 1s;
+}
+
+/* --- Severity Indicators --- */
+/* --- Shimmer Animation (Premium Buttons) --- */
+@keyframes shimmer {
+  0% { transform: translateX(-100%) skewX(-15deg); }
+  50% { transform: translateX(100%) skewX(-15deg); }
+  100% { transform: translateX(100%) skewX(-15deg); }
+}
+
+.shimmer-sweep {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 50%;
+  height: 100%;
+  background: linear-gradient(
+    to right,
+    transparent,
+    rgba(255, 255, 255, 0.1),
+    transparent
+  );
+  animation: shimmer 3s infinite;
+}
+
+/* --- Grain Texture --- */
+.bg-grain {
+  position: fixed;
+  inset: 0;
+  opacity: 0.02;
+  pointer-events: none;
+  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noiseFilter'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.65' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noiseFilter)'/%3E%3C/svg%3E");
+  z-index: 50;
+}
+
+/* --- Magnetic Glow --- */
+.magnetic-glow {
+  position: relative;
+  transition: all 0.3s cubic-bezier(0.23, 1, 0.32, 1);
+}
+
+.magnetic-glow:hover {
+  transform: translateY(-2px) scale(1.01);
+  box-shadow: 0 20px 40px -10px rgba(0, 0, 0, 0.5), 0 0 20px rgba(59, 130, 246, 0.1);
+}
+
+.magnetic-glow::after {
+  content: '';
+  position: absolute;
+  inset: -1px;
+  background: linear-gradient(135deg, rgba(255,255,255,0.1), transparent, rgba(255,255,255,0.05));
+  border-radius: inherit;
+  z-index: -1;
+  opacity: 0;
+  transition: opacity 0.3s ease;
+}
+
+.magnetic-glow:hover::after {
+  opacity: 1;
+}
+
+/* --- Active Sidebar Glow --- */
+.sidebar-active-glow {
+  box-shadow: 0 0 15px rgba(59, 130, 246, 0.3);
+}
+
+/* --- Severity Indicators --- */
+.severity-error {
+  border-left: 4px solid var(--accent-red);
+  background: linear-gradient(to right, rgba(239, 68, 68, 0.05), transparent);
+}
+
+.severity-warning {
+  border-left: 4px solid var(--accent-amber);
+  background: linear-gradient(to right, rgba(245, 158, 11, 0.05), transparent);
+}
+
+.severity-info {
+  border-left: 4px solid var(--accent-blue);
+  background: linear-gradient(to right, rgba(59, 130, 246, 0.05), transparent);
+}
+
+/* --- Search Input --- */
+.search-input {
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  backdrop-filter: blur(12px);
+  border-radius: 1.25rem;
+  color: var(--text-primary);
+  font-size: 0.9375rem;
+  padding: 0.875rem 1.25rem 0.875rem 3rem;
+  width: 100%;
+  outline: none;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.search-input:focus {
+  background: rgba(255, 255, 255, 0.05);
+  border-color: rgba(59, 130, 246, 0.5);
+  box-shadow: 0 0 0 4px rgba(59, 130, 246, 0.15);
+}
+
+/* --- Filter Chips --- */
+.filter-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.375rem;
+  padding: 0.5rem 1.125rem;
+  border-radius: 2rem;
+  font-size: 0.75rem;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  border: 1px solid rgba(255, 255, 255, 0.05);
+  background: rgba(255, 255, 255, 0.03);
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: all 0.25s ease;
+  user-select: none;
+}
+
+.filter-chip:hover {
+  background: rgba(255, 255, 255, 0.06);
+  border-color: rgba(255, 255, 255, 0.1);
+  color: white;
+}
+
+.filter-chip.active {
+  background: white;
+  border-color: white;
+  color: black;
+}
+
+/* --- Production Lock Button --- */
+.production-lock-btn {
+  position: relative;
+  overflow: hidden;
+  transition: all 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+}
+
+.production-lock-btn:hover {
+  transform: scale(1.05);
+}
+
+/* --- USB Device Card --- */
+.usb-device-card {
+  padding: 1.5rem;
+  border-radius: 1.5rem;
+  border: 1px solid rgba(255, 255, 255, 0.04);
+  background: rgba(255, 255, 255, 0.02);
+  cursor: pointer;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.usb-device-card:hover {
+  background: rgba(255, 255, 255, 0.05);
+  border-color: rgba(255, 255, 255, 0.1);
+  transform: scale(1.01);
+}
+
+.usb-device-card.selected {
+  background: rgba(59, 130, 246, 0.08);
+  border-color: rgba(59, 130, 246, 0.3);
+  box-shadow: 0 10px 30px -10px rgba(59, 130, 246, 0.2);
+}

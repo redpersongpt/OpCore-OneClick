@@ -1,0 +1,62 @@
+stateDiagram-v2
+    [*] --> scan
+
+    scan --> compatibility : SCAN_COMPLETE
+    scan --> scan : RESET
+
+    compatibility --> bios : COMPATIBILITY_PASS
+    compatibility --> blocked : COMPATIBILITY_FAIL
+    compatibility --> scan : RESET
+
+    bios --> build : BIOS_COMPLETE
+    bios --> blocked : BIOS_BLOCKED
+    bios --> bios : INVALIDATE_BIOS
+    bios --> scan : RESET
+
+    build --> validate : BUILD_COMPLETE
+    build --> blocked : BUILD_FAIL
+    build --> bios : INVALIDATE_BUILD
+    build --> bios : INVALIDATE_BIOS
+    build --> scan : RESET
+
+    validate --> method : VALIDATION_PASS
+    validate --> blocked : VALIDATION_FAIL
+    validate --> bios : INVALIDATE_BUILD
+    validate --> scan : RESET
+
+    method --> deploy : METHOD_SELECTED
+    method --> bios : INVALIDATE_BUILD
+    method --> scan : RESET
+
+    deploy --> complete : DEPLOY_COMPLETE
+    deploy --> blocked : DEPLOY_FAIL
+    deploy --> scan : RESET
+
+    complete --> scan : RESET
+    complete --> bios : INVALIDATE_BUILD
+
+    blocked --> scan : RESET
+    blocked --> bios : COMPATIBILITY_PASS
+    blocked --> build : BIOS_COMPLETE
+    blocked --> method : VALIDATION_PASS
+
+    note right of blocked
+        Blocked state is recoverable.
+        Fix the blocking issue and
+        the appropriate transition
+        will unlock the next step.
+    end note
+
+    note right of build
+        INVALIDATE_BUILD is fired when
+        target macOS is changed. This
+        resets build + validation and
+        returns to BIOS step.
+    end note
+
+    note right of bios
+        BIOS_COMPLETE only fires when
+        all required firmware settings
+        are verified (readyToBuild = true
+        and stage = complete).
+    end note

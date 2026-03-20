@@ -1,0 +1,138 @@
+name: Windows Compat Test Builds
+
+# Triggered manually to produce two diagnostic Windows builds for
+# Windows Server 2016 crash triage. Not part of the normal release flow.
+on:
+  workflow_dispatch:
+    inputs:
+      version_suffix:
+        description: 'Suffix appended to release tag, e.g. "rc1" → v2.0.2-win-test-rc1'
+        required: false
+        default: 'rc1'
+
+jobs:
+  # ── Build A: hardware acceleration disabled only ────────────────────────────
+  build-windows-a:
+    name: 'Build A — gpu-disabled'
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci
+
+      - name: Inject compat mode (gpu-disabled)
+        run: |
+          npx tsc && npx tsc -p electron/tsconfig.json
+          echo '{"mode":"gpu-disabled"}' > dist-electron/compat.json
+
+      - name: Build renderer
+        run: npx vite build
+
+      - name: Package — Build A
+        run: npx electron-builder --win nsis --x64 --publish never
+        env:
+          WIN_BUILD_VARIANT: A
+
+      - name: Rename artifact
+        shell: pwsh
+        run: |
+          $src = Get-ChildItem release\*.exe | Select-Object -First 1
+          $dst = Join-Path $src.Directory "macOS-OneClick-BuildA-gpu-disabled-Setup.exe"
+          Rename-Item $src.FullName $dst
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: windows-build-a
+          path: release/*BuildA*.exe
+
+  # ── Build B: hardware acceleration disabled + legacy Chromium flags ─────────
+  build-windows-b:
+    name: 'Build B — legacy (gpu-disabled + swiftshader + no-d3d11)'
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci
+
+      - name: Inject compat mode (legacy)
+        run: |
+          npx tsc && npx tsc -p electron/tsconfig.json
+          echo '{"mode":"legacy"}' > dist-electron/compat.json
+
+      - name: Build renderer
+        run: npx vite build
+
+      - name: Package — Build B
+        run: npx electron-builder --win nsis --x64 --publish never
+        env:
+          WIN_BUILD_VARIANT: B
+
+      - name: Rename artifact
+        shell: pwsh
+        run: |
+          $src = Get-ChildItem release\*.exe | Select-Object -First 1
+          $dst = Join-Path $src.Directory "macOS-OneClick-BuildB-legacy-Setup.exe"
+          Rename-Item $src.FullName $dst
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: windows-build-b
+          path: release/*BuildB*.exe
+
+  # ── Publish both as a pre-release for easy download ─────────────────────────
+  publish-test-release:
+    needs: [build-windows-a, build-windows-b]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: release-artifacts
+          merge-multiple: true
+
+      - name: Publish test pre-release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v2.0.2-win-test-${{ github.event.inputs.version_suffix }}
+          name: "Windows Compat Test — v2.0.2 (${{ github.event.inputs.version_suffix }})"
+          body: |
+            ## Windows Server 2016 Crash Triage Builds
+
+            **Do not use these in production.** Diagnostic builds only.
+
+            | Build | File | What it changes |
+            |-------|------|-----------------|
+            | **A** | `*BuildA-gpu-disabled*` | `app.disableHardwareAcceleration()` only |
+            | **B** | `*BuildB-legacy*` | GPU disabled + SwiftShader fallback + no D3D11 + no GPU sandbox |
+
+            ### How to read the logs after testing
+            Logs are at `%AppData%\macOS-OneClick\`:
+            - `app.log` — startup checkpoints, `child-process-gone`, `gpu-process-crashed`, GPU info
+            - `startup-crash.log` — uncaught exceptions before logger is ready
+
+            ### What to look for
+            - If **Build A** crashes and **Build B** doesn't → GPU driver crash confirmed, SwiftShader workaround works
+            - If **both crash** → not a GPU/D3D issue; look at `child-process-gone` type in app.log
+            - If **Build A works** → hardware acceleration was the root cause
+
+            ### Root cause context
+            Electron 41 uses Chromium 130. Windows Server 2016 (build 14393) lacks DXGI 1.4
+            and D3D11.1 features expected by Chromium 120+. The GPU subprocess exits with
+            no driver context, which propagates as a hard crash on machines without proper
+            GPU drivers installed.
+
+            **Recommended long-term fix if legacy mode is needed:** downgrade to Electron 28.x
+            (Chromium 120, last LTS with broad Windows Server 2016 support).
+          files: release-artifacts/**/*
+          draft: false
+          prerelease: true
+          overwrite: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

@@ -1,0 +1,100 @@
+{
+  "name": "macos-one-click",
+  "private": true,
+  "version": "2.2.1",
+  "description": "macOS One-Click Deployment Utility",
+  "author": "macOS-One-Click contributors",
+  "main": "dist-electron/main.js",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc && tsc -p electron/tsconfig.json && vite build && electron-builder",
+    "preview": "vite preview",
+    "clean": "rm -rf dist dist-electron",
+    "lint": "tsc --noEmit",
+    "electron:dev": "concurrently -k \"cross-env BROWSER=none npm run dev\" \"wait-on http://localhost:5173 && tsc -p electron/tsconfig.json -w\" \"wait-on http://localhost:5173 && tsc -p electron/tsconfig.json && electron .\"",
+    "test": "vitest run"
+  },
+  "build": {
+    "appId": "com.redpersongpt.macosoneclick",
+    "productName": "macOS-OneClick",
+    "directories": {
+      "output": "release"
+    },
+    "files": [
+      "dist/**/*",
+      "dist-electron/**/*",
+      "assets/**/*"
+    ],
+    "extraResources": [
+      {
+        "from": "electron/assets/kexts",
+        "to": "kexts",
+        "filter": ["**/*"]
+      }
+    ],
+    "mac": {
+      "target": "dmg",
+      "icon": "assets/icons/icon.icns",
+      "signIgnore": ["kexts/.*"]
+    },
+    "win": {
+      "target": "nsis",
+      "icon": "assets/icons/image.png",
+      "requestedExecutionLevel": "requireAdministrator"
+    },
+    "linux": {
+      "target": [
+        "AppImage",
+        "deb"
+      ],
+      "icon": "assets/icons/image.png",
+      "category": "System",
+      "maintainer": "macOS-One-Click contributors",
+      "vendor": "redpersongpt",
+      "executableArgs": [
+        "--no-sandbox"
+      ]
+    },
+    "deb": {
+      "depends": [
+        "libnss3",
+        "libatk1.0-0",
+        "libatk-bridge2.0-0",
+        "libcups2",
+        "libgtk-3-0",
+        "libasound2"
+      ]
+    }
+  },
+  "dependencies": {
+    "@tailwindcss/vite": "^4.1.14",
+    "@vitejs/plugin-react": "^5.0.4",
+    "lucide-react": "^0.546.0",
+    "motion": "^12.23.24",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0",
+    "vite": "^6.2.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.14.0",
+    "autoprefixer": "^10.4.21",
+    "concurrently": "^9.2.1",
+    "cross-env": "^10.1.0",
+    "electron": "^41.0.2",
+    "electron-builder": "^26.8.1",
+    "tailwindcss": "^4.1.14",
+    "tsx": "^4.21.0",
+    "typescript": "~5.8.2",
+    "wait-on": "^9.0.4",
+    "vitest": "^4.1.0"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/redpersongpt/macOS-One-Click.git"
+  },
+  "bugs": {
+    "url": "https://github.com/redpersongpt/macOS-One-Click/issues"
+  },
+  "homepage": "https://github.com/redpersongpt/macOS-One-Click#readme"
+}
