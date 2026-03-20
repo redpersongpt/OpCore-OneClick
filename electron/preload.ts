@@ -51,7 +51,7 @@ try {
     inspectEfiBackupPolicy: (device: string) => ipcRenderer.invoke('efi-backup:inspect-policy', device),
 
     // EFI build
-    buildEFI: (profile: object) => ipcRenderer.invoke('build-efi', profile),
+    buildEFI: (profile: object, allowAcceptedSession = false) => ipcRenderer.invoke('build-efi', profile, allowAcceptedSession),
 
     // Kext fetcher
     fetchLatestKexts: (efiPath: string, kextNames: string[]) =>
@@ -89,7 +89,7 @@ try {
     getBiosRestartCapability: () => ipcRenderer.invoke('bios:restart-capability'),
 
     // Flow guards
-    guardBuild: (profile: object) => ipcRenderer.invoke('flow:guard-build', profile),
+    guardBuild: (profile: object, allowAcceptedSession = false) => ipcRenderer.invoke('flow:guard-build', profile, allowAcceptedSession),
     guardDeploy: (profile: object, efiPath: string) => ipcRenderer.invoke('flow:guard-deploy', profile, efiPath),
 
     // File system / diagnostics

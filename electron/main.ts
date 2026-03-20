@@ -71,11 +71,13 @@ import { simulateBuild, dryRunRecovery, verifyBuildState, verifyEfiBuildSuccess,
 import { runSafeSimulation, type SafeSimulationResult } from './safeSimulation.js';
 import { sim } from './simulation.js';
 import { getCompatModeConfigPath, getPackagedRendererEntryPath, getPreloadScriptPath } from './runtimePaths.js';
+import { runEfiBuildFlow } from './efiBuildFlow.js';
 import {
   buildStartupFailurePageUrl,
+  determineDidFailLoadAction,
   describeStartupFailure,
+  MAX_MAIN_FRAME_LOAD_RETRIES,
   RENDERER_READY_TIMEOUT_MS,
-  shouldIgnoreDidFailLoad,
   type StartupFailureEventInput,
 } from './startupRecovery.js';
 import {
@@ -233,6 +235,9 @@ async function downloadFileWithProgress(
   checkAborted?: () => void,
 ): Promise<void> {
   return new Promise((resolve, reject) => {
+    const CONNECT_TIMEOUT_MS = 30_000;
+    const INACTIVITY_TIMEOUT_MS = 20_000;
+
     function fetchUrl(urlStr: string, redirects = 0): void {
       if (redirects > 10) { reject(new Error('Too many redirects')); return; }
       const parsedUrl = new URL(urlStr);
@@ -246,14 +251,16 @@ async function downloadFileWithProgress(
         path: parsedUrl.pathname + parsedUrl.search,
         headers
       };
-      lib.get(options as any, (res) => {
+      const req = lib.get(options as any, (res) => {
         if (res.statusCode === 301 || res.statusCode === 302 || res.statusCode === 307 || res.statusCode === 308) {
+          clearTimeout(connectTimer);
           fetchUrl(res.headers.location!, redirects + 1);
           return;
         }
         const isResume = res.statusCode === 206;
         const isFull   = res.statusCode === 200;
         if (!isResume && !isFull) {
+          clearTimeout(connectTimer);
           reject(new Error(`HTTP ${res.statusCode} downloading ${urlStr}`));
           return;
         }
@@ -263,10 +270,33 @@ async function downloadFileWithProgress(
         let downloaded = effectiveOffset;
         let rejected = false;
         const file = fs.createWriteStream(dest, isResume ? { flags: 'a' } : { flags: 'w' });
+        let inactivityTimer: NodeJS.Timeout | null = null;
+
+        const clearInactivityTimer = () => {
+          if (inactivityTimer) {
+            clearTimeout(inactivityTimer);
+            inactivityTimer = null;
+          }
+        };
+
+        const armInactivityTimer = () => {
+          clearInactivityTimer();
+          inactivityTimer = setTimeout(() => {
+            if (rejected) return;
+            rejected = true;
+            res.destroy(new Error(`Download stalled after ${INACTIVITY_TIMEOUT_MS / 1000}s with no progress: ${urlStr}`));
+            file.destroy(new Error(`Download stalled after ${INACTIVITY_TIMEOUT_MS / 1000}s with no progress: ${urlStr}`));
+            reject(new Error(`Download stalled after ${INACTIVITY_TIMEOUT_MS / 1000}s with no progress: ${urlStr}`));
+          }, INACTIVITY_TIMEOUT_MS);
+        };
+
+        clearTimeout(connectTimer);
+        armInactivityTimer();
         res.on('data', (chunk: Buffer) => {
           if (rejected) return;
           try { checkAborted?.(); } catch (abortErr) {
             rejected = true;
+            clearInactivityTimer();
             res.destroy();
             file.destroy();
             try { fs.truncateSync(dest, downloaded); } catch {}
@@ -274,13 +304,31 @@ async function downloadFileWithProgress(
             return;
           }
           downloaded += chunk.length;
+          armInactivityTimer();
           onProgress(downloaded, total);
         });
         res.pipe(file);
-        file.on('finish', () => { if (!rejected) file.close(() => resolve()); });
-        res.on('error', (e) => { if (!rejected) { rejected = true; reject(e); } });
-        file.on('error', (e) => { if (!rejected) { rejected = true; reject(e); } });
-      }).on('error', reject);
+        file.on('finish', () => {
+          if (rejected) return;
+          clearInactivityTimer();
+          file.close(() => resolve());
+        });
+        res.on('error', (e) => {
+          clearInactivityTimer();
+          if (!rejected) { rejected = true; reject(e); }
+        });
+        file.on('error', (e) => {
+          clearInactivityTimer();
+          if (!rejected) { rejected = true; reject(e); }
+        });
+      });
+      const connectTimer = setTimeout(() => {
+        req.destroy(new Error(`Timed out after ${CONNECT_TIMEOUT_MS / 1000}s connecting to ${urlStr}`));
+      }, CONNECT_TIMEOUT_MS);
+      req.on('error', (error) => {
+        clearTimeout(connectTimer);
+        reject(error);
+      });
     }
     fetchUrl(url);
   });
@@ -688,7 +736,11 @@ async function probeBiosSettings(): Promise<BIOSStatus> {
 
 // --- EFI Structure ---
 
-async function ensureOpenCoreBinaries(basePath: string, token?: OpToken) {
+async function ensureOpenCoreBinaries(
+  basePath: string,
+  token?: OpToken,
+  onPhase?: (phase: string, detail: string) => void,
+) {
   const cacheDir = path.resolve(app.getPath('userData'), 'OpenCore_Cache');
   const ocVersion = '1.0.3';
   const ocUrl = `https://github.com/acidanthera/OpenCorePkg/releases/download/${ocVersion}/OpenCore-${ocVersion}-RELEASE.zip`;
@@ -700,11 +752,18 @@ async function ensureOpenCoreBinaries(basePath: string, token?: OpToken) {
   const coreFile = path.resolve(ocExtracted, 'X64/EFI/OC/OpenCore.efi');
   if (!fs.existsSync(coreFile)) {
     log('INFO', 'efi', 'Downloading base OpenCore binaries...', { version: ocVersion });
-    await downloadFileWithProgress(ocUrl, ocZip, () => {}, 0, () => token?.check());
+    onPhase?.('Downloading OpenCore binaries…', `Caching OpenCore ${ocVersion} for the EFI build.`);
+    await downloadFileWithProgress(ocUrl, ocZip, (downloaded, total) => {
+      const detail = total > 0
+        ? `${formatBytes(downloaded)} of ${formatBytes(total)}`
+        : `${formatBytes(downloaded)} downloaded`;
+      onPhase?.('Downloading OpenCore binaries…', detail);
+    }, 0, () => token?.check());
     
     try {
       if (fs.existsSync(ocExtracted)) fs.rmSync(ocExtracted, { recursive: true, force: true });
       fs.mkdirSync(ocExtracted, { recursive: true });
+      onPhase?.('Extracting OpenCore base files…', 'Preparing bootloader files for config generation.');
 
       if (process.platform === 'win32') {
         await runCommand(`powershell -Command "Expand-Archive -Path '${ocZip}' -DestinationPath '${ocExtracted}' -Force"`, {}, token);
@@ -722,6 +781,7 @@ async function ensureOpenCoreBinaries(basePath: string, token?: OpToken) {
 
   const x64Efi = path.resolve(ocExtracted, 'X64/EFI');
   if (fs.existsSync(x64Efi)) {
+    onPhase?.('Copying OpenCore base files…', 'Moving the base EFI structure into the build workspace.');
     copyDirSync(x64Efi, path.resolve(basePath, 'EFI'));
     const versionedFiles = [
       path.resolve(basePath, 'EFI/OC/OpenCore.efi'),
@@ -739,8 +799,13 @@ async function ensureOpenCoreBinaries(basePath: string, token?: OpToken) {
   }
 }
 
-async function createEfiStructure(basePath: string, profile: HardwareProfile, token?: OpToken) {
-  await ensureOpenCoreBinaries(basePath, token);
+async function createEfiStructure(
+  basePath: string,
+  profile: HardwareProfile,
+  token?: OpToken,
+  onPhase?: (phase: string, detail: string) => void,
+) {
+  await ensureOpenCoreBinaries(basePath, token, onPhase);
 
   const { kexts, ssdts } = getRequiredResources(profile);
   const dirs = [
@@ -758,8 +823,10 @@ async function createEfiStructure(basePath: string, profile: HardwareProfile, to
     const fullPath = path.resolve(basePath, dir);
     if (!fs.existsSync(fullPath)) fs.mkdirSync(fullPath, { recursive: true });
   }
+  onPhase?.('Writing OpenCore configuration…', `Generating config.plist for ${profile.smbios}.`);
   const configContent = generateConfigPlist(profile);
   fs.writeFileSync(path.resolve(basePath, 'EFI/OC/config.plist'), configContent);
+  onPhase?.('Preparing ACPI and kext placeholders…', `${ssdts.length} SSDT entries and ${kexts.length} kext folders queued.`);
   ssdts.forEach(s => {
     const p = path.resolve(basePath, 'EFI/OC/ACPI', s);
     if (!fs.existsSync(p)) fs.writeFileSync(p, '');
@@ -1484,14 +1551,20 @@ async function continueWithCurrentBiosState(
   });
 }
 
-async function ensureBiosReady(profile: HardwareProfile): Promise<void> {
+async function ensureBiosReady(
+  profile: HardwareProfile,
+  options?: { allowAcceptedSession?: boolean },
+): Promise<void> {
+  if (options?.allowAcceptedSession) {
+    return;
+  }
   const state = await getBiosStateForProfile(profile);
   if (!state.readyToBuild || state.stage !== 'complete') {
     throw new Error(`BIOS step incomplete: ${state.blockingIssues[0] ?? 'Required firmware settings are not verified.'}`);
   }
 }
 
-async function getBuildFlowGuard(profile: HardwareProfile): Promise<FlowGuardResult> {
+async function getBuildFlowGuard(profile: HardwareProfile, allowAcceptedSession = false): Promise<FlowGuardResult> {
   const compatibility = checkCompatibility(profile);
   const compatibilityBlocked = !compatibility.isCompatible || compatibility.errors.length > 0;
   const biosState = await getBiosStateForProfile(profile);
@@ -1503,6 +1576,7 @@ async function getBuildFlowGuard(profile: HardwareProfile): Promise<FlowGuardRes
   return evaluateBuildGuard({
     compatibilityBlocked,
     biosFlowState,
+    biosAccepted: allowAcceptedSession,
     releaseFlowState: deriveReleaseFlowState({
       step: 'building',
       hasProfile: true,
@@ -1895,6 +1969,7 @@ const startupLifecycle = {
   rendererReady: false,
   recoveryShown: false,
   readyTimer: null as NodeJS.Timeout | null,
+  mainFrameLoadRetries: 0,
   appEntryUrl: null as string | null,
   safeEntryUrl: null as string | null,
   packagedDistRoot: null as string | null,
@@ -1912,6 +1987,7 @@ function resetStartupLifecycle(appEntryUrl: string | null, packagedDistRoot: str
   startupLifecycle.preloadReady = false;
   startupLifecycle.rendererReady = false;
   startupLifecycle.recoveryShown = false;
+  startupLifecycle.mainFrameLoadRetries = 0;
   startupLifecycle.appEntryUrl = appEntryUrl;
   startupLifecycle.safeEntryUrl = appEntryUrl
     ? (() => {
@@ -2060,8 +2136,44 @@ function createWindow() {
   });
 
   mainWindow.webContents.on('did-fail-load', (_e, errorCode, errorDescription, validatedURL, isMainFrame) => {
-    if (shouldIgnoreDidFailLoad({ errorCode, errorDescription, validatedURL, isMainFrame })) {
+    const action = determineDidFailLoadAction(
+      { errorCode, errorDescription, validatedURL, isMainFrame },
+      startupLifecycle.mainFrameLoadRetries,
+    );
+
+    if (action === 'ignore') {
       log('INFO', 'startup', 'did-fail-load ignored', { errorCode, errorDescription, validatedURL, isMainFrame });
+      return;
+    }
+
+    if (action === 'retry' && startupLifecycle.appEntryUrl && !startupLifecycle.recoveryShown) {
+      const retryWindow = mainWindow;
+      if (!retryWindow) {
+        void showStartupRecovery({
+          kind: 'did_fail_load',
+          detail: `Main window was unavailable during startup retry: ${validatedURL}`,
+        });
+        return;
+      }
+      startupLifecycle.mainFrameLoadRetries += 1;
+      startupLifecycle.rendererReady = false;
+      startupLifecycle.preloadReady = false;
+      clearStartupReadyTimer();
+      log('WARN', 'startup', 'did-fail-load main-frame failure — retrying once', {
+        errorCode,
+        errorDescription,
+        validatedURL,
+        isMainFrame,
+        retry: startupLifecycle.mainFrameLoadRetries,
+        maxRetries: MAX_MAIN_FRAME_LOAD_RETRIES,
+      });
+      void retryWindow.loadURL(startupLifecycle.appEntryUrl).catch((error) => {
+        log('FATAL', 'startup', 'automatic startup reload failed', { error: String(error) });
+        void showStartupRecovery({
+          kind: 'load_rejected',
+          detail: `Automatic startup retry failed: ${String(error)}`,
+        });
+      });
       return;
     }
 
@@ -2389,8 +2501,8 @@ app.whenReady().then(async () => {
     };
   });
 
-  ipcHandle('flow:guard-build', async (_event: Electron.IpcMainInvokeEvent, profile: HardwareProfile) => {
-    return getBuildFlowGuard(profile);
+  ipcHandle('flow:guard-build', async (_event: Electron.IpcMainInvokeEvent, profile: HardwareProfile, allowAcceptedSession?: boolean) => {
+    return getBuildFlowGuard(profile, allowAcceptedSession === true);
   });
 
   ipcHandle('flow:guard-deploy', async (_event: Electron.IpcMainInvokeEvent, profile: HardwareProfile, efiPath: string) => {
@@ -2512,50 +2624,26 @@ app.whenReady().then(async () => {
   });
 
   // EFI build
-  ipcHandle('build-efi', async (_event: Electron.IpcMainInvokeEvent, profile: HardwareProfile) => {
-    const token = registry.create('efi-build');
-    const efiPath = path.resolve(app.getPath('userData'), 'EFI_Build_' + Date.now());
-    log('INFO', 'efi', 'Building EFI', { efiPath, cpu: profile.cpu, smbios: profile.smbios, taskId: token.taskId });
+  ipcHandle('build-efi', async (_event: Electron.IpcMainInvokeEvent, profile: HardwareProfile, allowAcceptedSession?: boolean) => {
     lastBuildProfile = profile;
-
-    const compatibility = checkCompatibility(profile);
-    if (!compatibility.isCompatible || compatibility.errors.length > 0) {
-      rememberFailureContext({
-        trigger: 'efi_build_failure',
-        message: compatibility.errors[0] ?? compatibility.explanation,
-        detail: compatibility.explanation,
-      });
-      registry.fail(token.taskId, compatibility.errors[0] ?? compatibility.explanation);
-      throw new Error(compatibility.errors[0] ?? 'Hardware compatibility is blocked for this EFI build.');
-    }
-    await ensureBiosReady(profile);
-    
-    if (!fs.existsSync(efiPath)) fs.mkdirSync(efiPath, { recursive: true });
-    
-    try {
-      registry.updateProgress(token.taskId, { kind: 'efi-build', phase: 'initialising', detail: 'Preparing build environment' });
-      
-      await withTimeout(createEfiStructure(efiPath, profile, token), 45_000, 'createEfiStructure');
-      
-      registry.complete(token.taskId);
-      log('INFO', 'efi', 'EFI build complete', { efiPath });
-    } catch (e) {
-      const classified = classifyError(e);
-      rememberFailureContext({
-        trigger: 'efi_build_failure',
-        message: classified.message,
-        detail: classified.explanation,
-        code: classified.category,
-      });
-      log('ERROR', 'efi', 'EFI build failed', { error: classified.explanation });
-      if (!token.aborted) registry.fail(token.taskId, classified.message);
-      else registry.cancel(token.taskId);
-      
-      // Clean up partial build directory
-      try { fs.rmSync(efiPath, { recursive: true, force: true }); } catch (_) {}
-      throw createClassifiedIpcError(classified, e);
-    }
-    return efiPath;
+    return runEfiBuildFlow(
+      { profile, allowAcceptedSession },
+      {
+        registry,
+        getUserDataPath: () => app.getPath('userData'),
+        log,
+        rememberFailureContext,
+        checkCompatibility,
+        ensureBiosReady,
+        createEfiStructure,
+        withTimeout,
+        classifyError,
+        createClassifiedIpcError,
+        removeDir: (targetPath) => {
+          try { fs.rmSync(targetPath, { recursive: true, force: true }); } catch (_) {}
+        },
+      },
+    );
   });
 
   // Kext fetcher — hybrid: GitHub (latest) → embedded fallback → hard fail
@@ -3556,6 +3644,7 @@ app.whenReady().then(async () => {
 
   ipcHandle('renderer:ready', async () => {
     startupLifecycle.rendererReady = true;
+    startupLifecycle.mainFrameLoadRetries = 0;
     clearStartupReadyTimer();
     log('INFO', 'startup', 'renderer-ready handshake received', {
       preloadReady: startupLifecycle.preloadReady,

@@ -26,6 +26,7 @@ export interface StepGuardState {
   compat: CompatibilityReport | null;
   hasLiveHardwareContext: boolean;
   biosReady: boolean;
+  biosAccepted: boolean;
   buildReady: boolean;
   efiPath: string | null;
   biosConf: BIOSConfig | null;
@@ -147,8 +148,26 @@ export function evaluateStepTransition(target: StepId, state: StepGuardState): S
         };
   }
 
-  if (target === 'recovery-download' || target === 'method-select' || target === 'usb-select' || target === 'part-prep') {
+  if (target === 'recovery-download' || target === 'method-select' || target === 'usb-select') {
     return state.postBuildReady
+      ? { ok: true }
+      : {
+          ok: false,
+          reason: state.validationBlocked
+            ? 'EFI validation must pass before continuing.'
+            : state.compatibilityBlocked
+            ? 'Compatibility must remain unblocked before continuing.'
+            : (state.biosReady || state.biosAccepted)
+            ? 'A validated EFI is required before continuing.'
+            : 'BIOS preparation must be complete before continuing.',
+          redirect: state.compatibilityBlocked || state.validationBlocked || !state.buildReady || !state.efiPath || state.biosAccepted
+            ? 'report'
+            : 'bios',
+        };
+  }
+
+  if (target === 'part-prep') {
+    return state.buildReady && state.efiPath && state.compat && state.compat.errors.length === 0 && state.biosReady
       ? { ok: true }
       : {
           ok: false,

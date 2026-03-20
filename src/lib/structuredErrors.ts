@@ -42,6 +42,33 @@ const ERROR_MAP: Array<{
     },
   },
   {
+    test: m => m.includes('bios_continue_blocked') || m.includes('could not continue from the bios step'),
+    structured: {
+      title: 'BIOS continue is blocked',
+      what: 'The current BIOS checklist could not advance to EFI build from this state.',
+      nextStep: 'Stay on the BIOS step, review the blocking reason, and use Continue again only after the prerequisite is resolved.',
+      retryable: true,
+    },
+  },
+  {
+    test: m => m.includes('build_blocked_by_guard') || m.includes('efi build is blocked'),
+    structured: {
+      title: 'EFI build is blocked',
+      what: 'A build guard stopped EFI generation before it started.',
+      nextStep: 'Fix the blocking prerequisite shown in the report or BIOS step, then retry the EFI build.',
+      retryable: true,
+    },
+  },
+  {
+    test: m => m.includes('build_ipc_failed') || m.includes('efi build failed'),
+    structured: {
+      title: 'EFI build failed',
+      what: 'The EFI build IPC path returned a concrete runtime failure.',
+      nextStep: 'Review the reported build error, correct the blocker, then retry the EFI build once.',
+      retryable: true,
+    },
+  },
+  {
     test: m => m.includes('no supported display path') || m.includes('val_gpu_no_supported_path'),
     structured: {
       title: 'No supported display path',

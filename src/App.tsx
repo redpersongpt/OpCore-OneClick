@@ -95,7 +95,7 @@ declare global {
       exportHardwareProfile: (artifact?: HardwareProfileArtifact | null) => Promise<{ filePath: string; artifact: HardwareProfileArtifact } | null>;
       importHardwareProfile: () => Promise<HardwareProfileArtifact | null>;
       inspectEfiBackupPolicy: (device: string) => Promise<EfiBackupPolicy>;
-      buildEFI: (p: HardwareProfile) => Promise<string>;
+      buildEFI: (p: HardwareProfile, allowAcceptedSession?: boolean) => Promise<string>;
       fetchLatestKexts: (efi: string, ks: string[]) => Promise<KextFetchResult[]>;
       downloadRecovery: (dir: string, osv: string, startOffset?: number) => Promise<{ dmgPath: string; recoveryDir: string }>;
       listUsbDevices: () => Promise<{ name: string; device: string; size: string }[]>;
@@ -111,7 +111,7 @@ declare global {
       clearBiosSession: () => Promise<boolean>;
       getBiosResumeState: () => Promise<import('../electron/bios/types').BiosResumeStateResponse>;
       getBiosRestartCapability: () => Promise<import('../electron/bios/types').FirmwareRestartCapability>;
-      guardBuild: (profile: import('../electron/configGenerator').HardwareProfile) => Promise<import('./lib/stateMachine').FlowGuardResult>;
+      guardBuild: (profile: import('../electron/configGenerator').HardwareProfile, allowAcceptedSession?: boolean) => Promise<import('./lib/stateMachine').FlowGuardResult>;
       guardDeploy: (profile: import('../electron/configGenerator').HardwareProfile, efiPath: string) => Promise<import('./lib/stateMachine').FlowGuardResult>;
       openFolder: (p: string) => Promise<void>;
       getLogPath: () => Promise<string>;
@@ -323,6 +323,7 @@ export default function App() {
   const [recentEvents, setRecentEvents] = useState<any[]>([]);
   const [watchdogCount, setWatchdogCount] = useState(0);
   const [recoveryTryCount, setRecoveryTryCount] = useState(0);
+  const [biosAccepted, setBiosAccepted] = useState(false);
   const hasLiveHardwareContext = planningProfileContext === 'live_scan';
   const biosReady = biosState?.readyToBuild === true && biosState?.stage === 'complete';
   const compatibilityBlocked = isCompatibilityBlocked(compat);
@@ -354,9 +355,10 @@ export default function App() {
     () => evaluateBuildGuard({
       compatibilityBlocked,
       biosFlowState,
+      biosAccepted,
       releaseFlowState,
     }),
-    [biosFlowState, compatibilityBlocked, releaseFlowState],
+    [biosAccepted, biosFlowState, compatibilityBlocked, releaseFlowState],
   );
   const localDeployGuard = useMemo(
     () => evaluateDeployGuard({
@@ -368,7 +370,11 @@ export default function App() {
     }),
     [biosFlowState, compatibilityBlocked, efiPath, releaseFlowState, validationBlocked],
   );
-  const postBuildReady = !compatibilityBlocked && biosReady && buildReady && !!efiPath && !validationBlocked;
+  const postBuildReady = !compatibilityBlocked && (biosReady || biosAccepted) && buildReady && !!efiPath && !validationBlocked;
+
+  useEffect(() => {
+    setBiosAccepted(false);
+  }, [biosState?.hardwareFingerprint]);
 
   useEffect(() => {
     if (!profile) return;
@@ -432,6 +438,7 @@ export default function App() {
     compat,
     hasLiveHardwareContext,
     biosReady,
+    biosAccepted,
     buildReady,
     efiPath,
     biosConf,
@@ -694,10 +701,29 @@ export default function App() {
       };
     }
 
-    const guard = await window.electron.guardBuild(activeProfile);
+    const guard = await window.electron.guardBuild(activeProfile, biosAccepted);
     if (!guard.allowed && options?.surfaceError !== false) {
       const redirect = getBuildGuardRedirect(activeCompat);
-      setErrorWithSuggestion(guard.reason ?? 'Build is blocked by the current firmware or compatibility state.', redirect);
+      setGlobalNotice(null);
+      setGlobalError(JSON.stringify({
+        code: 'build_blocked_by_guard',
+        message: 'EFI build is blocked',
+        explanation: guard.reason ?? 'Build is blocked by the current firmware or compatibility state.',
+        decisionSummary: guard.reason ?? 'The EFI build cannot start from the current release state.',
+        suggestion: redirect === 'bios'
+          ? 'Return to the BIOS step and use Continue or Recheck BIOS before building again.'
+          : 'Return to the report step and fix the blocking prerequisite before rebuilding.',
+        category: 'build_error',
+        severity: 'warning',
+        targetStep: redirect,
+        rawMessage: guard.reason ?? 'Build is blocked by the current firmware or compatibility state.',
+      }));
+      logUiEvent('error_surface_opened', {
+        step: redirect,
+        code: 'build_blocked_by_guard',
+        message: 'EFI build is blocked',
+        rawMessage: guard.reason ?? 'Build is blocked by the current firmware or compatibility state.',
+      });
       _setStepRaw(redirect);
     }
     return guard;
@@ -781,11 +807,13 @@ export default function App() {
   const refreshBiosState = async (activeProfile: HardwareProfile, options?: { redirectIfBlocked?: boolean }) => {
     if (!hasLiveHardwareContext) {
       setBiosState(null);
+      setBiosAccepted(false);
       return null;
     }
     try {
       const nextState = await window.electron.getBiosState(activeProfile);
       setBiosState(nextState);
+      setBiosAccepted(false);
       if (options?.redirectIfBlocked && (!(nextState.readyToBuild && nextState.stage === 'complete')) && STEP_ORDER.indexOf(step) > STEP_ORDER.indexOf('bios')) {
         _setStepRaw('bios');
       }
@@ -1312,12 +1340,15 @@ export default function App() {
 
   const applySupportedBiosChanges = async (selectedChanges: Record<string, BiosSettingSelection>) => {
     if (!profile) throw new Error('Hardware profile missing for BIOS orchestration.');
+    setBiosAccepted(false);
     const result = await window.electron.applySupportedBiosChanges(profile, selectedChanges);
     setBiosState(result.state);
     return { message: result.message };
   };
 
-  const recheckBiosState = async (selectedChanges: Record<string, BiosSettingSelection>) => performBiosRecheck({
+  const recheckBiosState = async (selectedChanges: Record<string, BiosSettingSelection>) => {
+    setBiosAccepted(false);
+    return performBiosRecheck({
     profile,
     currentState: biosState,
     applyVerifiedState: setBiosState,
@@ -1334,7 +1365,8 @@ export default function App() {
         rawMessage: payload.rawMessage ?? payload.explanation ?? payload.message,
       });
     },
-  }, selectedChanges);
+    }, selectedChanges);
+  };
 
   const continueFromCurrentBiosState = async (selectedChanges: Record<string, BiosSettingSelection>) => performBiosContinue({
     profile,
@@ -1343,13 +1375,15 @@ export default function App() {
     recheckManualChanges: (activeProfile, changes) => window.electron.verifyManualBiosChanges(activeProfile, changes),
     continueWithCurrentState: (activeProfile, changes) => window.electron.continueBiosWithCurrentState(activeProfile, changes),
     advanceToBuildStep: () => {
+      setBiosAccepted(true);
       const nextBuildGuard = evaluateBuildGuard({
         compatibilityBlocked,
         biosFlowState: 'complete',
+        biosAccepted: true,
         releaseFlowState,
       });
       const transition = attemptStepTransition('building', {
-        biosReady: true,
+        biosAccepted: true,
         localBuildGuard: nextBuildGuard,
       });
       if (!transition?.ok) {
@@ -1362,7 +1396,7 @@ export default function App() {
       setGlobalError(JSON.stringify(payload));
       logUiEvent('error_surface_opened', {
         step: 'bios',
-        code: payload.code ?? 'bios_continue_failed',
+        code: payload.code ?? 'bios_continue_blocked',
         message: payload.message,
         rawMessage: payload.rawMessage ?? payload.explanation ?? payload.message,
       });
@@ -1371,6 +1405,7 @@ export default function App() {
 
   const restartToFirmwareWithSession = async (selectedChanges: Record<string, BiosSettingSelection>) => {
     if (!profile) return { supported: false, error: 'Hardware profile missing for BIOS reboot.' };
+    setBiosAccepted(false);
     const result = await window.electron.restartToFirmwareWithSession(profile, selectedChanges);
     setBiosState(result.state);
     window.electron.getBiosResumeState().then(setBiosResumeState).catch(() => {});
@@ -1382,7 +1417,7 @@ export default function App() {
 
   const startDeploy = async () => {
     if (!profile || isDeployingRef.current) return;
-    const liveBiosState = biosReady ? biosState : await refreshBiosState(profile, { redirectIfBlocked: true });
+    const liveBiosState = (biosReady || biosAccepted) ? biosState : await refreshBiosState(profile, { redirectIfBlocked: true });
     if (!liveBiosState) {
       return;
     }
@@ -1504,7 +1539,7 @@ export default function App() {
       setStatus('Generating OpenCore configuration…');
       setProgress(10);
       await new Promise(r => setTimeout(r, 800));
-      const built = await window.electron.buildEFI(profile);
+      const built = await window.electron.buildEFI(profile, biosAccepted);
       if (!isCurrentRun()) return;
       setEfiPath(built);
       setProgress(55);
@@ -1773,7 +1808,25 @@ export default function App() {
         pendingRendererExpectation: null,
         stalledReason: e.message || 'Build failed',
       });
-      setErrorWithSuggestion(e.message || 'Build failed. Please check the hardware compatibility.', 'building');
+      const message = e.message || 'Build failed. Please check the hardware compatibility.';
+      setGlobalNotice(null);
+      setGlobalError(JSON.stringify({
+        code: 'build_ipc_failed',
+        message: 'EFI build failed',
+        explanation: message,
+        decisionSummary: message,
+        suggestion: 'Return to the previous step, confirm the BIOS/build prerequisites, then retry the EFI build once.',
+        category: 'build_error',
+        severity: 'warning',
+        targetStep: 'report',
+        rawMessage: message,
+      }));
+      logUiEvent('error_surface_opened', {
+        step: 'building',
+        code: 'build_ipc_failed',
+        message: 'EFI build failed',
+        rawMessage: message,
+      });
       setStep('report');
     } finally {
       if (isCurrentRun()) {

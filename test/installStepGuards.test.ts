@@ -64,6 +64,7 @@ function makeState(overrides: Partial<StepGuardState> = {}): StepGuardState {
     compat,
     hasLiveHardwareContext: true,
     biosReady: true,
+    biosAccepted: false,
     buildReady: true,
     efiPath: '/tmp/efi',
     biosConf: { enable: [], disable: [] },
@@ -112,6 +113,30 @@ describe('install step guards', () => {
     assert.match(result.reason ?? '', /efi validation/i);
   });
 
+  test('keeps post-build redirects on the report step when BIOS was manually accepted', () => {
+    const result = evaluateStepTransition('method-select', makeState({
+      biosReady: false,
+      biosAccepted: true,
+      postBuildReady: false,
+    }));
+
+    assert.equal(result.ok, false);
+    assert.equal(result.redirect, 'report');
+    assert.match(result.reason ?? '', /validated efi/i);
+  });
+
+  test('does not allow accepted BIOS state to enter partition prep', () => {
+    const result = evaluateStepTransition('part-prep', makeState({
+      biosReady: false,
+      biosAccepted: true,
+      postBuildReady: true,
+    }));
+
+    assert.equal(result.ok, false);
+    assert.equal(result.redirect, 'bios');
+    assert.match(result.reason ?? '', /bios preparation/i);
+  });
+
   test('blocks flashing when no target drive is selected', () => {
     const result = evaluateStepTransition('flashing', makeState({
       selectedUsb: null,
@@ -119,6 +144,22 @@ describe('install step guards', () => {
 
     assert.equal(result.ok, false);
     assert.match(result.reason ?? '', /select a target drive/i);
+  });
+
+  test('does not allow accepted BIOS state to reach flashing', () => {
+    const result = evaluateStepTransition('flashing', makeState({
+      biosReady: false,
+      biosAccepted: true,
+      localDeployGuard: makeGuard({
+        allowed: false,
+        reason: 'BIOS preparation must be complete before deployment.',
+        currentState: 'deploy',
+        biosState: 'blocked',
+      }),
+    }));
+
+    assert.equal(result.ok, false);
+    assert.match(result.reason ?? '', /bios preparation/i);
   });
 
   test('blocks flashing when deploy guard blocks even with a drive selected', () => {

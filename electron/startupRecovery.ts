@@ -3,6 +3,7 @@ import type { IssueReportDraft, PublicDiagnosticsSnapshot } from './releaseDiagn
 
 export const DID_FAIL_LOAD_ERR_ABORTED = -3;
 export const RENDERER_READY_TIMEOUT_MS = 8_000;
+export const MAX_MAIN_FRAME_LOAD_RETRIES = 1;
 
 export type StartupFailureKind =
   | 'missing_assets'
@@ -17,6 +18,8 @@ export interface DidFailLoadContext {
   validatedURL: string;
   isMainFrame: boolean;
 }
+
+export type DidFailLoadAction = 'ignore' | 'retry' | 'recover';
 
 export interface StartupFailurePageInput {
   kind: StartupFailureKind;
@@ -52,6 +55,15 @@ export function shouldIgnoreDidFailLoad(context: DidFailLoadContext): boolean {
   if (context.validatedURL.startsWith('chrome-error://')) return false;
   if (context.validatedURL.startsWith('data:text/html')) return true;
   return false;
+}
+
+export function determineDidFailLoadAction(
+  context: DidFailLoadContext,
+  retryCount: number,
+): DidFailLoadAction {
+  if (shouldIgnoreDidFailLoad(context)) return 'ignore';
+  if (retryCount < MAX_MAIN_FRAME_LOAD_RETRIES) return 'retry';
+  return 'recover';
 }
 
 function escapeHtml(value: string): string {

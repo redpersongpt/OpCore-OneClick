@@ -369,6 +369,46 @@ const TEMPLATES: SuggestionTemplate[] = [
 
   // ── Pre-build blockers from deterministic/preflight checks ───────────────
   {
+    test: m => m.includes('build_blocked_by_guard') || m.includes('efi build is blocked'),
+    code: 'build_blocked_by_guard',
+    category: 'validation_error',
+    build: () => ({
+      title: 'EFI build is blocked',
+      explanation: 'The app stopped the EFI build before generation because a prerequisite is still unsatisfied.',
+      severity: 'critical',
+      decisionSummary: '',
+      primaryAction: act(
+        'Resolve the blocking prerequisite shown in the BIOS or report step, then retry the EFI build',
+        'high',
+        'The guard already identified the exact class of blocker, so retrying blindly is low value',
+        'fix_now',
+        'Build guard failures are deterministic gate checks, not transient renderer noise',
+        'The next build starts only after the prerequisite is satisfied',
+      ),
+      alternatives: [],
+    }),
+  },
+  {
+    test: m => m.includes('build_ipc_failed') || m.includes('efi build failed'),
+    code: 'build_ipc_failed',
+    category: 'validation_error',
+    build: () => ({
+      title: 'EFI build failed',
+      explanation: 'The backend build flow returned a concrete runtime failure while generating the EFI.',
+      severity: 'critical',
+      decisionSummary: '',
+      primaryAction: act(
+        'Review the concrete build error, fix it, then retry the EFI build once',
+        'high',
+        'This is a real backend build failure, not a safe retry candidate without first understanding the blocker',
+        'fix_now',
+        'Repeating the same failed build without addressing the reported cause is low signal',
+        'The next build attempt starts from a corrected state',
+      ),
+      alternatives: [],
+    }),
+  },
+  {
     test: m => m.includes('pre-build check failed') || m.includes('build will fail'),
     code: 'build_precheck_failed',
     category: 'validation_error',

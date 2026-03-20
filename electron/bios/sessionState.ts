@@ -63,8 +63,24 @@ export function loadBiosSession(userDataPath: string): BiosSessionState | null {
   try {
     const sessionFile = getSessionFile(userDataPath);
     if (!fs.existsSync(sessionFile)) return null;
-    const parsed = JSON.parse(fs.readFileSync(sessionFile, 'utf-8')) as BiosSessionState;
-    return parsed;
+    const parsed = JSON.parse(fs.readFileSync(sessionFile, 'utf-8')) as Partial<BiosSessionState>;
+    if (
+      typeof parsed?.sessionId !== 'string'
+      || typeof parsed?.hardwareFingerprint !== 'string'
+      || typeof parsed?.stage !== 'string'
+      || typeof parsed?.vendor !== 'string'
+    ) {
+      return null;
+    }
+    return {
+      sessionId: parsed.sessionId,
+      hardwareFingerprint: parsed.hardwareFingerprint,
+      selectedChanges: (parsed.selectedChanges ?? {}) as BiosSessionState['selectedChanges'],
+      stage: parsed.stage as BiosSessionStage,
+      vendor: parsed.vendor as BiosSessionState['vendor'],
+      rebootRequested: parsed.rebootRequested === true,
+      timestamp: typeof parsed.timestamp === 'number' ? parsed.timestamp : Date.now(),
+    };
   } catch {
     return null;
   }

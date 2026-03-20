@@ -393,6 +393,7 @@ export function deriveReleaseFlowState(input: ReleaseStateDerivationInput): Rele
 export interface SharedFlowGuardContext {
   compatibilityBlocked: boolean;
   biosFlowState: BiosFlowState;
+  biosAccepted?: boolean;
   releaseFlowState: ReleaseFlowState;
 }
 
@@ -406,6 +407,17 @@ export function evaluateBuildGuard(ctx: SharedFlowGuardContext): FlowGuardResult
     return {
       allowed: false,
       reason: 'Compatibility is blocked. Fix the compatibility report before building.',
+      currentState: ctx.releaseFlowState,
+      biosState: ctx.biosFlowState,
+    };
+  }
+
+  if (ctx.biosAccepted) {
+    const releaseFlow = createReleaseFlowMachine(ctx.releaseFlowState);
+    const allowed = releaseFlow.matches('build', 'bios');
+    return {
+      allowed,
+      reason: allowed ? null : `Cannot build from state: ${ctx.releaseFlowState}`,
       currentState: ctx.releaseFlowState,
       biosState: ctx.biosFlowState,
     };

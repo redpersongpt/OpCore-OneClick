@@ -21,7 +21,7 @@ declare global {
       } | null>;
       importHardwareProfile: () => Promise<import('../electron/hardwareProfileArtifact').HardwareProfileArtifact | null>;
       inspectEfiBackupPolicy: (device: string) => Promise<import('../electron/efiBackup').EfiBackupPolicy>;
-      buildEFI: (profile: any) => Promise<string>;
+      buildEFI: (profile: any, allowAcceptedSession?: boolean) => Promise<string>;
       fetchLatestKexts: (efiPath: string, kextNames: string[]) => Promise<Array<{ name: string; version: string; source?: 'github' | 'embedded' | 'failed' }>>;
       downloadRecovery: (targetPath: string, macOSVersion: string, startOffset?: number) => Promise<{ dmgPath: string; recoveryDir: string }>;
       listUsbDevices: () => Promise<Array<{ name: string; device: string; size: string }>>;
@@ -37,7 +37,7 @@ declare global {
       clearBiosSession: () => Promise<boolean>;
       getBiosResumeState: () => Promise<import('../electron/bios/types').BiosResumeStateResponse>;
       getBiosRestartCapability: () => Promise<import('../electron/bios/types').FirmwareRestartCapability>;
-      guardBuild: (profile: any) => Promise<import('./lib/stateMachine').FlowGuardResult>;
+      guardBuild: (profile: any, allowAcceptedSession?: boolean) => Promise<import('./lib/stateMachine').FlowGuardResult>;
       guardDeploy: (profile: any, efiPath: string) => Promise<import('./lib/stateMachine').FlowGuardResult>;
       openFolder: (folderPath: string) => Promise<void>;
       getLogPath: () => Promise<string>;

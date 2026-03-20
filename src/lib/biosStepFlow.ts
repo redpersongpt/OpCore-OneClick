@@ -6,7 +6,7 @@ export type BiosRecoveryCode =
   | 'bios_recheck_failed'
   | 'bios_state_unavailable'
   | 'bios_requirements_not_met'
-  | 'bios_continue_failed'
+  | 'bios_continue_blocked'
   | 'bios_restart_failed';
 
 export interface BiosActionFeedback {
@@ -121,10 +121,10 @@ export function buildBiosRecoveryPayload(input: {
         rawMessage: detail || undefined,
         targetStep: 'bios',
       };
-    case 'bios_continue_failed':
+    case 'bios_continue_blocked':
     default:
       return {
-        code: 'bios_continue_failed',
+        code: 'bios_continue_blocked',
         message: 'Could not continue from the BIOS step',
         explanation: 'The app could not carry the current BIOS checklist state into the next step.',
         decisionSummary: detail || 'The BIOS step did not produce a usable continuation state.',
@@ -205,7 +205,7 @@ export async function performBiosContinue(
     };
   } catch (error: any) {
     const payload = buildBiosRecoveryPayload({
-      code: 'bios_continue_failed',
+      code: 'bios_continue_blocked',
       detail: error?.message || 'Unknown BIOS continuation failure.',
     });
     deps.openRecoverySurface(payload);

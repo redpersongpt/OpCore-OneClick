@@ -18,6 +18,7 @@ function makeGuardState(): StepGuardState {
     } as any,
     hasLiveHardwareContext: true,
     biosReady: true,
+    biosAccepted: false,
     buildReady: false,
     efiPath: null,
     biosConf: {} as any,

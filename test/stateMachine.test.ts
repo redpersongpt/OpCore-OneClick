@@ -359,6 +359,18 @@ describe('Invalidation rules', () => {
     assert.equal(result.allowed, true);
   });
 
+  test('evaluateBuildGuard allows a manually accepted BIOS session to enter build without a fresh probe', () => {
+    const result = evaluateBuildGuard({
+      compatibilityBlocked: false,
+      biosFlowState: 'blocked',
+      biosAccepted: true,
+      releaseFlowState: 'bios',
+    });
+
+    assert.equal(result.allowed, true);
+    assert.equal(result.reason, null);
+  });
+
   test('evaluateDeployGuard blocks deploy when validation fails', () => {
     const result = evaluateDeployGuard({
       compatibilityBlocked: false,
@@ -395,5 +407,19 @@ describe('Invalidation rules', () => {
     });
 
     assert.equal(result.allowed, true);
+  });
+
+  test('evaluateDeployGuard still blocks deploy when build used biosAccepted only', () => {
+    const result = evaluateDeployGuard({
+      compatibilityBlocked: false,
+      biosFlowState: 'blocked',
+      biosAccepted: true,
+      releaseFlowState: 'deploy',
+      validationBlocked: false,
+      hasEfi: true,
+    });
+
+    assert.equal(result.allowed, false);
+    assert.match(result.reason ?? '', /bios preparation must be complete/i);
   });
 });
