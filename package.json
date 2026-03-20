@@ -1,7 +1,7 @@
 {
   "name": "macos-one-click",
   "private": true,
-  "version": "2.3.3",
+  "version": "2.3.6",
   "description": "macOS One-Click Deployment Utility",
   "author": "macOS-One-Click contributors",
   "main": "dist-electron/electron/main.js",

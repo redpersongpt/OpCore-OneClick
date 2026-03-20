@@ -1,5 +1,13 @@
 # Changelog
 
+## 2.3.6 - 2026-03-21
+
+- Fixed the remaining EFI-build stall after BIOS Continue by auto-starting the build flow instead of landing on a second manual Begin gate.
+- Prevented stale BIOS refresh responses from clearing an accepted BIOS session after Continue, so the non-destructive build path stays coherent until EFI generation starts.
+- Added an in-app "Update to latest version" button that opens the latest GitHub release page from both the landing screen and the main shell.
+- Timed out BIOS-state firmware probing in the main process and emitted EFI-build progress before BIOS validation so hung firmware reads fail clearly instead of leaving the build screen waiting indefinitely.
+- Kept destructive safety unchanged: accepted BIOS sessions still do not unlock partitioning or flashing without a real ready BIOS state.
+
 ## 2.3.3 - 2026-03-20
 
 - Fixed the BIOS-step recovery bug where the combined recheck/continue flow could fall into a generic unknown-error surface instead of staying in a clear BIOS-specific path.

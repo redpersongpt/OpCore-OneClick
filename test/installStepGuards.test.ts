@@ -113,15 +113,17 @@ describe('install step guards', () => {
     assert.match(result.reason ?? '', /efi validation/i);
   });
 
-  test('keeps post-build redirects on the report step when BIOS was manually accepted', () => {
+  test('keeps accepted BIOS sessions on the BIOS path when post-build prerequisites are still missing', () => {
     const result = evaluateStepTransition('method-select', makeState({
       biosReady: false,
       biosAccepted: true,
       postBuildReady: false,
+      buildReady: true,
+      efiPath: '/tmp/efi',
     }));
 
     assert.equal(result.ok, false);
-    assert.equal(result.redirect, 'report');
+    assert.equal(result.redirect, 'bios');
     assert.match(result.reason ?? '', /validated efi/i);
   });
 

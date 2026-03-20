@@ -160,7 +160,7 @@ export function evaluateStepTransition(target: StepId, state: StepGuardState): S
             : (state.biosReady || state.biosAccepted)
             ? 'A validated EFI is required before continuing.'
             : 'BIOS preparation must be complete before continuing.',
-          redirect: state.compatibilityBlocked || state.validationBlocked || !state.buildReady || !state.efiPath || state.biosAccepted
+          redirect: state.compatibilityBlocked || state.validationBlocked || !state.buildReady || !state.efiPath
             ? 'report'
             : 'bios',
         };

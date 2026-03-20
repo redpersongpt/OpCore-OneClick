@@ -78,6 +78,14 @@ export async function runEfiBuildFlow(
     throw new Error(compatibility.errors[0] ?? 'Hardware compatibility is blocked for this EFI build.');
   }
 
+  deps.registry.updateProgress(token.taskId, {
+    kind: 'efi-build',
+    phase: 'checking BIOS state',
+    detail: allowAcceptedSession === true
+      ? 'Using the accepted BIOS session for this non-destructive EFI build.'
+      : 'Verifying that BIOS preparation is complete before the EFI build starts.',
+  });
+
   try {
     await deps.ensureBiosReady(profile, { allowAcceptedSession: allowAcceptedSession === true });
   } catch (error) {

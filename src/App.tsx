@@ -3,7 +3,7 @@ import { motion, AnimatePresence } from 'motion/react';
 import {
   CheckCircle, Usb, Search, Box, Download, Settings, ChevronRight,
   HardDrive, ShieldCheck, ShieldAlert, Check, Info, AlertTriangle,
-  X, HelpCircle, Package, RefreshCcw, ChevronDown, ChevronLeft
+  X, HelpCircle, Package, RefreshCcw, ChevronDown, ChevronLeft, ArrowUpRight
 } from 'lucide-react';
 import BrandIcon from './components/BrandIcon';
 import { getBIOSSettings, getRequiredResources, getSMBIOSForProfile, type HardwareProfile, type BIOSConfig } from '../electron/configGenerator';
@@ -141,6 +141,7 @@ declare global {
       getSessionId: () => Promise<string>;
       // Issue reporter
       reportIssue: (extraContext?: string | null) => Promise<{ success: boolean; body: string; baseUrl: string }>;
+      openLatestReleasePage: () => Promise<boolean>;
       // Recovery Cache & Import
       importRecovery: (targetPath: string, macOSVersion: string) => Promise<{ dmgPath: string; recoveryDir: string } | null>;
       getCachedRecoveryInfo: (version: string) => Promise<any>;
@@ -316,6 +317,9 @@ export default function App() {
   } | null>(null);
   const buildFlowRef = useRef<BuildFlowSnapshot | null>(null);
   const buildRunIdRef = useRef(0);
+  const biosAcceptedRef = useRef(false);
+  const biosRefreshRequestIdRef = useRef(0);
+  const buildAutoStartRef = useRef(false);
 
   // ── Debug Overlay ──────────────────────────────────────────────
   const [debugOpen, setDebugOpen] = useState(false);
@@ -372,8 +376,13 @@ export default function App() {
   );
   const postBuildReady = !compatibilityBlocked && (biosReady || biosAccepted) && buildReady && !!efiPath && !validationBlocked;
 
+  const setBiosAcceptedRuntime = (next: boolean) => {
+    biosAcceptedRef.current = next;
+    setBiosAccepted(next);
+  };
+
   useEffect(() => {
-    setBiosAccepted(false);
+    setBiosAcceptedRuntime(false);
   }, [biosState?.hardwareFingerprint]);
 
   useEffect(() => {
@@ -498,7 +507,7 @@ export default function App() {
       buildReady: true,
       efiPath: nextEfiPath,
       validationBlocked: false,
-      postBuildReady: Boolean(nextEfiPath) && !compatibilityBlocked && biosReady,
+      postBuildReady: Boolean(nextEfiPath) && !compatibilityBlocked && (biosReady || biosAcceptedRef.current),
     });
     if (!transition?.ok) {
       setGlobalError(describeBuildFlowFailure(
@@ -527,6 +536,14 @@ export default function App() {
       setRecovError(msg);
       setErrorWithSuggestion(msg, 'recovery-download');
     } finally { isImportingRef.current = false; }
+  };
+
+  const openLatestReleasePage = async () => {
+    try {
+      await window.electron.openLatestReleasePage();
+    } catch (e: any) {
+      setErrorWithSuggestion(e?.message || 'Could not open the latest release page.', step);
+    }
   };
 
   /** Set a global error with context-aware suggestion.
@@ -701,7 +718,7 @@ export default function App() {
       };
     }
 
-    const guard = await window.electron.guardBuild(activeProfile, biosAccepted);
+    const guard = await window.electron.guardBuild(activeProfile, biosAcceptedRef.current);
     if (!guard.allowed && options?.surfaceError !== false) {
       const redirect = getBuildGuardRedirect(activeCompat);
       setGlobalNotice(null);
@@ -805,15 +822,20 @@ export default function App() {
   };
 
   const refreshBiosState = async (activeProfile: HardwareProfile, options?: { redirectIfBlocked?: boolean }) => {
+    const requestId = biosRefreshRequestIdRef.current + 1;
+    biosRefreshRequestIdRef.current = requestId;
     if (!hasLiveHardwareContext) {
       setBiosState(null);
-      setBiosAccepted(false);
+      setBiosAcceptedRuntime(false);
       return null;
     }
     try {
       const nextState = await window.electron.getBiosState(activeProfile);
+      if (biosRefreshRequestIdRef.current !== requestId) {
+        return nextState;
+      }
       setBiosState(nextState);
-      setBiosAccepted(false);
+      setBiosAcceptedRuntime(false);
       if (options?.redirectIfBlocked && (!(nextState.readyToBuild && nextState.stage === 'complete')) && STEP_ORDER.indexOf(step) > STEP_ORDER.indexOf('bios')) {
         _setStepRaw('bios');
       }
@@ -1340,14 +1362,15 @@ export default function App() {
 
   const applySupportedBiosChanges = async (selectedChanges: Record<string, BiosSettingSelection>) => {
     if (!profile) throw new Error('Hardware profile missing for BIOS orchestration.');
-    setBiosAccepted(false);
+    setBiosAcceptedRuntime(false);
     const result = await window.electron.applySupportedBiosChanges(profile, selectedChanges);
     setBiosState(result.state);
     return { message: result.message };
   };
 
   const recheckBiosState = async (selectedChanges: Record<string, BiosSettingSelection>) => {
-    setBiosAccepted(false);
+    buildAutoStartRef.current = false;
+    setBiosAcceptedRuntime(false);
     return performBiosRecheck({
     profile,
     currentState: biosState,
@@ -1375,7 +1398,8 @@ export default function App() {
     recheckManualChanges: (activeProfile, changes) => window.electron.verifyManualBiosChanges(activeProfile, changes),
     continueWithCurrentState: (activeProfile, changes) => window.electron.continueBiosWithCurrentState(activeProfile, changes),
     advanceToBuildStep: () => {
-      setBiosAccepted(true);
+      buildAutoStartRef.current = true;
+      setBiosAcceptedRuntime(true);
       const nextBuildGuard = evaluateBuildGuard({
         compatibilityBlocked,
         biosFlowState: 'complete',
@@ -1387,6 +1411,7 @@ export default function App() {
         localBuildGuard: nextBuildGuard,
       });
       if (!transition?.ok) {
+        buildAutoStartRef.current = false;
         return false;
       }
       return true;
@@ -1405,7 +1430,8 @@ export default function App() {
 
   const restartToFirmwareWithSession = async (selectedChanges: Record<string, BiosSettingSelection>) => {
     if (!profile) return { supported: false, error: 'Hardware profile missing for BIOS reboot.' };
-    setBiosAccepted(false);
+    buildAutoStartRef.current = false;
+    setBiosAcceptedRuntime(false);
     const result = await window.electron.restartToFirmwareWithSession(profile, selectedChanges);
     setBiosState(result.state);
     window.electron.getBiosResumeState().then(setBiosResumeState).catch(() => {});
@@ -1417,7 +1443,8 @@ export default function App() {
 
   const startDeploy = async () => {
     if (!profile || isDeployingRef.current) return;
-    const liveBiosState = (biosReady || biosAccepted) ? biosState : await refreshBiosState(profile, { redirectIfBlocked: true });
+    const allowAcceptedSession = biosAcceptedRef.current;
+    const liveBiosState = (biosReady || allowAcceptedSession) ? biosState : await refreshBiosState(profile, { redirectIfBlocked: true });
     if (!liveBiosState) {
       return;
     }
@@ -1539,7 +1566,7 @@ export default function App() {
       setStatus('Generating OpenCore configuration…');
       setProgress(10);
       await new Promise(r => setTimeout(r, 800));
-      const built = await window.electron.buildEFI(profile, biosAccepted);
+      const built = await window.electron.buildEFI(profile, allowAcceptedSession);
       if (!isCurrentRun()) return;
       setEfiPath(built);
       setProgress(55);
@@ -1834,6 +1861,14 @@ export default function App() {
       }
     }
   };
+
+  useEffect(() => {
+    if (step !== 'building' || !buildAutoStartRef.current || isDeployingRef.current) {
+      return;
+    }
+    buildAutoStartRef.current = false;
+    void startDeploy();
+  }, [step]); // eslint-disable-line react-hooks/exhaustive-deps
 
   /** Enrich a raw drive list with disk info (isSystemDisk, partitionTable, etc.)
    *  Each drive info fetch is best-effort — failures leave the fields undefined. */
@@ -2409,6 +2444,14 @@ export default function App() {
                   <HelpCircle className="w-5 h-5 text-white/40" /> Troubleshoot
                 </button>
               </div>
+              <button
+                onClick={openLatestReleasePage}
+                className="px-5 py-3 rounded-2xl border border-white/10 bg-white/5 text-sm font-semibold text-white/70 hover:bg-white/10 hover:text-white transition-all flex items-center gap-2 cursor-pointer backdrop-blur-md"
+              >
+                <Download className="w-4 h-4 text-white/50" />
+                Update to latest version
+                <ArrowUpRight className="w-4 h-4 text-white/35" />
+              </button>
             </motion.div>
 
             <motion.p 
@@ -2510,6 +2553,16 @@ export default function App() {
                   <div className="text-xs font-semibold text-[#777] truncate">{profile.targetOS}</div>
                   <div className="text-[9px] text-[#444] font-bold uppercase tracking-widest mt-1">SMBIOS</div>
                   <div className="text-xs font-semibold text-[#777]">{profile.smbios}</div>
+                  <button
+                    onClick={openLatestReleasePage}
+                    className="mt-3 w-full flex items-center justify-between gap-2 rounded-xl border border-white/10 bg-white/[0.04] px-3 py-2 text-left text-xs font-semibold text-white/65 transition-colors hover:bg-white/[0.08] hover:text-white cursor-pointer"
+                  >
+                    <span className="flex items-center gap-2">
+                      <Download className="w-3.5 h-3.5 text-white/40" />
+                      Update to latest version
+                    </span>
+                    <ArrowUpRight className="w-3.5 h-3.5 text-white/30" />
+                  </button>
                 </div>
               )}
             </div>

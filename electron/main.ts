@@ -1498,7 +1498,7 @@ function logFlashDecision(input: {
 
 async function getLiveFirmwareInfo() {
   try {
-    return await probeFirmware();
+    return await withTimeout(probeFirmware(), 30_000, 'probeFirmwareForBiosState');
   } catch {
     return null;
   }
@@ -3665,6 +3665,15 @@ app.whenReady().then(async () => {
       log('WARN', 'app', 'Failed to open browser automatically', { issueTrigger: draft.trigger });
     }
     return { success, body: draft.body, baseUrl };
+  });
+
+  ipcHandle('app:open-latest-release', async () => {
+    const url = 'https://github.com/redpersongpt/macOS-One-Click/releases/latest';
+    if (!isSafeExternalTarget(url)) {
+      throw new Error('Latest release URL is not a safe external target.');
+    }
+    await shell.openExternal(url);
+    return true;
   });
 
   log('INFO', 'app', 'App ready', { version: app.getVersion(), platform: process.platform, packaged: app.isPackaged });

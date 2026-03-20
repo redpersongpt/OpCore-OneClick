@@ -134,6 +134,7 @@ try {
     // Issue reporter
     reportIssue: (extraContext?: string | null): Promise<{ success: boolean; body: string; baseUrl: string }> =>
       ipcRenderer.invoke('report-issue', extraContext ?? null),
+    openLatestReleasePage: (): Promise<boolean> => ipcRenderer.invoke('app:open-latest-release'),
 
     // Recovery Cache & Import
     importRecovery: (targetPath: string, macOSVersion: string) => ipcRenderer.invoke('recovery:import', targetPath, macOSVersion),

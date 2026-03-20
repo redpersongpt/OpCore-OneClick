@@ -115,4 +115,48 @@ describe('runEfiBuildFlow', () => {
     assert.ok(events.includes('progress:initialising'));
     assert.ok(events.includes('complete:task-1'));
   });
+
+  test('emits build progress before waiting on BIOS readiness', async () => {
+    const events: string[] = [];
+    const tmpRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'efi-build-flow-'));
+    tempDirs.push(tmpRoot);
+
+    await runEfiBuildFlow(
+      {
+        profile: makeProfile(),
+        allowAcceptedSession: false,
+      },
+      {
+        registry: makeRegistry(events),
+        getUserDataPath: () => tmpRoot,
+        log: () => {},
+        rememberFailureContext: () => {},
+        checkCompatibility: () => ({
+          isCompatible: true,
+          errors: [],
+          explanation: 'ok',
+        }),
+        ensureBiosReady: async () => {
+          assert.equal(events[0], 'progress:checking BIOS state');
+        },
+        createEfiStructure: async (targetPath) => {
+          fs.mkdirSync(path.join(targetPath, 'EFI', 'OC'), { recursive: true });
+          fs.writeFileSync(path.join(targetPath, 'EFI', 'OC', 'OpenCore.efi'), '');
+        },
+        withTimeout: async (promise) => await promise,
+        classifyError: () => ({
+          message: 'classified failure',
+          explanation: 'classified failure',
+          category: 'build_error',
+        }),
+        createClassifiedIpcError: (_classified, error) => error as Error,
+        removeDir: (targetPath) => {
+          fs.rmSync(targetPath, { recursive: true, force: true });
+        },
+      },
+    );
+
+    assert.ok(events.includes('progress:checking BIOS state'));
+    assert.ok(events.includes('complete:task-1'));
+  });
 });

@@ -64,6 +64,7 @@ declare global {
       logClear: () => Promise<boolean>;
       getSessionId: () => Promise<string>;
       reportIssue: (extraContext?: string | null) => Promise<{ success: boolean; body: string; baseUrl: string }>;
+      openLatestReleasePage: () => Promise<boolean>;
       importRecovery: (targetPath: string, macOSVersion: string) => Promise<{ dmgPath: string; recoveryDir: string } | null>;
       getCachedRecoveryInfo: (version: string) => Promise<any>;
       clearRecoveryCache: (version: string) => Promise<boolean>;
