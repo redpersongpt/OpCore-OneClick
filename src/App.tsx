@@ -88,6 +88,7 @@ import type {
 } from '../electron/hardwareProfileArtifact';
 import type { EfiBackupPolicy } from '../electron/efiBackup';
 import type { ResourcePlan } from '../electron/resourcePlanner';
+import type { AppUpdateState as ElectronAppUpdateState } from '../electron/appUpdater';
 import {
   pickSelectedDiskInfo,
   shouldRetryDiskInfoLookup,
@@ -153,6 +154,10 @@ declare global {
       // Issue reporter
       reportIssue: (extraContext?: string | null) => Promise<{ success: boolean; body: string; baseUrl: string }>;
       openLatestReleasePage: () => Promise<boolean>;
+      getAppUpdateState: () => Promise<ElectronAppUpdateState>;
+      checkForUpdates: () => Promise<ElectronAppUpdateState>;
+      downloadLatestUpdate: () => Promise<ElectronAppUpdateState>;
+      installLatestUpdate: () => Promise<boolean>;
       // Recovery Cache & Import
       importRecovery: (targetPath: string, macOSVersion: string) => Promise<{ dmgPath: string; recoveryDir: string } | null>;
       getCachedRecoveryInfo: (version: string) => Promise<any>;
@@ -241,6 +246,7 @@ export default function App() {
   const [cachedRecovInfo, setCachedRecovInfo] = useState<any>(null);
   const [platform, setPlatform] = useState<string>('unknown');
   const [adminPrivileges, setAdminPrivileges] = useState<boolean | null>(null);
+  const [appUpdateState, setAppUpdateState] = useState<ElectronAppUpdateState | null>(null);
   const [usbDevices, setUsbDevices] = useState<import('./components/steps/UsbStep').DriveInfo[]>([]);
   const [usbRefreshBusy, setUsbRefreshBusy] = useState(false);
   const [selectedUsb, setSelectedUsb] = useState<string | null>(null);
@@ -317,6 +323,19 @@ export default function App() {
   useEffect(() => {
     latestEfiPathRef.current = efiPath;
   }, [efiPath]);
+
+  useEffect(() => {
+    void refreshAppUpdateState();
+    void checkForAppUpdates();
+  }, []);
+
+  useEffect(() => {
+    if (!appUpdateState?.checking && !appUpdateState?.downloading) return;
+    const interval = setInterval(() => {
+      void refreshAppUpdateState();
+    }, 800);
+    return () => clearInterval(interval);
+  }, [appUpdateState?.checking, appUpdateState?.downloading]);
 
   // ── Suggestion Engine State ──────────────────────────────────
   const [lastSuggestion, setLastSuggestion] = useState<{ code: string; category: string; title: string } | null>(null);
@@ -578,6 +597,38 @@ export default function App() {
       await window.electron.openLatestReleasePage();
     } catch (e: any) {
       setErrorWithSuggestion(e?.message || 'Could not open the latest release page.', step);
+    }
+  };
+
+  const refreshAppUpdateState = async () => {
+    try {
+      setAppUpdateState(await window.electron.getAppUpdateState());
+    } catch {
+      // keep updater non-fatal to the main flow
+    }
+  };
+
+  const checkForAppUpdates = async () => {
+    try {
+      setAppUpdateState(await window.electron.checkForUpdates());
+    } catch (e: any) {
+      setErrorWithSuggestion(e?.message || 'Could not check for updates.', step);
+    }
+  };
+
+  const downloadLatestUpdate = async () => {
+    try {
+      setAppUpdateState(await window.electron.downloadLatestUpdate());
+    } catch (e: any) {
+      setErrorWithSuggestion(e?.message || 'Could not download the latest update.', step);
+    }
+  };
+
+  const installLatestUpdate = async () => {
+    try {
+      await window.electron.installLatestUpdate();
+    } catch (e: any) {
+      setErrorWithSuggestion(e?.message || 'Could not install the downloaded update.', step);
     }
   };
 
@@ -2660,14 +2711,90 @@ export default function App() {
                   <HelpCircle className="w-5 h-5 text-white/40" /> Troubleshoot
                 </button>
               </div>
-              <button
-                onClick={openLatestReleasePage}
-                className="px-5 py-3 rounded-2xl border border-white/10 bg-white/5 text-sm font-semibold text-white/70 hover:bg-white/10 hover:text-white transition-all flex items-center gap-2 cursor-pointer backdrop-blur-md"
-              >
-                <Download className="w-4 h-4 text-white/50" />
-                Update to latest version
-                <ArrowUpRight className="w-4 h-4 text-white/35" />
-              </button>
+              <div className="w-full max-w-xl rounded-[1.6rem] border border-white/10 bg-white/[0.04] p-5 text-left backdrop-blur-md">
+                <div className="flex items-start justify-between gap-4">
+                  <div>
+                    <div className="text-[11px] font-bold uppercase tracking-[0.28em] text-white/35">Updater</div>
+                    <div className="mt-2 text-lg font-bold text-white">
+                      {appUpdateState?.available
+                        ? `${appUpdateState.latestVersion} is ready`
+                        : appUpdateState?.checking
+                        ? 'Checking for updates…'
+                        : appUpdateState?.readyToInstall
+                        ? 'Update downloaded'
+                        : 'You are up to date'}
+                    </div>
+                    <p className="mt-2 text-sm leading-relaxed text-white/50">
+                      {appUpdateState?.available
+                        ? `Download ${appUpdateState.assetName ?? 'the latest build'} directly in the app.`
+                        : appUpdateState?.readyToInstall
+                        ? 'The update is downloaded. Install it now.'
+                        : appUpdateState?.error
+                        ? appUpdateState.error
+                        : `Current version: ${appUpdateState?.currentVersion ?? 'unknown'}`}
+                    </p>
+                  </div>
+                  <button
+                    onClick={checkForAppUpdates}
+                    disabled={appUpdateState?.checking || appUpdateState?.downloading}
+                    className="inline-flex items-center gap-2 rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-xs font-semibold text-white/70 transition-colors hover:bg-white/10 hover:text-white disabled:cursor-not-allowed disabled:opacity-60"
+                  >
+                    <RefreshCcw className={`w-3.5 h-3.5 ${appUpdateState?.checking ? 'animate-spin' : ''}`} />
+                    Check
+                  </button>
+                </div>
+
+                {(appUpdateState?.downloading || appUpdateState?.readyToInstall) && (
+                  <div className="mt-4">
+                    <div className="mb-2 flex items-center justify-between text-xs text-white/45">
+                      <span>{appUpdateState.downloading ? 'Downloading update…' : 'Download complete'}</span>
+                      <span>
+                        {appUpdateState.totalBytes && appUpdateState.totalBytes > 0
+                          ? `${Math.min(100, Math.round((appUpdateState.downloadedBytes / appUpdateState.totalBytes) * 100))}%`
+                          : '—'}
+                      </span>
+                    </div>
+                    <div className="h-2 overflow-hidden rounded-full bg-white/8">
+                      <div
+                        className="h-full rounded-full bg-white transition-all"
+                        style={{
+                          width: `${appUpdateState.totalBytes && appUpdateState.totalBytes > 0
+                            ? Math.min(100, Math.round((appUpdateState.downloadedBytes / appUpdateState.totalBytes) * 100))
+                            : appUpdateState.readyToInstall ? 100 : 0}%`,
+                        }}
+                      />
+                    </div>
+                  </div>
+                )}
+
+                <div className="mt-4 flex flex-wrap gap-3">
+                  {appUpdateState?.readyToInstall ? (
+                    <button
+                      onClick={installLatestUpdate}
+                      className="inline-flex items-center gap-2 rounded-2xl bg-white px-5 py-3 text-sm font-bold text-black transition-transform hover:scale-[1.02] active:scale-[0.98]"
+                    >
+                      <Download className="w-4 h-4" />
+                      Install update
+                    </button>
+                  ) : (
+                    <button
+                      onClick={downloadLatestUpdate}
+                      disabled={!appUpdateState?.available || appUpdateState?.downloading || !appUpdateState?.supported}
+                      className="inline-flex items-center gap-2 rounded-2xl bg-white px-5 py-3 text-sm font-bold text-black transition-transform hover:scale-[1.02] active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-60"
+                    >
+                      <Download className="w-4 h-4" />
+                      {appUpdateState?.downloading ? 'Downloading…' : 'Download update'}
+                    </button>
+                  )}
+                  <button
+                    onClick={openLatestReleasePage}
+                    className="inline-flex items-center gap-2 rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm font-semibold text-white/70 transition-colors hover:bg-white/10 hover:text-white"
+                  >
+                    View release
+                    <ArrowUpRight className="w-4 h-4 text-white/35" />
+                  </button>
+                </div>
+              </div>
             </motion.div>
 
             <motion.p 
@@ -2770,14 +2897,32 @@ export default function App() {
                   <div className="text-[9px] text-[#444] font-bold uppercase tracking-widest mt-1">SMBIOS</div>
                   <div className="text-xs font-semibold text-[#777]">{profile.smbios}</div>
                   <button
-                    onClick={openLatestReleasePage}
+                    onClick={() => {
+                      if (appUpdateState?.readyToInstall) {
+                        void installLatestUpdate();
+                        return;
+                      }
+                      if (appUpdateState?.available) {
+                        void downloadLatestUpdate();
+                        return;
+                      }
+                      void checkForAppUpdates();
+                    }}
                     className="mt-3 w-full flex items-center justify-between gap-2 rounded-xl border border-white/10 bg-white/[0.04] px-3 py-2 text-left text-xs font-semibold text-white/65 transition-colors hover:bg-white/[0.08] hover:text-white cursor-pointer"
                   >
                     <span className="flex items-center gap-2">
                       <Download className="w-3.5 h-3.5 text-white/40" />
-                      Update to latest version
+                      {appUpdateState?.readyToInstall
+                        ? 'Install downloaded update'
+                        : appUpdateState?.available
+                        ? 'Download latest update'
+                        : 'Check for updates'}
                     </span>
-                    <ArrowUpRight className="w-3.5 h-3.5 text-white/30" />
+                    {appUpdateState?.available || appUpdateState?.readyToInstall ? (
+                      <Download className="w-3.5 h-3.5 text-white/30" />
+                    ) : (
+                      <RefreshCcw className="w-3.5 h-3.5 text-white/30" />
+                    )}
                   </button>
                 </div>
               )}

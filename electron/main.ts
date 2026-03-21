@@ -76,6 +76,13 @@ import { runEfiBuildFlow } from './efiBuildFlow.js';
 import { inferLaptopFormFactor } from './formFactor.js';
 import { generateFolderManifest, verifyFolderIntegrity } from './resourceIntegrity.js';
 import {
+  compareReleaseVersions,
+  pickReleaseAssetForPlatform,
+  type AppUpdateState,
+  type LatestReleaseInfo,
+  type ReleaseAssetInfo,
+} from './appUpdater.js';
+import {
   APPLE_RECOVERY_MLB_ZERO,
   buildAppleRecoveryDownloadHeaders,
   queryAppleRecoveryAssets,
@@ -448,6 +455,257 @@ function rememberFailureContext(context: Omit<ReleaseFailureContext, 'occurredAt
 function getCurrentCompatibilityReport(): ReturnType<typeof checkCompatibility> | null {
   const profile = getCurrentBuildProfile();
   return profile ? checkCompatibility(profile) : null;
+}
+
+const REPO_RELEASE_API_PATH = '/repos/redpersongpt/macOS-One-Click/releases/latest';
+
+function createInitialAppUpdateState(): AppUpdateState {
+  return {
+    currentVersion: app.getVersion(),
+    checking: false,
+    downloading: false,
+    available: false,
+    supported: process.platform === 'win32' || process.platform === 'linux',
+    latestVersion: null,
+    releaseUrl: null,
+    releaseNotes: null,
+    assetName: null,
+    assetSize: null,
+    downloadedBytes: 0,
+    totalBytes: null,
+    downloadedPath: null,
+    readyToInstall: false,
+    error: null,
+  };
+}
+
+let appUpdateState: AppUpdateState = createInitialAppUpdateState();
+
+function setAppUpdateState(patch: Partial<AppUpdateState>): AppUpdateState {
+  appUpdateState = {
+    ...appUpdateState,
+    ...patch,
+    currentVersion: app.getVersion(),
+    supported: process.platform === 'win32' || process.platform === 'linux',
+  };
+  return appUpdateState;
+}
+
+async function fetchLatestAppRelease(): Promise<LatestReleaseInfo> {
+  return await new Promise((resolve, reject) => {
+    const req = https.request({
+      hostname: 'api.github.com',
+      path: REPO_RELEASE_API_PATH,
+      method: 'GET',
+      headers: {
+        'User-Agent': 'macOS-OneClick-Updater/1.0',
+        Accept: 'application/vnd.github+json',
+      },
+      timeout: 15_000,
+    }, (res) => {
+      let data = '';
+      res.setEncoding('utf8');
+      res.on('data', (chunk) => { data += chunk; });
+      res.on('end', () => {
+        if (!res.statusCode || res.statusCode < 200 || res.statusCode >= 300) {
+          reject(new Error(`Failed to query latest release (HTTP ${res.statusCode ?? 'unknown'})`));
+          return;
+        }
+        try {
+          resolve(JSON.parse(data));
+        } catch {
+          reject(new Error('Latest release response could not be parsed.'));
+        }
+      });
+    });
+    req.on('timeout', () => req.destroy(new Error('Latest release query timed out.')));
+    req.on('error', reject);
+    req.end();
+  });
+}
+
+function selectLatestReleaseAsset(release: LatestReleaseInfo): ReleaseAssetInfo | null {
+  return pickReleaseAssetForPlatform(process.platform, release.assets ?? []);
+}
+
+async function checkForAppUpdates(): Promise<AppUpdateState> {
+  setAppUpdateState({ checking: true, error: null });
+  try {
+    const release = await fetchLatestAppRelease();
+    const asset = selectLatestReleaseAsset(release);
+    const available = !!asset && compareReleaseVersions(release.tag_name, app.getVersion()) > 0;
+    return setAppUpdateState({
+      checking: false,
+      available,
+      latestVersion: release.tag_name ?? null,
+      releaseUrl: release.html_url ?? 'https://github.com/redpersongpt/macOS-One-Click/releases/latest',
+      releaseNotes: release.body ?? null,
+      assetName: asset?.name ?? null,
+      assetSize: typeof asset?.size === 'number' ? asset.size : null,
+      totalBytes: typeof asset?.size === 'number' ? asset.size : null,
+      downloadedBytes: available && appUpdateState.readyToInstall ? appUpdateState.downloadedBytes : 0,
+      downloadedPath: available && appUpdateState.readyToInstall ? appUpdateState.downloadedPath : null,
+      readyToInstall: available && appUpdateState.readyToInstall && appUpdateState.assetName === asset?.name,
+      error: asset ? null : 'No installable update asset is published for this platform yet.',
+    });
+  } catch (error: any) {
+    return setAppUpdateState({
+      checking: false,
+      available: false,
+      latestVersion: null,
+      releaseUrl: 'https://github.com/redpersongpt/macOS-One-Click/releases/latest',
+      releaseNotes: null,
+      assetName: null,
+      assetSize: null,
+      downloadedBytes: 0,
+      totalBytes: null,
+      downloadedPath: null,
+      readyToInstall: false,
+      error: error?.message ?? 'Could not check for updates.',
+    });
+  }
+}
+
+async function downloadLatestAppUpdate(): Promise<AppUpdateState> {
+  if (appUpdateState.downloading) return appUpdateState;
+  if (!appUpdateState.supported) {
+    throw new Error('In-app updates are not supported on this platform.');
+  }
+
+  let release: LatestReleaseInfo;
+  if (!appUpdateState.latestVersion || !appUpdateState.assetName || !appUpdateState.releaseUrl) {
+    await checkForAppUpdates();
+  }
+  release = await fetchLatestAppRelease();
+  const asset = selectLatestReleaseAsset(release);
+  if (!asset?.browser_download_url || !asset.name) {
+    throw new Error('No installable update asset is available for this platform.');
+  }
+  if (compareReleaseVersions(release.tag_name, app.getVersion()) <= 0) {
+    return setAppUpdateState({
+      available: false,
+      latestVersion: release.tag_name,
+      releaseUrl: release.html_url,
+      releaseNotes: release.body ?? null,
+      assetName: asset.name,
+      assetSize: asset.size ?? null,
+      downloadedBytes: 0,
+      totalBytes: asset.size ?? null,
+      downloadedPath: null,
+      readyToInstall: false,
+      error: null,
+    });
+  }
+
+  const downloadsDir = path.resolve(app.getPath('downloads'), 'macOS-OneClick-Updates');
+  fs.mkdirSync(downloadsDir, { recursive: true });
+  const finalPath = path.resolve(downloadsDir, asset.name);
+  const tempPath = `${finalPath}.download`;
+  if (fs.existsSync(tempPath)) fs.rmSync(tempPath, { force: true });
+
+  setAppUpdateState({
+    checking: false,
+    downloading: true,
+    available: true,
+    latestVersion: release.tag_name,
+    releaseUrl: release.html_url,
+    releaseNotes: release.body ?? null,
+    assetName: asset.name,
+    assetSize: asset.size ?? null,
+    downloadedBytes: 0,
+    totalBytes: asset.size ?? null,
+    downloadedPath: null,
+    readyToInstall: false,
+    error: null,
+  });
+
+  try {
+    await new Promise<void>((resolve, reject) => {
+      const fetchAsset = (urlString: string, redirects = 0) => {
+        if (redirects > 10) {
+          reject(new Error('Too many redirects while downloading the update.'));
+          return;
+        }
+        const targetUrl = new URL(urlString);
+        const lib = targetUrl.protocol === 'https:' ? https : http;
+        const request = lib.get({
+          hostname: targetUrl.hostname,
+          port: targetUrl.port || (targetUrl.protocol === 'https:' ? 443 : 80),
+          path: `${targetUrl.pathname}${targetUrl.search}`,
+          headers: { 'User-Agent': 'macOS-OneClick-Updater/1.0' },
+          timeout: 30_000,
+        }, (response) => {
+          if (response.statusCode && [301, 302, 307, 308].includes(response.statusCode)) {
+            const redirectUrl = response.headers.location;
+            response.resume();
+            if (!redirectUrl) {
+              reject(new Error('Update download redirected without a target URL.'));
+              return;
+            }
+            fetchAsset(new URL(redirectUrl, urlString).toString(), redirects + 1);
+            return;
+          }
+          if (!response.statusCode || response.statusCode < 200 || response.statusCode >= 300) {
+            response.resume();
+            reject(new Error(`Update download failed (HTTP ${response.statusCode ?? 'unknown'})`));
+            return;
+          }
+          const totalBytesHeader = response.headers['content-length'];
+          const totalBytes = totalBytesHeader ? parseInt(totalBytesHeader, 10) : asset.size ?? null;
+          setAppUpdateState({ totalBytes: Number.isFinite(totalBytes as number) ? totalBytes : asset.size ?? null });
+
+          const file = fs.createWriteStream(tempPath);
+          let downloadedBytes = 0;
+          response.on('data', (chunk: Buffer) => {
+            downloadedBytes += chunk.length;
+            setAppUpdateState({ downloadedBytes, totalBytes: totalBytes ?? asset.size ?? null });
+          });
+          response.on('error', reject);
+          file.on('error', reject);
+          file.on('finish', () => file.close(() => resolve()));
+          response.pipe(file);
+        });
+        request.on('timeout', () => request.destroy(new Error('Update download timed out.')));
+        request.on('error', reject);
+      };
+      fetchAsset(asset.browser_download_url);
+    });
+
+    fs.rmSync(finalPath, { force: true });
+    fs.renameSync(tempPath, finalPath);
+    if (process.platform === 'linux' && finalPath.endsWith('.AppImage')) {
+      fs.chmodSync(finalPath, 0o755);
+    }
+    return setAppUpdateState({
+      downloading: false,
+      downloadedPath: finalPath,
+      downloadedBytes: appUpdateState.totalBytes ?? appUpdateState.downloadedBytes,
+      readyToInstall: true,
+      error: null,
+    });
+  } catch (error: any) {
+    try { fs.rmSync(tempPath, { force: true }); } catch {}
+    return setAppUpdateState({
+      downloading: false,
+      downloadedPath: null,
+      readyToInstall: false,
+      error: error?.message ?? 'Update download failed.',
+    });
+  }
+}
+
+async function installDownloadedUpdate(): Promise<boolean> {
+  if (!appUpdateState.downloadedPath || !fs.existsSync(appUpdateState.downloadedPath)) {
+    throw new Error('No downloaded update is ready to install.');
+  }
+  const result = await shell.openPath(appUpdateState.downloadedPath);
+  if (result) {
+    throw new Error(result);
+  }
+  if (process.platform === 'win32') {
+    setTimeout(() => app.quit(), 750);
+  }
+  return true;
 }
 
 // Crash-safe ipcMain.handle wrapper.
@@ -966,7 +1224,7 @@ async function getWindowsHardwareInfo(): Promise<HardwareProfile> {
   const psCommand = (cmd: string) => `powershell -NoProfile -Command "${cmd}"`;
   const runWindowsProbe = (cmd: string, fallback = '') =>
     execPromise(psCommand(cmd), {
-      timeout: 5_000,
+      timeout: 3_500,
       maxBuffer: 1024 * 1024,
     }).catch(() => ({ stdout: fallback }));
 
@@ -981,8 +1239,14 @@ async function getWindowsHardwareInfo(): Promise<HardwareProfile> {
     runWindowsProbe("Get-CimInstance Win32_Battery | Select-Object -First 1 | ConvertTo-Json -Compress"),
   ]);
 
-  const cpuModel = cpuRaw.stdout.trim().split('\n')[0];
-  const gpuModel = gpuRaw.stdout.trim().split('\n').join(' / ');
+  const cpuModel = cpuRaw.stdout.trim().split('\n')[0] || os.cpus()[0]?.model || 'Unknown CPU';
+  const gpuLines = gpuRaw.stdout
+    .trim()
+    .split('\n')
+    .map((line) => line.trim())
+    .filter(Boolean);
+  const filteredGpuLines = gpuLines.filter((line) => !/remote display adapter|basic display adapter|render only|indirect display/i.test(line));
+  const gpuModel = (filteredGpuLines.length > 0 ? filteredGpuLines : gpuLines).join(' / ') || 'Unknown GPU';
   const motherboard = baseboardRaw.stdout.trim().split('\n')[0] || 'Unknown';
   const coreCount = parseInt(coresRaw.stdout.trim()) || 4;
   
@@ -3727,6 +3991,22 @@ app.whenReady().then(async () => {
     }
     await shell.openExternal(url);
     return true;
+  });
+
+  ipcHandle('app:update-state', async () => {
+    return setAppUpdateState({});
+  });
+
+  ipcHandle('app:check-for-updates', async () => {
+    return await checkForAppUpdates();
+  });
+
+  ipcHandle('app:download-update', async () => {
+    return await downloadLatestAppUpdate();
+  });
+
+  ipcHandle('app:install-update', async () => {
+    return await installDownloadedUpdate();
   });
 
   log('INFO', 'app', 'App ready', { version: app.getVersion(), platform: process.platform, packaged: app.isPackaged });

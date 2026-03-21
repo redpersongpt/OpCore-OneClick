@@ -122,9 +122,12 @@ describe('diskOps platform helpers', () => {
     const script = buildWindowsFlashDiskpartScript('2');
 
     assert.match(script, /select disk 2/);
-    assert.match(script, /attributes disk clear readonly/);
+    assert.match(script, /attributes disk clear readonly noerr/);
     assert.match(script, /online disk noerr/);
-    assert.match(script, /clean/);
-    assert.match(script, /convert gpt/);
+    assert.match(script, /clean noerr/);
+    assert.match(script, /convert gpt noerr/);
+    assert.match(script, /create partition primary noerr/);
+    assert.match(script, /assign noerr/);
+    assert.match(script, /rescan/);
   });
 });

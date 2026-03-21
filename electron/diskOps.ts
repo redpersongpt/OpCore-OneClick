@@ -126,13 +126,14 @@ export function buildLinuxFirstPartitionPath(device: string): string {
 export function buildWindowsFlashDiskpartScript(diskNum: string): string {
   return [
     `select disk ${diskNum}`,
-    'attributes disk clear readonly',
+    'attributes disk clear readonly noerr',
     'online disk noerr',
-    'clean',
-    'convert gpt',
-    'create partition primary',
-    'format fs=fat32 quick label=OPENCORE',
-    'assign',
+    'clean noerr',
+    'convert gpt noerr',
+    'create partition primary noerr',
+    'format fs=fat32 quick label=OPENCORE noerr',
+    'assign noerr',
+    'rescan',
     '',
   ].join('\n');
 }
@@ -203,6 +204,29 @@ export function createDiskOps(log: LogFunction): DiskOps {
       `powershell -NoProfile -Command "Get-Partition -DiskNumber ${diskNum} | Where-Object { $_.DriveLetter } | ForEach-Object { try { mountvol ($_.DriveLetter + ':') /D } catch {} }"`,
       register,
     );
+  }
+
+  async function assignWindowsDriveLetter(
+    diskNum: string,
+    label: string,
+    register?: (child: any) => void,
+  ): Promise<string> {
+    const script = [
+      `select disk ${diskNum}`,
+      'select partition 1',
+      `set id=c12a7328-f81f-11d2-ba4b-00a0c93ec93b noerr`,
+      `assign noerr`,
+      'rescan',
+      '',
+    ].join('\n');
+    const scriptPath = path.join(os.tmpdir(), `assign-letter-${crypto.randomUUID()}.txt`);
+    fs.writeFileSync(scriptPath, script);
+    try {
+      await runCmd(`diskpart /s "${scriptPath}"`, register).catch(() => ({ stdout: '', stderr: '' }));
+    } finally {
+      try { fs.unlinkSync(scriptPath); } catch {}
+    }
+    return await waitForWindowsDriveLetterForLabel(diskNum, label, register, 8, 500);
   }
 
   async function getWindowsPrimaryPartitionNumber(diskNum: string): Promise<string> {
@@ -945,16 +969,32 @@ export function createDiskOps(log: LogFunction): DiskOps {
             onPhase('erase', `Detaching mounted volumes from disk ${diskNum}`);
             log('WARN', 'usb-flash', 'Detaching mounted Windows volumes before flash', { diskNum, mountedPartitions });
             await detachWindowsDriveLetters(diskNum, registerProcess);
+            await new Promise((resolve) => setTimeout(resolve, 500));
           }
 
           onPhase('format', `Running diskpart on disk ${diskNum}`);
           checkAborted();
           log('DEBUG', 'usb-flash', 'Running diskpart', { diskNum });
-          await runCmd(`diskpart /s "${scriptPath}"`, registerProcess);
+          let diskpartFailed = false;
+          try {
+            await runCmd(`diskpart /s "${scriptPath}"`, registerProcess);
+          } catch (error) {
+            diskpartFailed = true;
+            log('WARN', 'usb-flash', 'diskpart reported an error while preparing the USB; checking whether the partition was created anyway', {
+              diskNum,
+              error: (error as Error).message,
+            });
+          }
 
           // Resolve drive letter from the specific disk number, not a global label search.
           // A global label search can match the wrong volume if another OPENCORE disk exists.
-          const driveLetter = await waitForWindowsDriveLetterForLabel(diskNum, 'OPENCORE', registerProcess);
+          let driveLetter = await waitForWindowsDriveLetterForLabel(diskNum, 'OPENCORE', registerProcess);
+          if (!driveLetter) {
+            driveLetter = await assignWindowsDriveLetter(diskNum, 'OPENCORE', registerProcess);
+          }
+          if (!driveLetter && diskpartFailed) {
+            throw new Error(`diskpart could not prepare disk ${diskNum}. Disconnect any open Explorer windows for that USB, reconnect the drive, and try again.`);
+          }
           if (!driveLetter) throw new Error(`Could not determine drive letter for disk ${diskNum} — diskpart may have failed or Windows has not mounted the new volume yet`);
 
           onPhase('copy', `Copying EFI to ${driveLetter}:`);

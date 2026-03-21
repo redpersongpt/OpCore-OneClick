@@ -64,6 +64,10 @@ declare global {
       getSessionId: () => Promise<string>;
       reportIssue: (extraContext?: string | null) => Promise<{ success: boolean; body: string; baseUrl: string }>;
       openLatestReleasePage: () => Promise<boolean>;
+      getAppUpdateState: () => Promise<import('../electron/appUpdater').AppUpdateState>;
+      checkForUpdates: () => Promise<import('../electron/appUpdater').AppUpdateState>;
+      downloadLatestUpdate: () => Promise<import('../electron/appUpdater').AppUpdateState>;
+      installLatestUpdate: () => Promise<boolean>;
       importRecovery: (targetPath: string, macOSVersion: string) => Promise<{ dmgPath: string; recoveryDir: string } | null>;
       getCachedRecoveryInfo: (version: string) => Promise<any>;
       clearRecoveryCache: (version: string) => Promise<boolean>;

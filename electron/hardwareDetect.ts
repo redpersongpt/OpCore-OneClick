@@ -48,16 +48,36 @@ const GPU_VENDOR_MAP: Record<string, string> = {
   '1234': 'QEMU',
 };
 
-function resolveGpuVendor(vendorId: string | null, rawName: string): string {
+export function resolveGpuVendor(vendorId: string | null, rawName: string): string {
   if (vendorId) {
     const known = GPU_VENDOR_MAP[vendorId.toLowerCase()];
     if (known) return known;
   }
   const n = rawName.toLowerCase();
+  if (n.includes('microsoft remote display adapter') || n.includes('microsoft basic display adapter') || n.includes('remote display adapter')) return 'Microsoft';
   if (n.includes('nvidia') || n.includes('geforce') || n.includes('quadro') || n.includes('rtx') || n.includes('gtx')) return 'NVIDIA';
   if (n.includes('amd') || n.includes('radeon') || n.includes('rx ') || n.includes('vega') || n.includes('navi')) return 'AMD';
   if (n.includes('intel') || n.includes('iris') || n.includes('uhd') || n.includes('hd graphics')) return 'Intel';
   return 'Unknown';
+}
+
+function pickFallbackCpuName(): string {
+  return os.cpus()[0]?.model?.trim() || 'Unknown CPU';
+}
+
+function isSoftwareDisplayAdapter(gpu: GpuDevice): boolean {
+  const name = gpu.name.toLowerCase();
+  return gpu.vendorId === '1414'
+    || name.includes('remote display adapter')
+    || name.includes('basic display adapter')
+    || name.includes('render only')
+    || name.includes('indirect display');
+}
+
+export function normalizeWindowsGpuList(gpus: GpuDevice[]): GpuDevice[] {
+  const filtered = gpus.filter((gpu) => !isSoftwareDisplayAdapter(gpu));
+  if (filtered.length > 0) return filtered;
+  return gpus;
 }
 
 function resolveCpuVendor(vendorStr: string, rawName: string): { vendor: string; vendorName: string } {
@@ -90,7 +110,7 @@ export const WINDOWS_HARDWARE_QUERIES = {
 export async function detectWindowsHardware(): Promise<DetectedHardware> {
   const ps = (cmd: string, fallback = '') =>
     execPromise(`powershell -NoProfile -Command "${cmd}"`, {
-      timeout: 5_000,
+      timeout: 3_500,
       maxBuffer: 1024 * 1024,
     }).catch(() => ({ stdout: fallback }));
 
@@ -107,7 +127,7 @@ export async function detectWindowsHardware(): Promise<DetectedHardware> {
     ps(WINDOWS_HARDWARE_QUERIES.coreCount),
   ]);
 
-  const cpuName = cpuRes.stdout.trim().split('\n')[0] || 'Unknown CPU';
+  const cpuName = cpuRes.stdout.trim().split('\n')[0] || pickFallbackCpuName();
   const cpuVendorRaw = cpuVendorRes.stdout.trim() || '';
   const { vendor, vendorName } = resolveCpuVendor(cpuVendorRaw, cpuName);
 
@@ -135,7 +155,10 @@ export async function detectWindowsHardware(): Promise<DetectedHardware> {
     const rawName = gpuRes.stdout.trim().split('\n')[0] || 'Unknown GPU';
     gpus = [{ name: rawName, vendorId: null, deviceId: null, vendorName: resolveGpuVendor(null, rawName), confidence: 'partially-detected' }];
   }
-  if (gpus.length === 0) gpus = [{ name: 'Unknown GPU', vendorId: null, deviceId: null, vendorName: 'Unknown', confidence: 'unverified' }];
+  if (gpus.length === 0) {
+    gpus = [{ name: 'Unknown GPU', vendorId: null, deviceId: null, vendorName: 'Unknown', confidence: 'unverified' }];
+  }
+  gpus = normalizeWindowsGpuList(gpus);
 
   // Board
   let boardVendor = 'Unknown', boardModel = 'Unknown';
