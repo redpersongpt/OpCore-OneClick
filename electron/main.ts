@@ -72,6 +72,7 @@ import { runSafeSimulation, type SafeSimulationResult } from './safeSimulation.j
 import { sim } from './simulation.js';
 import { getCompatModeConfigPath, getPackagedRendererEntryPath, getPreloadScriptPath } from './runtimePaths.js';
 import { runEfiBuildFlow } from './efiBuildFlow.js';
+import { generateFolderManifest, verifyFolderIntegrity } from './resourceIntegrity.js';
 import {
   APPLE_RECOVERY_MLB_ZERO,
   buildAppleRecoveryDownloadHeaders,
@@ -755,29 +756,50 @@ async function ensureOpenCoreBinaries(
   const ocUrl = `https://github.com/acidanthera/OpenCorePkg/releases/download/${ocVersion}/OpenCore-${ocVersion}-RELEASE.zip`;
   const ocZip = path.resolve(cacheDir, `OpenCore-${ocVersion}.zip`);
   const ocExtracted = path.resolve(cacheDir, ocVersion);
+  const x64Efi = path.resolve(ocExtracted, 'X64/EFI');
+  const coreFile = path.resolve(x64Efi, 'OC/OpenCore.efi');
+  const manifestPath = path.resolve(ocExtracted, 'x64-efi-manifest.json');
 
   if (!fs.existsSync(cacheDir)) fs.mkdirSync(cacheDir, { recursive: true });
 
-  const coreFile = path.resolve(ocExtracted, 'X64/EFI/OC/OpenCore.efi');
+  if (fs.existsSync(coreFile)) {
+    const integrity = verifyFolderIntegrity(x64Efi, manifestPath);
+    if (!integrity.valid) {
+      log('WARN', 'efi', 'OpenCore cache integrity check failed; rebuilding cache', {
+        version: ocVersion,
+        issues: integrity.issues,
+      });
+      try { fs.rmSync(ocExtracted, { recursive: true, force: true }); } catch {}
+    }
+  }
+
   if (!fs.existsSync(coreFile)) {
-    log('INFO', 'efi', 'Downloading base OpenCore binaries...', { version: ocVersion });
-    onPhase?.('Downloading OpenCore binaries…', `Caching OpenCore ${ocVersion} for the EFI build.`);
-    await downloadFileWithProgress(ocUrl, ocZip, (downloaded, total) => {
-      const detail = total > 0
-        ? `${formatBytes(downloaded)} of ${formatBytes(total)}`
-        : `${formatBytes(downloaded)} downloaded`;
-      onPhase?.('Downloading OpenCore binaries…', detail);
-    }, 0, () => token?.check());
-    
-    try {
+    const extractCachedZip = async () => {
       if (fs.existsSync(ocExtracted)) fs.rmSync(ocExtracted, { recursive: true, force: true });
       fs.mkdirSync(ocExtracted, { recursive: true });
       onPhase?.('Extracting OpenCore base files…', 'Preparing bootloader files for config generation.');
-
       if (process.platform === 'win32') {
         await runCommand(`powershell -Command "Expand-Archive -Path '${ocZip}' -DestinationPath '${ocExtracted}' -Force"`, {}, token);
       } else {
         await runCommand(`unzip -o "${ocZip}" -d "${ocExtracted}"`, {}, token);
+      }
+    };
+
+    try {
+      if (fs.existsSync(ocZip) && fs.statSync(ocZip).size > 0) {
+        log('INFO', 'efi', 'Reusing cached OpenCore archive', { version: ocVersion, ocZip });
+        await extractCachedZip();
+      }
+      if (!fs.existsSync(coreFile)) {
+        log('INFO', 'efi', 'Downloading base OpenCore binaries...', { version: ocVersion });
+        onPhase?.('Downloading OpenCore binaries…', `Caching OpenCore ${ocVersion} for the EFI build.`);
+        await downloadFileWithProgress(ocUrl, ocZip, (downloaded, total) => {
+          const detail = total > 0
+            ? `${formatBytes(downloaded)} of ${formatBytes(total)}`
+            : `${formatBytes(downloaded)} downloaded`;
+          onPhase?.('Downloading OpenCore binaries…', detail);
+        }, 0, () => token?.check());
+        await extractCachedZip();
       }
     } catch (err) {
       throw new Error(`Failed to extract OpenCore binaries: ${err instanceof Error ? err.message : String(err)}`);
@@ -788,8 +810,8 @@ async function ensureOpenCoreBinaries(
     throw new Error('OpenCore binaries could not be located after extraction. The download may be corrupt.');
   }
 
-  const x64Efi = path.resolve(ocExtracted, 'X64/EFI');
   if (fs.existsSync(x64Efi)) {
+    generateFolderManifest(x64Efi, manifestPath);
     onPhase?.('Copying OpenCore base files…', 'Moving the base EFI structure into the build workspace.');
     copyDirSync(x64Efi, path.resolve(basePath, 'EFI'));
     const versionedFiles = [
@@ -1090,6 +1112,8 @@ function mapDetectedToProfile(hw: import('./hardwareDetect.js').DetectedHardware
 interface KextRegistryEntry {
   repo: string;
   assetFilter?: string;
+  directUrl?: string;
+  staticVersion?: string;
 }
 
 const KEXT_REGISTRY: Record<string, KextRegistryEntry> = {
@@ -1099,15 +1123,15 @@ const KEXT_REGISTRY: Record<string, KextRegistryEntry> = {
   'WhateverGreen.kext':                 { repo: 'acidanthera/WhateverGreen',           assetFilter: 'RELEASE' },
   'AppleALC.kext':                      { repo: 'acidanthera/AppleALC',                assetFilter: 'RELEASE' },
   'NootedRed.kext':                     { repo: 'ChefKissInc/NootedRed' },
-  'NootRX.kext':                        { repo: 'ChefKissInc/NootRX' },
+  'NootRX.kext':                        { repo: 'ChefKissInc/NootRX',                  directUrl: 'https://nightly.link/ChefKissInc/NootRX/workflows/main/master/Artifacts.zip', staticVersion: 'nightly' },
   'RTCMemoryFixup.kext':                { repo: 'acidanthera/RTCMemoryFixup',          assetFilter: 'RELEASE' },
   'VoodooPS2Controller.kext':           { repo: 'acidanthera/VoodooPS2',              assetFilter: 'RELEASE' },
   'AMDRyzenCPUPowerManagement.kext':    { repo: 'trulyspinach/SMCAMDProcessor' },
   'SMCAMDProcessor.kext':               { repo: 'trulyspinach/SMCAMDProcessor' },
-  'AppleMCEReporterDisabler.kext':      { repo: 'acidanthera/AppleMCEReporterDisabler', assetFilter: 'RELEASE' },
+  'AppleMCEReporterDisabler.kext':      { repo: 'acidanthera/bugtracker',              directUrl: 'https://github.com/acidanthera/bugtracker/files/3703498/AppleMCEReporterDisabler.kext.zip', staticVersion: 'bugtracker' },
   'RestrictEvents.kext':                { repo: 'acidanthera/RestrictEvents',          assetFilter: 'RELEASE' },
   'NVMeFix.kext':                       { repo: 'acidanthera/NVMeFix',                assetFilter: 'RELEASE' },
-  'CPUTopologyRebuild.kext':            { repo: 'acidanthera/CPUTopologyRebuild',      assetFilter: 'RELEASE' },
+  'CPUTopologyRebuild.kext':            { repo: 'b00t0x/CpuTopologyRebuild',           assetFilter: 'RELEASE' },
 };
 
 async function downloadToTemp(url: string, dest: string, timeoutMs = 120_000, checkAborted?: () => void): Promise<void> {
@@ -1767,6 +1791,13 @@ async function fetchKextFromGitHub(kextName: string, targetDir: string, checkAbo
   const proxy = parseProxy();
 
   async function queryGitHubRelease(): Promise<{ version: string; assetUrl: string | null; assetName: string | null }> {
+    if (entry.directUrl) {
+      return {
+        version: entry.staticVersion ?? 'direct',
+        assetUrl: entry.directUrl,
+        assetName: path.basename(new URL(entry.directUrl).pathname) || null,
+      };
+    }
     return new Promise((resolve, reject) => {
       const reqOptions: any = {
         hostname: 'api.github.com',
@@ -1824,11 +1855,26 @@ async function fetchKextFromGitHub(kextName: string, targetDir: string, checkAbo
 
   try {
     const { version, assetUrl } = await retryWithBackoff(queryGitHubRelease, 3, `github-api(${kextName})`, checkAborted);
+    const dest = path.join(targetDir, kextName);
+    const versionFile = path.join(dest, '.version');
+    const manifestFile = path.join(dest, 'manifest.json');
+
+    if (fs.existsSync(dest) && fs.existsSync(versionFile)) {
+      const installedVersion = fs.readFileSync(versionFile, 'utf-8').trim();
+      if (installedVersion === version) {
+        const integrity = verifyFolderIntegrity(dest, manifestFile);
+        if (integrity.valid) {
+          log('INFO', 'kext', `Reusing validated ${kextName} ${version}`, { dest });
+          return { name: kextName, version };
+        }
+      }
+    }
 
     if (!assetUrl) {
       const kextDir = path.join(targetDir, kextName);
       if (!fs.existsSync(kextDir)) fs.mkdirSync(kextDir, { recursive: true });
       fs.writeFileSync(path.join(kextDir, '.version'), version);
+      generateFolderManifest(kextDir, path.join(kextDir, 'manifest.json'));
       return { name: kextName, version };
     }
 
@@ -1845,13 +1891,13 @@ async function fetchKextFromGitHub(kextName: string, targetDir: string, checkAbo
       await extractZip(tmpZip, tmpExtract);
 
       const bundles = findKextBundles(tmpExtract, kextName);
-      const dest = path.join(targetDir, kextName);
       if (bundles.length > 0) {
         const staging = dest + '.staging';
         try {
           if (fs.existsSync(staging)) fs.rmSync(staging, { recursive: true, force: true });
           copyDirSync(bundles[0], staging);
           fs.writeFileSync(path.join(staging, '.version'), version);
+          generateFolderManifest(staging, path.join(staging, 'manifest.json'));
           if (fs.existsSync(dest)) fs.rmSync(dest, { recursive: true, force: true });
           fs.renameSync(staging, dest);
           log('INFO', 'kext', `Installed ${kextName} ${version}`, { dest });
@@ -1860,12 +1906,14 @@ async function fetchKextFromGitHub(kextName: string, targetDir: string, checkAbo
           if (fs.existsSync(dest)) fs.rmSync(dest, { recursive: true, force: true });
           copyDirSync(bundles[0], dest);
           fs.writeFileSync(path.join(dest, '.version'), version);
+          generateFolderManifest(dest, path.join(dest, 'manifest.json'));
           log('WARN', 'kext', `Atomic rename failed, used copy fallback`, { kextName });
         }
       } else {
         log('WARN', 'kext', `Could not find ${kextName} in extracted archive — writing stub`, { tmpExtract });
         if (!fs.existsSync(dest)) fs.mkdirSync(dest, { recursive: true });
         fs.writeFileSync(path.join(dest, '.version'), version);
+        generateFolderManifest(dest, path.join(dest, 'manifest.json'));
       }
     } finally {
       try { if (fs.existsSync(tmpZip)) fs.unlinkSync(tmpZip); } catch (_) {}

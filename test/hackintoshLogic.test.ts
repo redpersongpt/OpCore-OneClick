@@ -333,13 +333,23 @@ describe('Hackintosh compatibility logic', () => {
   test('recovery resume is blocked when the restored EFI is no longer valid', () => {
     const decision = recoveryResumeDecision({
       compatibilityBlocked: false,
-      biosReady: true,
       efiReady: false,
     });
 
     assert.equal(decision.canResume, false);
     assert.equal(decision.redirect, 'report');
     assert.match(decision.message ?? '', /efi no longer passes validation/i);
+  });
+
+  test('recovery resume stays allowed for a validated EFI without forcing a BIOS recheck', () => {
+    const decision = recoveryResumeDecision({
+      compatibilityBlocked: false,
+      efiReady: true,
+    });
+
+    assert.equal(decision.canResume, true);
+    assert.equal(decision.redirect, null);
+    assert.equal(decision.message, null);
   });
 });
 

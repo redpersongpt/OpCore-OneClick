@@ -67,7 +67,6 @@ export function isValidationBlockingDeployment(result: ValidationResult | null |
 
 export interface RecoveryResumeDecisionInput {
   compatibilityBlocked: boolean;
-  biosReady: boolean;
   efiReady: boolean;
 }
 
@@ -83,14 +82,6 @@ export function recoveryResumeDecision(input: RecoveryResumeDecisionInput): Reco
       canResume: false,
       message: 'Skipped recovery resume because the restored hardware profile is now blocked. Fix compatibility before resuming downloads.',
       redirect: 'report',
-    };
-  }
-
-  if (!input.biosReady) {
-    return {
-      canResume: false,
-      message: 'Skipped recovery resume because BIOS preparation is incomplete for the restored hardware profile.',
-      redirect: 'bios',
     };
   }
 

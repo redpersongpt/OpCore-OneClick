@@ -1192,16 +1192,17 @@ export default function App() {
 
     const s = await window.electron.getPersistedState();
     let restoredCompatibilityBlocked = false;
-    let restoredBiosReady = true;
     let restoredBuildReady = false;
     if (s && s.profile && s.currentStep && Date.now() - s.timestamp < 4 * 3600 * 1000) {
+      invalidateGeneratedBuild();
       const restore = restoreFlowDecision(s.profile, s.currentStep);
+      const restoredPlanningContext = s.planningProfileContext ?? 'saved_artifact';
       restoredCompatibilityBlocked = isCompatibilityBlocked(restore.compatibility);
       const latestArtifact = s.profileArtifactDigest
         ? await window.electron.getLatestHardwareProfile().catch(() => null)
         : null;
 
-      setPlanningProfileContext('saved_artifact');
+      setPlanningProfileContext(restoredPlanningContext);
       setProfileArtifact(latestArtifact && latestArtifact.digest === s.profileArtifactDigest ? latestArtifact : null);
       setProfile(restore.profile);
       setCompat(restore.compatibility);
@@ -1213,9 +1214,19 @@ export default function App() {
         ? 'report'
         : (restore.restoredStep as StepId);
       _setStepRaw(restoredStep);
-      invalidateGeneratedBuild();
-      restoredBiosReady = false;
-      restoredBuildReady = false;
+      if (restore.canReuseExistingEfi && s.efiPath) {
+        try {
+          const restoredValidation = await window.electron.validateEfi(s.efiPath, restore.profile);
+          setValidationResult(restoredValidation);
+          if (!isValidationBlockingDeployment(restoredValidation)) {
+            setEfiPath(s.efiPath);
+            setBuildReady(true);
+            restoredBuildReady = true;
+          }
+        } catch {
+          restoredBuildReady = false;
+        }
+      }
     }
 
     // Auto-resume an interrupted recovery download
@@ -1223,7 +1234,6 @@ export default function App() {
       const resumeState = await window.electron.getDownloadResumeState();
       const resumeDecision = recoveryResumeDecision({
         compatibilityBlocked: restoredCompatibilityBlocked,
-        biosReady: restoredBiosReady,
         efiReady: restoredBuildReady,
       });
       if (resumeState && resumeState.offset > 0 && resumeDecision.canResume) {
