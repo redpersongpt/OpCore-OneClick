@@ -127,16 +127,14 @@ describe('install step guards', () => {
     assert.match(result.reason ?? '', /validated efi/i);
   });
 
-  test('does not allow accepted BIOS state to enter partition prep', () => {
+  test('allows accepted BIOS state to enter partition prep once the EFI is ready', () => {
     const result = evaluateStepTransition('part-prep', makeState({
       biosReady: false,
       biosAccepted: true,
       postBuildReady: true,
     }));
 
-    assert.equal(result.ok, false);
-    assert.equal(result.redirect, 'bios');
-    assert.match(result.reason ?? '', /bios preparation/i);
+    assert.equal(result.ok, true);
   });
 
   test('blocks flashing when no target drive is selected', () => {

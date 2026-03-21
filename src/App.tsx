@@ -2007,21 +2007,6 @@ export default function App() {
       return;
     }
 
-    const { guard, validation } = await ensureDeployGuard(profile, efiPath, {
-      surfaceError: true,
-      reasonSuffix: ' Select a build method only after the BIOS and EFI are still valid.',
-    });
-    if (!guard.allowed) {
-      return;
-    }
-    if (validation) {
-      setValidationResult(validation);
-      if (isValidationBlockingDeployment(validation)) {
-        setBuildReady(false);
-        return;
-      }
-    }
-
     try {
       const freshValidation = await window.electron.validateEfi(efiPath, profile);
       setValidationResult(freshValidation);
@@ -2044,17 +2029,20 @@ export default function App() {
       setMethod(m);
       // Always reset selection when loading new drive list
       setSelectedUsb(null);
+      setUsbDevices([]);
       clearFlashConfirmationState();
       if (m === 'usb') {
+        const transition = attemptStepTransition('usb-select');
+        if (!transition?.ok) return;
         const devs = await window.electron.listUsbDevices();
         const enriched = await enrichDrives(devs);
         setUsbDevices(enriched);
-        setStep('usb-select');
       } else {
+        const transition = attemptStepTransition('part-prep');
+        if (!transition?.ok) return;
         const drives = await window.electron.getHardDrives();
         const enriched = await enrichDrives(drives);
         setUsbDevices(enriched);
-        setStep('part-prep');
       }
     } catch (e: any) {
       setErrorWithSuggestion(e.message || 'Failed to list drives');
