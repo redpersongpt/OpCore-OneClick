@@ -890,6 +890,18 @@ export default function UsbStep({
         </p>
       </div>
 
+      {loading && (
+        <div className="flex items-start gap-3 rounded-2xl border border-blue-500/20 bg-blue-500/10 px-4 py-3">
+          <RefreshCcw className="mt-0.5 h-4 w-4 flex-shrink-0 animate-spin text-blue-300" />
+          <div className="space-y-1">
+            <p className="text-sm font-bold text-blue-100">Refreshing drive list…</p>
+            <p className="text-xs leading-relaxed text-blue-100/70">
+              Scanning connected drives and reloading their safety details.
+            </p>
+          </div>
+        </div>
+      )}
+
       {/* Erasure warning */}
       <div className="flex gap-3 p-4 rounded-2xl bg-red-500/6 border border-red-500/15">
         <ShieldAlert className="w-5 h-5 text-red-400 flex-shrink-0 mt-0.5" />
@@ -911,9 +923,9 @@ export default function UsbStep({
           <button
             onClick={onRefresh}
             disabled={loading}
-            className="flex items-center gap-2 px-5 py-2.5 bg-white/5 border border-white/10 rounded-xl text-xs font-bold text-white hover:bg-white/10 transition-all cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed"
+            className="flex items-center gap-2 rounded-xl border border-blue-400/20 bg-blue-500/10 px-5 py-2.5 text-xs font-bold text-blue-100 transition-all hover:bg-blue-500/16 cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed"
           >
-            <RefreshCcw className={`w-3.5 h-3.5 ${loading ? 'animate-spin' : ''}`} /> {loading ? 'Detecting…' : 'Refresh'}
+            <RefreshCcw className={`w-3.5 h-3.5 ${loading ? 'animate-spin' : ''}`} /> {loading ? 'Refreshing…' : 'Refresh'}
           </button>
         </div>
       ) : (
@@ -982,9 +994,9 @@ export default function UsbStep({
           <button
             onClick={onRefresh}
             disabled={loading}
-            className="w-full flex items-center justify-center gap-2 py-3 text-xs text-[#555555] hover:text-[#888888] transition-colors cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed"
+            className="w-full flex items-center justify-center gap-2 rounded-xl border border-blue-400/10 bg-blue-500/[0.06] py-3 text-xs font-semibold text-blue-100/70 transition-colors hover:bg-blue-500/[0.1] hover:text-blue-50 cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed"
           >
-            <RefreshCcw className={`w-3 h-3 ${loading ? 'animate-spin' : ''}`} /> {loading ? 'Detecting drives…' : 'Refresh drive list'}
+            <RefreshCcw className={`w-3 h-3 ${loading ? 'animate-spin' : ''}`} /> {loading ? 'Refreshing drive list…' : 'Refresh drive list'}
           </button>
 
           {/* Advanced devices disclosure — beginner mode only, when suspicious drives exist */}

@@ -1395,21 +1395,23 @@ function detectArchitecture(cpuModel: string): HardwareProfile['architecture'] {
 
 async function getWindowsHardwareInfo(): Promise<HardwareProfile> {
   const psCommand = (cmd: string) => `powershell -NoProfile -Command "${cmd}"`;
-  const runWindowsProbe = (cmd: string, fallback = '') =>
+  const runWindowsProbe = (cmd: string, fallback = '', timeout = 8_000) =>
     execPromise(psCommand(cmd), {
-      timeout: 12_000,
+      timeout,
       maxBuffer: 1024 * 1024,
     }).catch(() => ({ stdout: fallback }));
 
-  const [cpuRaw, gpuRaw, baseboardRaw, coresRaw, chassisRaw, manufRaw, modelRaw, batteryRaw] = await Promise.all([
-    runWindowsProbe("Get-CimInstance CIM_Processor | Select-Object -ExpandProperty Name", 'Unknown CPU'),
-    runWindowsProbe("Get-CimInstance CIM_VideoController | Select-Object -ExpandProperty Name", 'Unknown GPU'),
-    runWindowsProbe("Get-CimInstance Win32_BaseBoard | Select-Object -ExpandProperty Product", 'Unknown Board'),
-    runWindowsProbe("Get-CimInstance CIM_Processor | Select-Object -ExpandProperty NumberOfCores", '4'),
-    runWindowsProbe("Get-CimInstance CIM_SystemEnclosure | Select-Object -ExpandProperty ChassisTypes", '3'),
-    runWindowsProbe("Get-CimInstance CIM_ComputerSystem | Select-Object -ExpandProperty Manufacturer", 'Unknown'),
-    runWindowsProbe("Get-CimInstance CIM_ComputerSystem | Select-Object -ExpandProperty Model"),
-    runWindowsProbe("Get-CimInstance Win32_Battery | Select-Object -First 1 | ConvertTo-Json -Compress"),
+  const [cpuRaw, gpuRaw, baseboardRaw, coresRaw, chassisRaw, manufRaw] = await Promise.all([
+    runWindowsProbe("Get-CimInstance CIM_Processor | Select-Object -ExpandProperty Name", 'Unknown CPU', 10_000),
+    runWindowsProbe("Get-CimInstance CIM_VideoController | Select-Object -ExpandProperty Name", 'Unknown GPU', 10_000),
+    runWindowsProbe("Get-CimInstance CIM_BaseBoard | Select-Object -ExpandProperty Product", 'Unknown Board', 8_000),
+    runWindowsProbe("Get-CimInstance CIM_Processor | Select-Object -ExpandProperty NumberOfCores", '4', 8_000),
+    runWindowsProbe("Get-CimInstance CIM_SystemEnclosure | Select-Object -ExpandProperty ChassisTypes", '3', 6_000),
+    runWindowsProbe("Get-CimInstance CIM_ComputerSystem | Select-Object -ExpandProperty Manufacturer", 'Unknown', 6_000),
+  ]);
+  const [modelRaw, batteryRaw] = await Promise.all([
+    runWindowsProbe("Get-CimInstance CIM_ComputerSystem | Select-Object -ExpandProperty Model", '', 3_500),
+    runWindowsProbe("Get-CimInstance Win32_Battery | Select-Object -First 1 | ConvertTo-Json -Compress", '', 3_500),
   ]);
 
   const cpuModel = cpuRaw.stdout.trim().split('\n')[0] || os.cpus()[0]?.model || 'Unknown CPU';
@@ -3139,7 +3141,7 @@ app.whenReady().then(async () => {
   // result is normalised into HardwareProfile for the rest of the app
   ipcHandle('scan-hardware', async () => {
     try {
-      const hw = await withTimeout(detectHardware(), 18_000, 'detectHardware');
+      const hw = await withTimeout(detectHardware(), 30_000, 'detectHardware');
       lastHardwareProfile = hw;
 
       // Build interpretation layer — separates facts from inferences

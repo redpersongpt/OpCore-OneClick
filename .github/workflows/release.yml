@@ -101,7 +101,7 @@ jobs:
           body: |
             macOS OneClick ${{ steps.tag.outputs.name }}
 
-            This release improves the in-app updater and tightens a few user-facing refresh paths. The updater now keeps its controls inside the landing page layout, shows a clearer refresh state, stages the downloaded update cleanly, prompts with “Set up complete - please restart the app”, and resets back to “You are up to date” after the updated build starts. Windows update completion also clears cached app data, including stale installer residue under AppData\Roaming, so old recovery and OpenCore caches do not bleed into the new build.
+            This release restores the known-good Windows hardware scan path so CPU and GPU detection work reliably again, while keeping Microsoft software display adapters out of the compatibility warnings. It also improves small-window layout behavior on the landing page and makes drive-list refresh states much more visible, so refresh actions are obvious while the device list is being rebuilt.
 
             Included assets:
             - Windows NSIS installer

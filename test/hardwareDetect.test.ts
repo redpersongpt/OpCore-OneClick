@@ -8,10 +8,10 @@ import {
 } from '../electron/hardwareDetect.js';
 
 describe('hardwareDetect Windows queries', () => {
-  test('uses the stable cim queries from the known-good windows detector', () => {
+  test('uses the stable known-good v2.3.6 windows detector queries', () => {
     assert.match(WINDOWS_HARDWARE_QUERIES.cpuName, /CIM_Processor/);
     assert.match(WINDOWS_HARDWARE_QUERIES.cpuVendor, /CIM_Processor/);
-    assert.match(WINDOWS_HARDWARE_QUERIES.gpuJson, /Win32_VideoController/);
+    assert.match(WINDOWS_HARDWARE_QUERIES.gpuJson, /CIM_VideoController/);
     assert.match(WINDOWS_HARDWARE_QUERIES.chassisTypes, /CIM_SystemEnclosure/);
     assert.match(WINDOWS_HARDWARE_QUERIES.manufacturer, /CIM_ComputerSystem/);
   });

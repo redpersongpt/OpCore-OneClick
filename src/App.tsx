@@ -2724,7 +2724,7 @@ export default function App() {
               transition={{ delay: 0.4 }} 
               className="flex flex-col items-center gap-4"
             >
-              <div className="flex gap-4">
+              <div className="flex w-full max-w-xl flex-col gap-4 sm:flex-row">
                 <button
                   onClick={() => {
                     if (adminPrivileges === false && platform !== 'darwin') {
@@ -2737,11 +2737,11 @@ export default function App() {
                     }
                     setStep('welcome');
                   }}
-                  className="group px-10 py-5 bg-white text-black rounded-2xl font-bold text-lg hover:scale-105 active:scale-95 transition-all shadow-[0_20px_50px_rgba(255,255,255,0.12)] flex items-center gap-3 cursor-pointer relative overflow-hidden">
+                  className="group flex min-w-0 flex-1 items-center justify-center gap-3 overflow-hidden rounded-2xl bg-white px-10 py-5 text-lg font-bold text-black shadow-[0_20px_50px_rgba(255,255,255,0.12)] transition-all hover:scale-105 active:scale-95 cursor-pointer relative">
                   <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/20 to-transparent translate-x-[-100%] group-hover:translate-x-[100%] transition-transform duration-700 ease-in-out" />
                   Begin Installation
                 </button>
-                <button onClick={() => setStep('troubleshooting')} className="px-10 py-5 bg-white/5 border border-white/10 text-white rounded-2xl font-bold text-lg hover:bg-white/10 hover:scale-105 active:scale-95 transition-all flex items-center gap-3 cursor-pointer backdrop-blur-md">
+                <button onClick={() => setStep('troubleshooting')} className="flex min-w-0 flex-1 items-center justify-center gap-3 rounded-2xl border border-white/10 bg-white/5 px-10 py-5 text-lg font-bold text-white transition-all hover:bg-white/10 hover:scale-105 active:scale-95 cursor-pointer backdrop-blur-md">
                   <HelpCircle className="w-5 h-5 text-white/40" /> Troubleshoot
                 </button>
               </div>
@@ -2842,7 +2842,7 @@ export default function App() {
         {/* ── WIZARD SHELL ── */}
         {step !== 'landing' && (
           <motion.div key="shell" initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}
-            className="z-10 w-full max-w-5xl h-[660px] flex glass-card overflow-hidden">
+            className="z-10 flex h-[min(660px,calc(100vh-2rem))] w-full max-w-5xl glass-card overflow-hidden">
 
             {/* Sidebar */}
             <div className="w-64 border-r border-white/5 bg-black/20 flex flex-col p-6 gap-1 flex-shrink-0">
@@ -2943,10 +2943,11 @@ export default function App() {
                       }
                       void checkForAppUpdates();
                     }}
-                    className="mt-3 w-full flex items-center justify-between gap-2 rounded-xl border border-white/10 bg-white/[0.04] px-3 py-2 text-left text-xs font-semibold text-white/65 transition-colors hover:bg-white/[0.08] hover:text-white cursor-pointer"
+                    className="mt-3 flex w-full min-w-0 items-center justify-between gap-2 rounded-xl border border-white/10 bg-white/[0.04] px-3 py-2 text-left text-xs font-semibold text-white/65 transition-colors hover:bg-white/[0.08] hover:text-white cursor-pointer"
                   >
-                    <span className="flex items-center gap-2">
+                    <span className="flex min-w-0 flex-1 items-center gap-2">
                       <Download className="w-3.5 h-3.5 text-white/40" />
+                      <span className="truncate">
                       {appUpdateState?.restartRequired
                         ? 'Restart to finish update'
                         : appUpdateState?.readyToInstall
@@ -2954,6 +2955,7 @@ export default function App() {
                         : appUpdateState?.available
                         ? 'Download latest update'
                         : 'Check for updates'}
+                      </span>
                     </span>
                     {appUpdateState?.restartRequired || appUpdateState?.available || appUpdateState?.readyToInstall ? (
                       <Download className="w-3.5 h-3.5 text-white/30" />

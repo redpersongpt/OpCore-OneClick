@@ -96,7 +96,7 @@ function resolveCpuVendor(vendorStr: string, rawName: string): { vendor: string;
 export const WINDOWS_HARDWARE_QUERIES = {
   cpuName: '(Get-CimInstance CIM_Processor).Name',
   cpuVendor: '(Get-CimInstance CIM_Processor).Manufacturer',
-  gpuJson: 'Get-CimInstance Win32_VideoController | Select-Object Name, PNPDeviceID | ConvertTo-Json -Compress',
+  gpuJson: 'Get-CimInstance CIM_VideoController | Select-Object Name, PNPDeviceID | ConvertTo-Json -Compress',
   boardJson: 'Get-CimInstance Win32_BaseBoard | Select-Object Manufacturer, Product | ConvertTo-Json -Compress',
   chassisTypes: '(Get-CimInstance CIM_SystemEnclosure).ChassisTypes',
   manufacturer: '(Get-CimInstance CIM_ComputerSystem).Manufacturer',
@@ -108,23 +108,25 @@ export const WINDOWS_HARDWARE_QUERIES = {
 // ── Windows ───────────────────────────────────────────────────────────────────
 
 export async function detectWindowsHardware(): Promise<DetectedHardware> {
-  const ps = (cmd: string, fallback = '') =>
+  const ps = (cmd: string, fallback = '', timeout = 8_000) =>
     execPromise(`powershell -NoProfile -Command "${cmd}"`, {
-      timeout: 12_000,
+      timeout,
       maxBuffer: 1024 * 1024,
     }).catch(() => ({ stdout: fallback }));
 
-  const [cpuRes, cpuVendorRes, gpuRes, boardRes, chassisRes, manufRes, modelRes, batteryRes, coresRes] = await Promise.all([
-    ps(WINDOWS_HARDWARE_QUERIES.cpuName, 'Unknown CPU'),
-    ps(WINDOWS_HARDWARE_QUERIES.cpuVendor),
+  const [cpuRes, cpuVendorRes, gpuRes, boardRes, chassisRes, manufRes, coresRes] = await Promise.all([
+    ps(WINDOWS_HARDWARE_QUERIES.cpuName, 'Unknown CPU', 10_000),
+    ps(WINDOWS_HARDWARE_QUERIES.cpuVendor, '', 10_000),
     // PNPDeviceID gives "PCI\\VEN_10DE&DEV_2484&..." — extract vendor+device IDs
-    ps(WINDOWS_HARDWARE_QUERIES.gpuJson),
-    ps(WINDOWS_HARDWARE_QUERIES.boardJson),
-    ps(WINDOWS_HARDWARE_QUERIES.chassisTypes),
-    ps(WINDOWS_HARDWARE_QUERIES.manufacturer),
-    ps(WINDOWS_HARDWARE_QUERIES.model),
-    ps(WINDOWS_HARDWARE_QUERIES.batteryJson),
-    ps(WINDOWS_HARDWARE_QUERIES.coreCount),
+    ps(WINDOWS_HARDWARE_QUERIES.gpuJson, '', 10_000),
+    ps(WINDOWS_HARDWARE_QUERIES.boardJson, '', 8_000),
+    ps(WINDOWS_HARDWARE_QUERIES.chassisTypes, '', 6_000),
+    ps(WINDOWS_HARDWARE_QUERIES.manufacturer, '', 6_000),
+    ps(WINDOWS_HARDWARE_QUERIES.coreCount, '', 8_000),
+  ]);
+  const [modelRes, batteryRes] = await Promise.all([
+    ps(WINDOWS_HARDWARE_QUERIES.model, '', 3_500),
+    ps(WINDOWS_HARDWARE_QUERIES.batteryJson, '', 3_500),
   ]);
 
   const cpuName = cpuRes.stdout.trim().split('\n')[0] || pickFallbackCpuName();
