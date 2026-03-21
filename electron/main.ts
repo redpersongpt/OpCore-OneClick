@@ -1419,7 +1419,24 @@ function requireFlashAuthorizationContext(): {
 }
 
 async function inspectEfiBackupPolicy(device: string): Promise<EfiBackupPolicy> {
-  return efiBackupManager.inspectPolicy(device, (targetDevice) => diskOps.inspectExistingEfi(targetDevice));
+  try {
+    return await withTimeout(
+      efiBackupManager.inspectPolicy(device, (targetDevice) => diskOps.inspectExistingEfi(targetDevice)),
+      8_000,
+      'inspectEfiBackupPolicy',
+    );
+  } catch (error: any) {
+    log('WARN', 'efi-backup', 'EFI backup policy inspection timed out', {
+      device,
+      error: String(error?.message ?? error),
+    });
+    return {
+      status: 'not_required',
+      reason: 'EFI check timed out. Backup requirements will be checked again before writing.',
+      existingEfiState: 'absent',
+      latestBackup: null,
+    };
+  }
 }
 
 async function captureEfiBackupForFlash(input: {
@@ -2913,11 +2930,15 @@ app.whenReady().then(async () => {
       throw new Error(decision.reason ?? 'SAFETY BLOCK: Flash preparation failed.');
     }
 
-    const backupPolicy = await captureEfiBackupForFlash({
-      device,
-      expectedIdentity: capturedIdentity,
-      hardwareProfileDigest,
-    });
+    const backupPolicy = await withTimeout(
+      captureEfiBackupForFlash({
+        device,
+        expectedIdentity: capturedIdentity,
+        hardwareProfileDigest,
+      }),
+      15_000,
+      'captureEfiBackupForFlash',
+    );
     if (backupPolicy.status === 'blocked') {
       throw new Error(backupPolicy.reason);
     }

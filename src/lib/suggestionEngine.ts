@@ -613,19 +613,98 @@ const TEMPLATES: SuggestionTemplate[] = [
     category: 'device_error',
     build: (ctx) => {
       const tier = getEscalationTier(ctx.retryCount ?? 0);
-      if (tier === 'escalated') {
+      const msg = ctx.errorMessage.toLowerCase();
+      const looksLikePermissionError = msg.includes('permission denied') || msg.includes('eacces') || msg.includes('eperm') || msg.includes('administrator') || msg.includes('sudo');
+      const looksLikeTimeoutError = msg.includes('timeout') || msg.includes('timed out');
+      const looksLikeVerificationError = msg.includes('verification failed') || msg.includes('not found on usb after copy');
+      const looksLikeMediaError = msg.includes('write-protect') || msg.includes('write protect') || msg.includes('i/o error') || msg.includes('input/output error') || msg.includes('media is write protected') || msg.includes('device rejected write');
+
+      if (looksLikePermissionError) {
         return {
-          title: 'USB write keeps failing',
-          explanation: 'Multiple write attempts have failed on this drive. The drive is likely faulty.',
+          title: 'USB write blocked by permissions',
+          explanation: 'The app could not get the system access needed to write to the drive.',
+          severity: 'critical',
+          decisionSummary: '',
+          primaryAction: ctx.platform === 'win32'
+            ? act(
+                'Close the app and run it as Administrator',
+                'high',
+                'Windows blocks raw disk writes without elevation',
+                'fix_now',
+                'Permission problems can look like generic USB write failures',
+                'The flash can proceed with the correct privileges',
+              )
+            : act(
+                'Run the app with elevated privileges',
+                'high',
+                'Raw disk writes need elevated access',
+                'fix_now',
+                'Permission problems can look like generic USB write failures',
+                'The flash can proceed with the correct privileges',
+              ),
+          alternatives: [],
+        };
+      }
+
+      if (looksLikeTimeoutError) {
+        return {
+          title: 'USB write preparation timed out',
+          explanation: 'A long-running USB step did not finish in time. This does not prove the drive is bad.',
           severity: 'critical',
           decisionSummary: '',
           primaryAction: act(
-            'Replace the USB drive with a known-good drive from a reputable brand',
+            'Reconnect the drive and retry once',
             'high',
-            'Three write failures on the same drive strongly indicate a hardware defect',
+            'Transient USB controller stalls are common and often recover on a clean reconnect',
+            'fix_now',
+            'A timeout alone is not enough evidence to call the drive faulty',
+            'The write path gets a clean device session',
+          ),
+          alternatives: [],
+        };
+      }
+
+      if (looksLikeVerificationError) {
+        return {
+          title: 'USB write verification failed',
+          explanation: 'The write step finished, but the app could not verify the expected files on the drive afterward.',
+          severity: 'critical',
+          decisionSummary: '',
+          primaryAction: act(
+            'Reconnect the drive, then retry the flash',
+            'high',
+            'Verification failures are often caused by remount timing or transient device state',
+            'fix_now',
+            'This is a post-write verification problem, not direct proof of media failure',
+            'The app can verify the written files on a clean retry',
+          ),
+          alternatives: [],
+        };
+      }
+
+      if (tier === 'escalated') {
+        return {
+          title: 'USB write keeps failing',
+          explanation: looksLikeMediaError
+            ? 'Multiple low-level write attempts have failed on this drive. The drive may be failing or write-protected.'
+            : 'Multiple USB write attempts have failed, but the current errors do not prove the drive itself is faulty.',
+          severity: 'critical',
+          decisionSummary: '',
+          primaryAction: act(
+            looksLikeMediaError
+              ? 'Try a different USB drive'
+              : 'Try a different USB port or reconnect the drive before replacing it',
+            'high',
+            looksLikeMediaError
+              ? 'Repeated low-level write errors are strong evidence of a media or controller problem'
+              : 'These retries failed, but the messages still point to a transport or environment problem first',
             'try_alternative',
-            'Counterfeit or worn flash drives fail silently — repeated failures confirm this pattern',
-            'A known-good drive eliminates the hardware variable entirely',
+            looksLikeMediaError
+              ? 'Repeated low-level write errors usually come from the drive or its controller'
+              : 'A generic write failure can still be caused by USB transport, permissions, or remount timing',
+            looksLikeMediaError
+              ? 'A known-good drive removes the failing media from the equation'
+              : 'A clean port or reconnect may resolve the issue without replacing the drive',
           ),
           alternatives: [
             ...(ctx.platform === 'win32' ? [act(
@@ -641,7 +720,7 @@ const TEMPLATES: SuggestionTemplate[] = [
       }
       return {
         title: 'USB write operation failed',
-        explanation: 'The write stream to the USB drive was interrupted. This is usually a hardware or permission issue — not a config problem.',
+        explanation: 'The write stream to the USB drive was interrupted. This is usually a device, connection, or permission issue — not a config problem.',
         severity: 'critical',
         decisionSummary: '',
         primaryAction: ctx.platform === 'win32'

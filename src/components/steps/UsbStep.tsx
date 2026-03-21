@@ -243,8 +243,7 @@ function DeviceIdentityPanel({ drive, onRescan, driveStillPresent }: DeviceIdent
           <AlertTriangle className="w-3.5 h-3.5 text-amber-400 flex-shrink-0 mt-0.5" />
           <p className="text-[10px] text-amber-300/70 leading-relaxed">
             <span className="font-bold text-amber-300/90">Important:</span>{' '}
-            If you disconnect and reconnect this drive, its identifier may change.
-            Re-check the identifier before confirming the flash.
+            If you reconnect this drive, its identifier may change. Check it again before flashing.
           </p>
         </div>
       </div>
@@ -460,9 +459,8 @@ function AdvancedDriveRow({ drive, selected, onSelect, ackGranted, onAckGranted,
 
       {/* Full warning copy */}
       <div className="px-4 py-3 text-xs text-amber-200/70 leading-relaxed border-b border-amber-500/10">
-        This drive could not be fully identified. Selecting it may be safe, but the app cannot confirm
-        it is a removable USB drive. You are responsible for verifying the device before proceeding.{' '}
-        <span className="font-bold text-amber-300">ALL DATA WILL BE PERMANENTLY ERASED.</span>
+        This drive could not be fully identified. Verify it first.{' '}
+        <span className="font-bold text-amber-300">This drive will be erased.</span>
       </div>
 
       {ackGranted ? (
@@ -481,7 +479,7 @@ function AdvancedDriveRow({ drive, selected, onSelect, ackGranted, onAckGranted,
         // Require typed acknowledgement
         <div className="px-4 py-3 space-y-3">
           <label className="text-[10px] text-white/35 block">
-            Type exactly to unlock this drive:
+            Type to unlock:
             <span className="ml-1 font-mono text-amber-400/70 select-all">{SUSPICIOUS_ACK_TEXT}</span>
           </label>
           <input
@@ -500,7 +498,7 @@ function AdvancedDriveRow({ drive, selected, onSelect, ackGranted, onAckGranted,
                 : 'bg-white/4 border border-white/8 text-white/20 cursor-not-allowed'
             }`}
           >
-            Unlock drive for selection
+            Unlock drive
           </button>
         </div>
       )}
@@ -517,6 +515,7 @@ interface SelectionReviewPanelProps {
   onRescan: () => void;
   onBack: () => void;
   onConfirm: () => void;
+  confirmBusy: boolean;
   requireFullSize: boolean;
 }
 
@@ -550,7 +549,7 @@ function plainLanguageSummary(drive: DriveInfo, requireFullSize: boolean): { tex
   };
 }
 
-function SelectionReviewPanel({ drive, driveStillPresent, backupPolicy, onRescan, onBack, onConfirm, requireFullSize }: SelectionReviewPanelProps) {
+function SelectionReviewPanel({ drive, driveStillPresent, backupPolicy, onRescan, onBack, onConfirm, confirmBusy, requireFullSize }: SelectionReviewPanelProps) {
   const summary = plainLanguageSummary(drive, requireFullSize);
   const { tier, unreliable } = classifyDrive(drive, requireFullSize);
 
@@ -584,7 +583,7 @@ function SelectionReviewPanel({ drive, driveStillPresent, backupPolicy, onRescan
     },
   ];
 
-  const canConfirm = tier !== 'blocked' && driveStillPresent && backupPolicy?.status !== 'blocked';
+  const canConfirm = tier !== 'blocked' && driveStillPresent && backupPolicy?.status !== 'blocked' && !confirmBusy;
 
   return (
     <motion.div
@@ -603,9 +602,7 @@ function SelectionReviewPanel({ drive, driveStillPresent, backupPolicy, onRescan
           <ChevronDown className="w-3.5 h-3.5 rotate-90" /> Back to drive list
         </button>
         <h2 className="text-4xl font-bold text-white mb-1">Review Your Selection</h2>
-        <p className="text-[#888888] font-medium text-sm">
-          Verify the drive details below. You can still go back.
-        </p>
+        <p className="text-[#888888] font-medium text-sm">Check the drive, then continue.</p>
       </div>
 
       {/* Plain-language summary banner */}
@@ -628,8 +625,7 @@ function SelectionReviewPanel({ drive, driveStillPresent, backupPolicy, onRescan
           <div className="space-y-1">
             <div className="text-[11px] font-bold text-amber-300 uppercase tracking-wide">Potential Reliability Risk</div>
             <p className="text-[11px] text-amber-200/60 leading-relaxed">
-              This device uses a generic controller or reported unstable detection. 
-              The operation may be slow or fail during verification.
+              This device looks unstable. The write may be slow or fail verification.
             </p>
           </div>
         </div>
@@ -662,9 +658,7 @@ function SelectionReviewPanel({ drive, driveStillPresent, backupPolicy, onRescan
           <div className="flex items-start gap-2">
             <AlertTriangle className="w-3.5 h-3.5 text-amber-400 flex-shrink-0 mt-0.5" />
             <p className="text-[10px] text-amber-300/70 leading-relaxed">
-              <span className="font-bold text-amber-300/90">Important:</span>{' '}
-              If you disconnect and reconnect this drive, its identifier may change.
-              Re-check the identifier above before confirming the flash.
+              <span className="font-bold text-amber-300/90">Important:</span> Replugging the drive can change its identifier.
             </p>
           </div>
         </div>
@@ -692,8 +686,7 @@ function SelectionReviewPanel({ drive, driveStillPresent, backupPolicy, onRescan
       <div className="flex gap-3 p-4 rounded-2xl bg-red-500/6 border border-red-500/15">
         <ShieldAlert className="w-4 h-4 text-red-400 flex-shrink-0 mt-0.5" />
         <div className="text-xs text-red-300/75 leading-relaxed">
-          <span className="font-bold text-red-400">This drive will be completely erased and reformatted.</span>
-          {' '}A final confirmation will appear before any data is written.
+          <span className="font-bold text-red-400">This drive will be erased.</span> One more confirmation is required.
         </div>
       </div>
 
@@ -718,13 +711,15 @@ function SelectionReviewPanel({ drive, driveStillPresent, backupPolicy, onRescan
             }`}
           >
             <ShieldAlert className="w-4 h-4 opacity-70" />
-            Confirm Flash to {drive.device} →
+            {confirmBusy ? 'Preparing…' : `Flash ${drive.device} →`}
           </motion.button>
         </div>
         {!canConfirm && (
           <p className="text-[10px] text-red-400/60 text-center">
             {!driveStillPresent
               ? 'Drive disconnected — reconnect it or go back.'
+              : confirmBusy
+              ? 'Preparing the final confirmation…'
               : backupPolicy?.status === 'blocked'
               ? 'Existing EFI could not be backed up safely on this target.'
               : 'This drive is blocked by safety rules.'}
@@ -746,10 +741,11 @@ interface Props {
   onRefresh: () => void;
   /** When provided, selecting a drive shows the review panel with this callback on confirm. */
   onConfirmDrive?: () => void;
+  confirmDriveBusy?: boolean;
   requireFullSize?: boolean;
 }
 
-export default function UsbStep({ devices, selected, backupPolicy = null, onSelect, onDeselect, onRefresh, onConfirmDrive, requireFullSize = true }: Props) {
+export default function UsbStep({ devices, selected, backupPolicy = null, onSelect, onDeselect, onRefresh, onConfirmDrive, confirmDriveBusy = false, requireFullSize = true }: Props) {
   const [advancedOpen, setAdvancedOpen] = useState(false);
   // Per-device typed acknowledgements (device string → granted)
   const [ackGranted, setAckGranted] = useState<Set<string>>(new Set());
@@ -801,6 +797,7 @@ export default function UsbStep({ devices, selected, backupPolicy = null, onSele
         onRescan={handleRescan}
         onBack={handleBack}
         onConfirm={handleConfirm}
+        confirmBusy={confirmDriveBusy}
         requireFullSize={requireFullSize}
       />
     );
@@ -810,17 +807,14 @@ export default function UsbStep({ devices, selected, backupPolicy = null, onSele
     <div className="space-y-6">
       <div>
         <h2 className="text-4xl font-bold text-white mb-2">Select a USB Drive</h2>
-        <p className="text-[#888888] font-medium text-sm">
-          Choose a removable USB drive (16 GB or larger). All data on it will be erased.
-        </p>
+        <p className="text-[#888888] font-medium text-sm">Choose a removable USB drive.</p>
       </div>
 
       {/* Erasure warning */}
       <div className="flex gap-3 p-4 rounded-2xl bg-red-500/6 border border-red-500/15">
         <ShieldAlert className="w-5 h-5 text-red-400 flex-shrink-0 mt-0.5" />
         <div className="text-xs text-red-300/75 leading-relaxed">
-          <span className="font-bold text-red-400">The selected drive will be completely erased.</span>
-          {' '}It will be reformatted as GPT/FAT32. Back up anything important first.
+          <span className="font-bold text-red-400">The selected drive will be erased.</span> It will be reformatted as GPT/FAT32.
         </div>
       </div>
 
@@ -932,8 +926,7 @@ export default function UsbStep({ devices, selected, backupPolicy = null, onSele
                       <div className="flex items-start gap-2 px-3 py-2 rounded-xl bg-amber-500/6 border border-amber-500/15">
                         <AlertTriangle className="w-3.5 h-3.5 text-amber-400 flex-shrink-0 mt-0.5" />
                         <p className="text-[10px] text-amber-300/70 leading-relaxed">
-                          These drives could not be fully identified. Each one requires typed acknowledgement before selection.
-                          Only proceed if you are certain you are selecting the correct removable USB drive.
+                          These drives could not be fully identified. Unlock one only if you are sure it is the right USB drive.
                         </p>
                       </div>
 

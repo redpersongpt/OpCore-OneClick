@@ -78,4 +78,30 @@ describe('error recovery messaging', () => {
     assert.equal(view!.nextActions.length, 1);
     assert.match(view!.nextActions[0] ?? '', /administrator|sudo/i);
   });
+
+  test('does not escalate generic flash failures into a faulty-drive claim without media-style errors', () => {
+    const suggestion = getSuggestionPayload({
+      errorMessage: 'USB flash write failed. Verification failed: EFI\\\\OC\\\\OpenCore.efi not found on USB after copy',
+      step: 'usb-select',
+      platform: 'win32',
+      retryCount: 2,
+    });
+
+    assert.equal(suggestion.code, 'flash_write_error');
+    assert.doesNotMatch(suggestion.explanation ?? '', /likely faulty/i);
+    assert.doesNotMatch(suggestion.suggestion ?? '', /replace the usb drive with a known-good drive/i);
+  });
+
+  test('keeps permission-style flash failures on the permission path instead of blaming the drive', () => {
+    const suggestion = getSuggestionPayload({
+      errorMessage: 'USB flash write failed: permission denied: raw disk access failed',
+      step: 'usb-select',
+      platform: 'win32',
+      retryCount: 2,
+    });
+
+    assert.equal(suggestion.code, 'flash_write_error');
+    assert.match(suggestion.message ?? '', /permissions/i);
+    assert.match(suggestion.suggestion ?? '', /administrator/i);
+  });
 });

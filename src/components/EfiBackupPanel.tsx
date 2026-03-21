@@ -10,8 +10,8 @@ export default function EfiBackupPanel({ policy }: EfiBackupPanelProps) {
   if (!policy) {
     return (
       <div className="rounded-2xl border border-white/8 bg-white/3 p-4">
-        <div className="text-[10px] font-bold uppercase tracking-widest text-white/25">EFI Backup Policy</div>
-        <div className="text-xs text-white/55 mt-2">Inspecting existing EFI state on the selected target…</div>
+        <div className="text-[10px] font-bold uppercase tracking-widest text-white/25">Backup Check</div>
+        <div className="text-xs text-white/55 mt-2">Checking the drive…</div>
       </div>
     );
   }
@@ -45,7 +45,7 @@ export default function EfiBackupPanel({ policy }: EfiBackupPanelProps) {
       <div className="flex items-center justify-between gap-3">
         <div className="flex items-center gap-2 text-[10px] font-bold uppercase tracking-widest text-white/75">
           {tone.icon}
-          EFI Backup Policy
+          Backup Check
         </div>
         <div className={`text-[10px] font-bold uppercase tracking-widest ${tone.text}`}>
           {tone.label}
@@ -67,7 +67,7 @@ export default function EfiBackupPanel({ policy }: EfiBackupPanelProps) {
       {policy.status === 'blocked' && (
         <div className="flex items-start gap-2 text-[11px] text-red-200/70">
           <AlertTriangle className="w-3.5 h-3.5 mt-0.5 flex-shrink-0" />
-          <span>Flashing must not proceed until the target EFI can be inspected and backed up safely.</span>
+          <span>Flashing is blocked until the drive can be inspected and backed up.</span>
         </div>
       )}
     </div>

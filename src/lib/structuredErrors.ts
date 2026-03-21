@@ -231,11 +231,11 @@ const ERROR_MAP: Array<{
     test: m => m.includes('flash') || m.includes('write') || m.includes('dd:'),
     structured: {
       title: 'USB write failed',
-      what: 'Writing to the USB drive failed. The drive may be faulty or write-protected.',
+      what: 'Writing to the USB drive failed. This can be caused by permissions, connection problems, verification failures, or the drive itself.',
       nextStep:
-        'Try a different USB drive. Make sure it is not write-protected and has at least 16 GB of space.',
+        'Retry once. If it fails again, check permissions, reconnect the drive, and review the exact write error before replacing the USB drive.',
       retryable: true,
-      retryNote: 'with a different USB drive',
+      retryNote: 'after checking the exact write error',
     },
   },
   {

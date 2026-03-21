@@ -37,7 +37,7 @@ import DebugOverlay from './components/DebugOverlay';
 import ValidationSummary from './components/ValidationSummary';
 import EfiReportPanel from './components/EfiReport';
 import CommunityPanel from './components/CommunityPanel';
-import type { ValidationResult } from '../electron/configValidator';
+import type { ValidationResult, ValidationTrace } from '../electron/configValidator';
 import { generateEfiReport, type EfiReport } from './lib/efiReport';
 import { getRelevantIssues, type CommunityIssue } from './data/communityKnowledge';
 import { useTaskManager } from './hooks/useTaskManager';
@@ -335,6 +335,7 @@ export default function App() {
   const [watchdogCount, setWatchdogCount] = useState(0);
   const [recoveryTryCount, setRecoveryTryCount] = useState(0);
   const [biosAccepted, setBiosAccepted] = useState(false);
+  const [flashConfirmBusy, setFlashConfirmBusy] = useState(false);
   const hasLiveHardwareContext = planningProfileContext === 'live_scan';
   const biosReady = biosState?.readyToBuild === true && biosState?.stage === 'complete';
   const compatibilityBlocked = isCompatibilityBlocked(compat);
@@ -561,6 +562,28 @@ export default function App() {
     }
   };
 
+  const classifyRetryBucket = (errorMessage: string, trace?: ValidationTrace | null) => {
+    const msgLower = errorMessage.toLowerCase();
+    if (trace?.code) return trace.code;
+    if (msgLower.includes('401') || msgLower.includes('403')) return 'recovery_auth';
+    if (msgLower.includes('recovery')) return 'recovery_dl';
+    if (msgLower.includes('efi') && msgLower.includes('valid')) return 'efi_val';
+    if (msgLower.includes('permission denied') || msgLower.includes('eacces') || msgLower.includes('eperm') || msgLower.includes('administrator') || msgLower.includes('sudo')) {
+      return 'flash_permission';
+    }
+    if (msgLower.includes('timed out') || msgLower.includes('timeout')) return 'flash_timeout';
+    if (msgLower.includes('verification failed') || msgLower.includes('not found on usb after copy') || msgLower.includes('not found on usb after copy')) {
+      return 'flash_verify';
+    }
+    if (msgLower.includes('write-protect') || msgLower.includes('write protect') || msgLower.includes('i/o error') || msgLower.includes('input/output error') || msgLower.includes('media is write protected') || msgLower.includes('device rejected write')) {
+      return 'flash_media';
+    }
+    if (msgLower.includes('flash') || msgLower.includes('write') || msgLower.includes('diskpart') || msgLower.includes('xcopy') || msgLower.includes('mkfs') || msgLower.includes('mount') || msgLower.includes('umount')) {
+      return 'flash_general';
+    }
+    return 'other';
+  };
+
   /** Set a global error with context-aware suggestion.
    *  Tracks retry counts per error code so suggestions evolve on repeated failures. */
   const setErrorWithSuggestion = (
@@ -575,11 +598,7 @@ export default function App() {
     const trace = options?.validationResult?.firstFailureTrace ?? validationResult?.firstFailureTrace ?? null;
     // Pre-compute a rough code for retry counting (before full payload build)
     const msgLower = errorMessage.toLowerCase();
-    const roughCode = trace?.code ?? (msgLower.includes('401') || msgLower.includes('403') ? 'recovery_auth'
-      : msgLower.includes('recovery') ? 'recovery_dl'
-      : msgLower.includes('efi') && msgLower.includes('valid') ? 'efi_val'
-      : msgLower.includes('flash') || msgLower.includes('write') ? 'flash'
-      : 'other');
+    const roughCode = classifyRetryBucket(errorMessage, trace);
     errorCountRef.current[roughCode] = (errorCountRef.current[roughCode] ?? 0) + 1;
 
     const payload = getSuggestionPayload({
@@ -609,6 +628,14 @@ export default function App() {
       rawMessage: errorMessage,
     });
   };
+
+  useEffect(() => {
+    errorCountRef.current.flash_general = 0;
+    errorCountRef.current.flash_media = 0;
+    errorCountRef.current.flash_permission = 0;
+    errorCountRef.current.flash_timeout = 0;
+    errorCountRef.current.flash_verify = 0;
+  }, [selectedUsb]);
 
   const openBiosRecoverySurface = (
     code: BiosRecoveryCode,
@@ -697,6 +724,7 @@ export default function App() {
     setFlashConfirmationExpiresAt(null);
     setFlashConfirmText('');
     setFlashChecks(new Set());
+    setFlashConfirmBusy(false);
   };
 
   const getBuildGuardRedirect = (activeCompat: CompatibilityReport | null | undefined): StepId =>
@@ -1644,7 +1672,7 @@ export default function App() {
       if (!isCurrentRun()) return;
       setEfiPath(built);
       setProgress(55);
-      setStatus('Preparing the generated EFI for validation…');
+      setStatus('Validating EFI…');
       await new Promise(r => setTimeout(r, 600));
       if (!isCurrentRun()) return;
       setProgress(65);
@@ -2118,18 +2146,22 @@ export default function App() {
   const initiateFlash = async () => {
     if (!selectedUsb || !efiPath) return;
     if (!profile) return;
+    if (flashConfirmBusy) return;
     clearFlashConfirmationState();
+    setFlashConfirmBusy(true);
     const { guard, validation } = await ensureDeployGuard(profile, efiPath, {
       surfaceError: true,
       reasonSuffix: ' Flashing is blocked until the BIOS and EFI are still valid.',
     });
     if (!guard.allowed) {
+      setFlashConfirmBusy(false);
       return;
     }
     if (validation) {
       setValidationResult(validation);
       if (isValidationBlockingDeployment(validation)) {
         setBuildReady(false);
+        setFlashConfirmBusy(false);
         return;
       }
     }
@@ -2161,6 +2193,7 @@ export default function App() {
           validationResult: vResult,
         });
         setStep('report');
+        setFlashConfirmBusy(false);
         return;
       }
     } catch (e) {
@@ -2169,6 +2202,7 @@ export default function App() {
       setBuildReady(false);
       setErrorWithSuggestion('EFI validation failed — failed to verify build integrity before flashing.', 'report');
       setStep('report');
+      setFlashConfirmBusy(false);
       return;
     } finally {
       setValidationRunning(false);
@@ -2194,8 +2228,10 @@ export default function App() {
       setFlashConfirmationExpiresAt(prepared.expiresAt);
     } catch (e: any) {
       setErrorWithSuggestion(e.message || 'Flash confirmation could not be prepared. Re-select the drive and try again.', 'usb-select');
+      setFlashConfirmBusy(false);
       return;
     }
+    setFlashConfirmBusy(false);
     setShowFlashConfirm(true);
   };
 
@@ -2379,7 +2415,7 @@ export default function App() {
     { label: 'Dry-run simulation', sublabel: buildPlan ? (buildPlan.certainty === 'will_succeed' ? `${buildPlan.verifiedComponents}/${buildPlan.totalComponents} components reachable` : `${buildPlan.failedComponents} component(s) unverified`) : 'Testing every download URL before committing…', done: progress >= 5, active: progress >= 3 && progress < 5 },
     { label: 'Generate EFI structure', sublabel: profile ? `${profile.generation} · ${profile.smbios} · ${profile.kexts.length} kexts` : 'Generating OpenCore, ACPI, and boot files', done: progress >= 65, active: progress >= 5 && progress < 65 },
     { label: 'Validate generated EFI', sublabel: validationRunning ? 'Validation is running…' : 'Checking config, drivers, and required files on disk', done: progress >= 92, active: progress >= 65 && progress < 92 },
-    { label: 'Finalize next step', sublabel: 'Preparing kext download and recovery flow', done: progress >= 100, active: progress >= 92 && progress < 100 },
+    { label: 'Start downloads', sublabel: 'Starting kext and recovery setup', done: progress >= 100, active: progress >= 92 && progress < 100 },
   ];
   const kextStages = kextResults.map((k: any) => {
     const src = k.source === 'embedded' ? 'embedded fallback' : k.source === 'failed' ? 'FAILED' : 'GitHub';
@@ -2528,7 +2564,7 @@ export default function App() {
               transition={{ delay: 1 }}
               className="mt-12 text-[10px] text-white/20 font-mono uppercase tracking-[0.4em]"
             >
-              Frontier Edition
+              macOS OneClick
             </motion.p>
           </motion.div>
         )}
@@ -2551,7 +2587,7 @@ export default function App() {
                 className="flex items-center gap-2.5 mb-8 px-2 hover:opacity-75 transition-opacity cursor-pointer text-left"
               >
                 <BrandIcon className="w-5 h-5 text-white" />
-                <span className="font-bold text-sm tracking-wide text-white">Frontier Edition</span>
+                <span className="font-bold text-sm tracking-wide text-white">macOS OneClick</span>
               </button>
 
               {SIDEBAR_STEPS.map(s => (React.createElement(SidebarItem as any, { key: s.id, id: s.id, label: s.label, icon: s.icon })))}
@@ -2640,7 +2676,7 @@ export default function App() {
               <div className="relative flex-shrink-0 px-10 pt-8 pb-4">
                 <div className="absolute top-4 right-8 opacity-10 pointer-events-none flex items-center gap-2">
                   <BrandIcon className="w-4 h-4 text-white" />
-                  <span className="text-[10px] font-bold uppercase tracking-widest">macOS Frontier</span>
+                  <span className="text-[10px] font-bold uppercase tracking-widest">macOS OneClick</span>
                 </div>
                 {(() => {
                   const backMap: Partial<Record<StepId, StepId>> = {
@@ -2785,15 +2821,15 @@ export default function App() {
                       stages={buildStages}
                       onBegin={buildAutoStartRef.current || buildStartRequestedRef.current || buildFlow?.active ? undefined : startDeploy}
                       briefing={{
-                        heading: 'Getting ready to prepare your installer',
+                        heading: 'What happens next',
                         bullets: [
-                          'An OpenCore EFI folder will be generated and configured for your specific hardware.',
-                          'Kext drivers (hardware compatibility files) will be downloaded from GitHub.',
-                          'A macOS recovery image will be downloaded from Apple\'s servers (~500 MB).',
-                          'You will then select a USB drive and write the installer to it.',
+                          'The app builds an OpenCore EFI for your hardware.',
+                          'It downloads the required kexts.',
+                          'It downloads Apple recovery files.',
+                          'Then you choose where to write the installer.',
                         ],
                         estimatedMinutes: 15,
-                        interruptionWarning: 'Once begun, the download steps can be paused and resumed later. The USB write step cannot be interrupted once started — do not remove the drive during that phase.',
+                        interruptionWarning: 'Downloads can resume later. Do not unplug the drive once writing starts.',
                       }}
                     />
                   </motion.div>
@@ -2954,7 +2990,7 @@ export default function App() {
                       <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-amber-500/10 border border-amber-500/20 text-amber-400 text-[10px] font-bold uppercase tracking-widest">
                         <ShieldAlert className="w-3 h-3" /> Experimental
                       </span>
-                      <span className="text-[11px] text-white/30">USB flashing is in beta — validate with the real-device checklist before broad deployment</span>
+                      <span className="text-[11px] text-white/30">USB flashing is in beta.</span>
                     </div>
                     <UsbStep
                       devices={usbDevices}
@@ -2964,6 +3000,7 @@ export default function App() {
                       onDeselect={() => { setSelectedUsb(null); setDiskInfo(null); setEfiBackupPolicy(null); clearFlashConfirmationState(); }}
                       onRefresh={refreshUsbTargets}
                       onConfirmDrive={initiateFlash}
+                      confirmDriveBusy={flashConfirmBusy}
                       requireFullSize={recovPct >= 100}
                     />
                   </motion.div>
@@ -3125,10 +3162,10 @@ export default function App() {
               </div>
               <div className="space-y-3 text-sm text-white/60 leading-relaxed">
                 <p>
-                  <span className="text-white font-semibold">macOS One-Click</span> is a community project and isn't officially supported by Apple.
+                  <span className="text-white font-semibold">macOS OneClick</span> is a community project and is not affiliated with Apple.
                 </p>
                 <p>
-                  We don't provide any warranty—you're doing this at your own risk. Make sure you know what you're getting into, grab a coffee, and let's build a Hackintosh.
+                  Continue only if you are okay changing boot settings.
                 </p>
               </div>
               <div className="flex gap-3 mt-6">
@@ -3136,13 +3173,13 @@ export default function App() {
                   onClick={() => { setShowDisclaimer(false); }}
                   className="flex-1 py-3 rounded-xl bg-white/5 border border-white/10 text-white/50 text-sm font-medium hover:bg-white/8 transition-all cursor-pointer"
                 >
-                  Nevermind
+                  Cancel
                 </button>
                 <button
                   onClick={() => { setDisclaimerAccepted(true); setShowDisclaimer(false); setShowRecoveryPrompt(true); }}
                   className="flex-1 py-3 rounded-xl bg-white text-black text-sm font-bold hover:bg-white/90 transition-all cursor-pointer"
                 >
-                  Sounds Good — Let's Go
+                  Continue
                 </button>
               </div>
             </motion.div>
@@ -3174,16 +3211,16 @@ export default function App() {
               </div>
               <div className="space-y-3 text-sm text-white/60 leading-relaxed">
                 <p>
-                  Before proceeding, we <span className="text-white font-semibold">strongly recommend</span> creating a system recovery point on your current OS. This will allow you to undo any changes if something goes wrong.
+                  Create a recovery point before you continue.
                 </p>
                 <div className="bg-white/4 border border-white/8 rounded-2xl p-4 space-y-2 text-xs font-mono">
                   <p className="text-white/40 text-[10px] uppercase tracking-widest mb-1">Windows</p>
-                  <p className="text-white/70">Search → "Create a restore point" → System Protection → Create</p>
+                  <p className="text-white/70">Search “Create a restore point” → System Protection → Create</p>
                   <p className="text-white/40 text-[10px] uppercase tracking-widest mt-3 mb-1">Linux</p>
                   <p className="text-white/70">Use Timeshift or your distro's snapshot tool before continuing.</p>
                 </div>
                 <p className="text-amber-400/80 text-xs">
-                  ⚠️ macOS One-Click writes to your EFI partition and may modify boot settings. A restore point is your safety net.
+                  A restore point helps if you need to roll back boot changes.
                 </p>
               </div>
               <div className="flex gap-3 mt-6">
@@ -3197,7 +3234,7 @@ export default function App() {
                   onClick={() => { setShowRecoveryPrompt(false); setStep('prereq'); }}
                   className="flex-1 py-3 rounded-xl bg-white text-black text-sm font-bold hover:bg-white/90 transition-all cursor-pointer"
                 >
-                  Done — Begin Installation →
+                  Begin Installation
                 </button>
               </div>
             </motion.div>
@@ -3387,7 +3424,7 @@ export default function App() {
             if (d.startsWith('\\\\.\\')) return d.replace('\\\\.\\', '');
             return d;
           })();
-          const FLASH_CHECK_IDS = ['no-data', 'correct-drive', 'bios-reviewed', 'irreversible'];
+          const FLASH_CHECK_IDS = ['correct-drive', 'bios-reviewed'];
           const allChecked = FLASH_CHECK_IDS.every(id => flashChecks.has(id));
           const validationBlocked = validationResult?.overall === 'blocked';
           const confirmationExpired = flashConfirmationExpiresAt !== null && Date.now() > flashConfirmationExpiresAt;
@@ -3417,8 +3454,8 @@ export default function App() {
                     <ShieldAlert className="w-5 h-5 text-red-400" />
                   </div>
                   <div>
-                    <h2 className="text-xl font-bold text-white">Last chance — are you absolutely sure?</h2>
-                    <p className="text-[10px] text-red-400/70 font-mono uppercase tracking-widest mt-0.5">This action cannot be undone</p>
+                    <h2 className="text-xl font-bold text-white">Confirm the drive</h2>
+                    <p className="text-[10px] text-red-400/70 font-mono uppercase tracking-widest mt-0.5">Drive will be erased</p>
                   </div>
                 </div>
 
@@ -3442,8 +3479,7 @@ export default function App() {
                 <div className="mb-5 flex items-start gap-3 px-4 py-3 rounded-2xl bg-red-500/8 border border-red-500/20">
                   <ShieldAlert className="w-4 h-4 text-red-400 flex-shrink-0 mt-0.5" />
                   <p className="text-xs text-red-300/80 leading-relaxed">
-                    <span className="font-bold text-red-300">ALL DATA ON THIS DRIVE WILL BE PERMANENTLY AND IRREVERSIBLY ERASED.</span>{' '}
-                    This cannot be undone.
+                    <span className="font-bold text-red-300">This drive will be erased.</span>
                   </p>
                 </div>
 
@@ -3451,9 +3487,7 @@ export default function App() {
                 <div className="mb-5 flex items-start gap-3 px-4 py-3 rounded-2xl bg-amber-500/6 border border-amber-500/15">
                   <AlertTriangle className="w-4 h-4 text-amber-400 flex-shrink-0 mt-0.5" />
                   <p className="text-xs text-amber-300/70 leading-relaxed">
-                    <span className="font-bold text-amber-300">Reminder:</span>{' '}
-                    If you disconnected and reconnected this drive since selecting it, its identifier may have changed.
-                    Verify the identifier shown above matches the physical drive you intend to erase.
+                    <span className="font-bold text-amber-300">Reminder:</span> Replugging the drive can change its identifier.
                   </p>
                 </div>
 
@@ -3464,12 +3498,10 @@ export default function App() {
 
                 {/* 4-checkbox final checklist */}
                 <div className="mb-5 space-y-2">
-                  <div className="text-[10px] font-bold uppercase tracking-widest text-white/25 mb-2">Confirm before continuing</div>
+                  <div className="text-[10px] font-bold uppercase tracking-widest text-white/25 mb-2">Before you flash</div>
                   {([
-                    { id: 'no-data',      label: 'This USB drive contains no important data' },
-                    { id: 'correct-drive', label: 'I have confirmed this is the correct drive' },
-                    { id: 'bios-reviewed', label: 'I have reviewed the BIOS settings for my target PC' },
-                    { id: 'irreversible',  label: 'I understand this action cannot be undone' },
+                    { id: 'correct-drive', label: 'This is the right drive' },
+                    { id: 'bios-reviewed', label: 'My BIOS settings are ready' },
                   ] as { id: string; label: string }[]).map(({ id, label }) => (
                     <label key={id} className="flex items-start gap-3 cursor-pointer group">
                       <div
@@ -3495,7 +3527,7 @@ export default function App() {
                 {/* Typed confirmation — user must type the disk identifier */}
                 <div className="mb-6">
                   <label className="block text-xs text-white/40 mb-2 leading-relaxed">
-                    Type the drive identifier to confirm:{' '}
+                    Type disk id:{' '}
                     <span className="font-mono font-bold text-white/70">{shortId}</span>
                   </label>
                   <input
@@ -3510,7 +3542,7 @@ export default function App() {
                   />
                   {confirmationExpired && (
                     <p className="mt-2 text-[11px] text-red-300/70 leading-relaxed">
-                      Confirmation expired. Close this dialog and reopen it to refresh the destructive-write authorization.
+                      Confirmation expired. Reopen this dialog to continue.
                     </p>
                   )}
                 </div>
@@ -3529,7 +3561,7 @@ export default function App() {
                     onClick={executeFlash}
                     className="flex-1 py-3 rounded-xl text-sm font-bold transition-all cursor-pointer bg-red-600 text-white hover:bg-red-500 shadow-lg shadow-red-600/20 disabled:opacity-25 disabled:cursor-not-allowed disabled:shadow-none"
                   >
-                    Erase and continue
+                    Flash drive
                   </button>
                 </div>
               </motion.div>

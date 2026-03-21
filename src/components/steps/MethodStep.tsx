@@ -14,7 +14,7 @@ export default function MethodStep({ onSelect }: Props) {
       <div className="text-left animate-in fade-in slide-in-from-left duration-700">
         <h2 className="text-4xl font-bold text-white tracking-tight mb-2">Deployment Method</h2>
         <p className="text-[#888888] text-sm font-medium mt-2">
-          Choose how you want to boot the macOS installer on this machine.
+          Choose where to place the installer.
         </p>
       </div>
 
@@ -31,7 +31,7 @@ export default function MethodStep({ onSelect }: Props) {
           </div>
           <h3 className="text-xl font-bold text-white mb-2">USB Flash Drive</h3>
           <p className="text-sm text-[#777] leading-relaxed mb-6">
-            Write the installer to a USB drive. Use this if you plan to install on a different machine or want a portable boot disk.
+            Write the installer to a USB drive. Best for most installs.
           </p>
           <div className="mt-auto flex items-center text-blue-400 font-bold text-sm">
             Recommended <ChevronRight className="w-4 h-4 ml-1" />
@@ -53,7 +53,7 @@ export default function MethodStep({ onSelect }: Props) {
           </div>
           <h3 className="text-xl font-bold text-white mb-2">Local Partition</h3>
           <p className="text-sm text-[#777] leading-relaxed mb-6">
-            Create a boot partition on this PC's internal drive. No USB drive needed, but this modifies your disk layout and still requires manual boot and installer steps.
+            Create a small boot partition on this PC. No USB needed, but it changes your disk layout.
           </p>
           <div className="mt-auto flex items-center text-purple-400 font-bold text-sm">
             Advanced only <ChevronRight className="w-4 h-4 ml-1" />
@@ -69,7 +69,7 @@ export default function MethodStep({ onSelect }: Props) {
         <div className="space-y-1">
           <p className="text-xs font-bold text-amber-200/90 uppercase tracking-widest">About local partitioning</p>
           <p className="text-xs text-amber-200/50 leading-relaxed">
-            This option changes your existing disk layout and is less forgiving than a removable USB workflow. Back up important data first.
+            This changes your disk layout. Back up anything important first.
           </p>
         </div>
       </div>
