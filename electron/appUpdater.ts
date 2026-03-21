@@ -15,6 +15,7 @@ export interface AppUpdateState {
   currentVersion: string;
   checking: boolean;
   downloading: boolean;
+  installing: boolean;
   available: boolean;
   supported: boolean;
   latestVersion: string | null;
@@ -26,6 +27,7 @@ export interface AppUpdateState {
   totalBytes: number | null;
   downloadedPath: string | null;
   readyToInstall: boolean;
+  restartRequired: boolean;
   error: string | null;
 }
 
@@ -57,4 +59,12 @@ export function pickReleaseAssetForPlatform(
       ?? null;
   }
   return null;
+}
+
+export function isInstallerResidueEntryName(name: string): boolean {
+  const normalized = name.trim().toLowerCase();
+  return /macos[-_. ]?installer/.test(normalized)
+    || /macossinstaller/.test(normalized)
+    || normalized === 'installer'
+    || normalized === 'installer-cache';
 }

@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { describe, test } from 'vitest';
 import {
   compareReleaseVersions,
+  isInstallerResidueEntryName,
   normalizeReleaseVersion,
   pickReleaseAssetForPlatform,
 } from '../electron/appUpdater.js';
@@ -28,5 +29,12 @@ describe('appUpdater helpers', () => {
     assert.equal(pickReleaseAssetForPlatform('win32', assets)?.name, 'macOS-OneClick.Setup.2.3.9.exe');
     assert.equal(pickReleaseAssetForPlatform('linux', assets)?.name, 'macOS-OneClick-2.3.9.AppImage');
     assert.equal(pickReleaseAssetForPlatform('darwin', assets), null);
+  });
+
+  test('detects updater residue entries in user data', () => {
+    assert.equal(isInstallerResidueEntryName('macOSInstaller'), true);
+    assert.equal(isInstallerResidueEntryName('macossinstaller'), true);
+    assert.equal(isInstallerResidueEntryName('installer-cache'), true);
+    assert.equal(isInstallerResidueEntryName('hardware-profiles'), false);
   });
 });

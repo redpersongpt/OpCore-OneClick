@@ -101,14 +101,14 @@ jobs:
           body: |
             macOS OneClick ${{ steps.tag.outputs.name }}
 
-            This release fixes Windows USB flash preparation so valid removable targets keep their disk identity from selection through confirmation. It also closes the stale disk-info race that could let an older lookup overwrite the current USB target, hardens Windows disk-info IPC against slow removable-media queries, and adds RX 6950 XT support on the supported Navi 21 path.
+            This release improves the in-app updater and tightens a few user-facing refresh paths. The updater now keeps its controls inside the landing page layout, shows a clearer refresh state, stages the downloaded update cleanly, prompts with “Set up complete - please restart the app”, and resets back to “You are up to date” after the updated build starts. Windows update completion also clears cached app data, including stale installer residue under AppData\Roaming, so old recovery and OpenCore caches do not bleed into the new build.
 
             Included assets:
             - Windows NSIS installer
             - Linux AppImage
             - Linux Debian package
 
-            Safety checks for flashing, EFI validation, BIOS gating, backup handling, system-disk blocking, and disk-identity verification remain in place.
+            Existing safety checks for flashing, EFI validation, BIOS gating, backup handling, system-disk blocking, and disk-identity verification remain in place.
           files: release-artifacts/**/*
           draft: false
           prerelease: false

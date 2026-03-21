@@ -67,7 +67,8 @@ declare global {
       getAppUpdateState: () => Promise<import('../electron/appUpdater').AppUpdateState>;
       checkForUpdates: () => Promise<import('../electron/appUpdater').AppUpdateState>;
       downloadLatestUpdate: () => Promise<import('../electron/appUpdater').AppUpdateState>;
-      installLatestUpdate: () => Promise<boolean>;
+      installLatestUpdate: () => Promise<import('../electron/appUpdater').AppUpdateState>;
+      quitForUpdate: () => Promise<boolean>;
       importRecovery: (targetPath: string, macOSVersion: string) => Promise<{ dmgPath: string; recoveryDir: string } | null>;
       getCachedRecoveryInfo: (version: string) => Promise<any>;
       clearRecoveryCache: (version: string) => Promise<boolean>;

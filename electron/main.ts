@@ -2,7 +2,7 @@ import { app, BrowserWindow, dialog, ipcMain, shell } from 'electron';
 import path from 'path';
 import crypto from 'node:crypto';
 import { fileURLToPath, pathToFileURL } from 'url';
-import { exec } from 'child_process';
+import { exec, spawn } from 'child_process';
 import util from 'util';
 import os from 'os';
 import fs from 'fs';
@@ -77,6 +77,8 @@ import { inferLaptopFormFactor } from './formFactor.js';
 import { generateFolderManifest, verifyFolderIntegrity } from './resourceIntegrity.js';
 import {
   compareReleaseVersions,
+  isInstallerResidueEntryName,
+  normalizeReleaseVersion,
   pickReleaseAssetForPlatform,
   type AppUpdateState,
   type LatestReleaseInfo,
@@ -458,12 +460,65 @@ function getCurrentCompatibilityReport(): ReturnType<typeof checkCompatibility> 
 }
 
 const REPO_RELEASE_API_PATH = '/repos/redpersongpt/macOS-One-Click/releases/latest';
+const APP_UPDATE_RESULT_FILE = path.resolve(app.getPath('userData'), 'app-update-result.json');
+
+interface AppUpdateResultMarker {
+  status: 'success' | 'failed';
+  version: string;
+  completedAt: string;
+  message: string | null;
+}
+
+function readAppUpdateResultMarker(): AppUpdateResultMarker | null {
+  if (!fs.existsSync(APP_UPDATE_RESULT_FILE)) return null;
+  try {
+    return JSON.parse(fs.readFileSync(APP_UPDATE_RESULT_FILE, 'utf8')) as AppUpdateResultMarker;
+  } catch {
+    try { fs.rmSync(APP_UPDATE_RESULT_FILE, { force: true }); } catch {}
+    return null;
+  }
+}
+
+function consumeAppUpdateResultMarker(): AppUpdateResultMarker | null {
+  const marker = readAppUpdateResultMarker();
+  if (!marker) return null;
+  try { fs.rmSync(APP_UPDATE_RESULT_FILE, { force: true }); } catch {}
+  return marker;
+}
+
+function buildAppUpdateCleanupTargets(downloadedPath: string): string[] {
+  const userDataPath = app.getPath('userData');
+  const targets = new Set<string>([
+    path.resolve(userDataPath, 'Recovery_Cache'),
+    path.resolve(userDataPath, 'OpenCore_Cache'),
+    path.resolve(userDataPath, 'safe-simulations'),
+    path.resolve(userDataPath, 'hardware-profiles'),
+    path.resolve(userDataPath, 'app_state.json'),
+    path.resolve(userDataPath, 'bios_session.json'),
+    path.resolve(userDataPath, 'startup-crash.log'),
+    path.resolve(userDataPath, 'session.lock'),
+    path.resolve(userDataPath, 'app.log'),
+    path.resolve(userDataPath, 'operations.log'),
+    path.resolve(downloadedPath),
+    path.resolve(path.dirname(downloadedPath)),
+  ]);
+
+  try {
+    for (const entry of fs.readdirSync(userDataPath, { withFileTypes: true })) {
+      if (!isInstallerResidueEntryName(entry.name)) continue;
+      targets.add(path.resolve(userDataPath, entry.name));
+    }
+  } catch {}
+
+  return Array.from(targets);
+}
 
 function createInitialAppUpdateState(): AppUpdateState {
-  return {
+  const baseState: AppUpdateState = {
     currentVersion: app.getVersion(),
     checking: false,
     downloading: false,
+    installing: false,
     available: false,
     supported: process.platform === 'win32' || process.platform === 'linux',
     latestVersion: null,
@@ -475,7 +530,21 @@ function createInitialAppUpdateState(): AppUpdateState {
     totalBytes: null,
     downloadedPath: null,
     readyToInstall: false,
+    restartRequired: false,
     error: null,
+  };
+
+  const marker = consumeAppUpdateResultMarker();
+  if (!marker) return baseState;
+  if (marker.status === 'success' && compareReleaseVersions(app.getVersion(), marker.version) >= 0) {
+    return {
+      ...baseState,
+      latestVersion: `v${normalizeReleaseVersion(app.getVersion())}`,
+    };
+  }
+  return {
+    ...baseState,
+    error: marker.message ?? 'The last in-app update did not finish successfully.',
   };
 }
 
@@ -529,6 +598,9 @@ function selectLatestReleaseAsset(release: LatestReleaseInfo): ReleaseAssetInfo 
 }
 
 async function checkForAppUpdates(): Promise<AppUpdateState> {
+  if (appUpdateState.restartRequired) {
+    return setAppUpdateState({ checking: false, available: false, error: null });
+  }
   setAppUpdateState({ checking: true, error: null });
   try {
     const release = await fetchLatestAppRelease();
@@ -536,6 +608,7 @@ async function checkForAppUpdates(): Promise<AppUpdateState> {
     const available = !!asset && compareReleaseVersions(release.tag_name, app.getVersion()) > 0;
     return setAppUpdateState({
       checking: false,
+      installing: false,
       available,
       latestVersion: release.tag_name ?? null,
       releaseUrl: release.html_url ?? 'https://github.com/redpersongpt/macOS-One-Click/releases/latest',
@@ -546,11 +619,13 @@ async function checkForAppUpdates(): Promise<AppUpdateState> {
       downloadedBytes: available && appUpdateState.readyToInstall ? appUpdateState.downloadedBytes : 0,
       downloadedPath: available && appUpdateState.readyToInstall ? appUpdateState.downloadedPath : null,
       readyToInstall: available && appUpdateState.readyToInstall && appUpdateState.assetName === asset?.name,
+      restartRequired: appUpdateState.restartRequired,
       error: asset ? null : 'No installable update asset is published for this platform yet.',
     });
   } catch (error: any) {
     return setAppUpdateState({
       checking: false,
+      installing: false,
       available: false,
       latestVersion: null,
       releaseUrl: 'https://github.com/redpersongpt/macOS-One-Click/releases/latest',
@@ -561,6 +636,7 @@ async function checkForAppUpdates(): Promise<AppUpdateState> {
       totalBytes: null,
       downloadedPath: null,
       readyToInstall: false,
+      restartRequired: false,
       error: error?.message ?? 'Could not check for updates.',
     });
   }
@@ -584,6 +660,7 @@ async function downloadLatestAppUpdate(): Promise<AppUpdateState> {
   if (compareReleaseVersions(release.tag_name, app.getVersion()) <= 0) {
     return setAppUpdateState({
       available: false,
+      installing: false,
       latestVersion: release.tag_name,
       releaseUrl: release.html_url,
       releaseNotes: release.body ?? null,
@@ -593,6 +670,7 @@ async function downloadLatestAppUpdate(): Promise<AppUpdateState> {
       totalBytes: asset.size ?? null,
       downloadedPath: null,
       readyToInstall: false,
+      restartRequired: false,
       error: null,
     });
   }
@@ -606,6 +684,7 @@ async function downloadLatestAppUpdate(): Promise<AppUpdateState> {
   setAppUpdateState({
     checking: false,
     downloading: true,
+    installing: false,
     available: true,
     latestVersion: release.tag_name,
     releaseUrl: release.html_url,
@@ -616,6 +695,7 @@ async function downloadLatestAppUpdate(): Promise<AppUpdateState> {
     totalBytes: asset.size ?? null,
     downloadedPath: null,
     readyToInstall: false,
+    restartRequired: false,
     error: null,
   });
 
@@ -678,33 +758,126 @@ async function downloadLatestAppUpdate(): Promise<AppUpdateState> {
     }
     return setAppUpdateState({
       downloading: false,
+      installing: false,
       downloadedPath: finalPath,
       downloadedBytes: appUpdateState.totalBytes ?? appUpdateState.downloadedBytes,
       readyToInstall: true,
+      restartRequired: false,
       error: null,
     });
   } catch (error: any) {
     try { fs.rmSync(tempPath, { force: true }); } catch {}
     return setAppUpdateState({
       downloading: false,
+      installing: false,
       downloadedPath: null,
       readyToInstall: false,
+      restartRequired: false,
       error: error?.message ?? 'Update download failed.',
     });
   }
 }
 
-async function installDownloadedUpdate(): Promise<boolean> {
+async function installDownloadedUpdate(): Promise<AppUpdateState> {
   if (!appUpdateState.downloadedPath || !fs.existsSync(appUpdateState.downloadedPath)) {
     throw new Error('No downloaded update is ready to install.');
   }
+  if (process.platform === 'win32') {
+    const installerPath = path.resolve(appUpdateState.downloadedPath);
+    const workerDir = path.resolve(app.getPath('userData'), 'update-worker');
+    const workerScriptPath = path.resolve(workerDir, `apply-update-${crypto.randomUUID()}.ps1`);
+    fs.mkdirSync(workerDir, { recursive: true });
+
+    const cleanupTargets = buildAppUpdateCleanupTargets(installerPath);
+    const scriptContents = `
+$ErrorActionPreference = 'Stop'
+$pidToWait = ${process.pid}
+$installerPath = ${JSON.stringify(installerPath)}
+$resultPath = ${JSON.stringify(APP_UPDATE_RESULT_FILE)}
+$targetVersion = ${JSON.stringify(normalizeReleaseVersion(appUpdateState.latestVersion ?? app.getVersion()))}
+$userDataPath = ${JSON.stringify(app.getPath('userData'))}
+$cleanupTargets = @(
+${cleanupTargets.map((entry) => `  ${JSON.stringify(entry)}`).join(",\n")}
+)
+
+try {
+  $deadline = (Get-Date).AddMinutes(10)
+  while ((Get-Process -Id $pidToWait -ErrorAction SilentlyContinue) -and (Get-Date) -lt $deadline) {
+    Start-Sleep -Milliseconds 500
+  }
+  if (Get-Process -Id $pidToWait -ErrorAction SilentlyContinue) {
+    throw 'Timed out waiting for the app to close before applying the update.'
+  }
+
+  $installProcess = Start-Process -FilePath $installerPath -ArgumentList '/S' -PassThru -Wait
+  if ($installProcess.ExitCode -ne 0) {
+    throw ("Installer exited with code {0}." -f $installProcess.ExitCode)
+  }
+
+  foreach ($target in $cleanupTargets) {
+    if ([string]::IsNullOrWhiteSpace($target)) { continue }
+    if (Test-Path -LiteralPath $target) {
+      Remove-Item -LiteralPath $target -Recurse -Force -ErrorAction SilentlyContinue
+    }
+  }
+
+  if (Test-Path -LiteralPath $userDataPath) {
+    Get-ChildItem -LiteralPath $userDataPath -Force -ErrorAction SilentlyContinue |
+      Where-Object { $_.Name -match '(?i)macos[-_. ]?installer|macossinstaller|^installer$|^installer-cache$' } |
+      ForEach-Object { Remove-Item -LiteralPath $_.FullName -Recurse -Force -ErrorAction SilentlyContinue }
+  }
+
+  @{ status = 'success'; version = $targetVersion; completedAt = (Get-Date).ToString('o'); message = 'Update installed successfully.' } |
+    ConvertTo-Json -Compress |
+    Set-Content -LiteralPath $resultPath -Encoding UTF8
+} catch {
+  @{ status = 'failed'; version = $targetVersion; completedAt = (Get-Date).ToString('o'); message = $_.Exception.Message } |
+    ConvertTo-Json -Compress |
+    Set-Content -LiteralPath $resultPath -Encoding UTF8
+}
+`;
+
+    fs.writeFileSync(workerScriptPath, scriptContents, 'utf8');
+    const worker = spawn('powershell.exe', [
+      '-NoProfile',
+      '-ExecutionPolicy',
+      'Bypass',
+      '-WindowStyle',
+      'Hidden',
+      '-File',
+      workerScriptPath,
+    ], {
+      detached: true,
+      stdio: 'ignore',
+    });
+    worker.unref();
+
+    return setAppUpdateState({
+      installing: false,
+      available: false,
+      downloading: false,
+      downloadedPath: null,
+      downloadedBytes: 0,
+      totalBytes: null,
+      readyToInstall: false,
+      restartRequired: true,
+      error: null,
+    });
+  }
+
+  setAppUpdateState({ installing: true, error: null });
   const result = await shell.openPath(appUpdateState.downloadedPath);
   if (result) {
     throw new Error(result);
   }
-  if (process.platform === 'win32') {
-    setTimeout(() => app.quit(), 750);
-  }
+  return setAppUpdateState({
+    installing: false,
+    error: null,
+  });
+}
+
+function quitForScheduledAppUpdate(): boolean {
+  setTimeout(() => app.quit(), 100);
   return true;
 }
 
@@ -4007,6 +4180,10 @@ app.whenReady().then(async () => {
 
   ipcHandle('app:install-update', async () => {
     return await installDownloadedUpdate();
+  });
+
+  ipcHandle('app:quit-for-update', async () => {
+    return quitForScheduledAppUpdate();
   });
 
   log('INFO', 'app', 'App ready', { version: app.getVersion(), platform: process.platform, packaged: app.isPackaged });

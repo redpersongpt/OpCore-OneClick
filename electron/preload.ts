@@ -138,7 +138,8 @@ try {
     getAppUpdateState: (): Promise<import('./appUpdater').AppUpdateState> => ipcRenderer.invoke('app:update-state'),
     checkForUpdates: (): Promise<import('./appUpdater').AppUpdateState> => ipcRenderer.invoke('app:check-for-updates'),
     downloadLatestUpdate: (): Promise<import('./appUpdater').AppUpdateState> => ipcRenderer.invoke('app:download-update'),
-    installLatestUpdate: (): Promise<boolean> => ipcRenderer.invoke('app:install-update'),
+    installLatestUpdate: (): Promise<import('./appUpdater').AppUpdateState> => ipcRenderer.invoke('app:install-update'),
+    quitForUpdate: (): Promise<boolean> => ipcRenderer.invoke('app:quit-for-update'),
 
     // Recovery Cache & Import
     importRecovery: (targetPath: string, macOSVersion: string) => ipcRenderer.invoke('recovery:import', targetPath, macOSVersion),

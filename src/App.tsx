@@ -157,7 +157,8 @@ declare global {
       getAppUpdateState: () => Promise<ElectronAppUpdateState>;
       checkForUpdates: () => Promise<ElectronAppUpdateState>;
       downloadLatestUpdate: () => Promise<ElectronAppUpdateState>;
-      installLatestUpdate: () => Promise<boolean>;
+      installLatestUpdate: () => Promise<ElectronAppUpdateState>;
+      quitForUpdate: () => Promise<boolean>;
       // Recovery Cache & Import
       importRecovery: (targetPath: string, macOSVersion: string) => Promise<{ dmgPath: string; recoveryDir: string } | null>;
       getCachedRecoveryInfo: (version: string) => Promise<any>;
@@ -330,12 +331,12 @@ export default function App() {
   }, []);
 
   useEffect(() => {
-    if (!appUpdateState?.checking && !appUpdateState?.downloading) return;
+    if (!appUpdateState?.checking && !appUpdateState?.downloading && !appUpdateState?.installing) return;
     const interval = setInterval(() => {
       void refreshAppUpdateState();
     }, 800);
     return () => clearInterval(interval);
-  }, [appUpdateState?.checking, appUpdateState?.downloading]);
+  }, [appUpdateState?.checking, appUpdateState?.downloading, appUpdateState?.installing]);
 
   // ── Suggestion Engine State ──────────────────────────────────
   const [lastSuggestion, setLastSuggestion] = useState<{ code: string; category: string; title: string } | null>(null);
@@ -626,9 +627,17 @@ export default function App() {
 
   const installLatestUpdate = async () => {
     try {
-      await window.electron.installLatestUpdate();
+      setAppUpdateState(await window.electron.installLatestUpdate());
     } catch (e: any) {
       setErrorWithSuggestion(e?.message || 'Could not install the downloaded update.', step);
+    }
+  };
+
+  const quitForUpdate = async () => {
+    try {
+      await window.electron.quitForUpdate();
+    } catch (e: any) {
+      setErrorWithSuggestion(e?.message || 'Could not restart the app to finish the update.', step);
     }
   };
 
@@ -2608,6 +2617,31 @@ export default function App() {
           : buildFlowAlert.reason,
       }
     : null;
+  const updaterHeadline = appUpdateState?.restartRequired
+    ? 'Set up complete - please restart the app'
+    : appUpdateState?.checking
+    ? 'Refreshing update status…'
+    : appUpdateState?.downloading
+    ? 'Downloading update…'
+    : appUpdateState?.readyToInstall
+    ? 'Update ready to finish'
+    : appUpdateState?.available
+    ? `${appUpdateState.latestVersion} is ready`
+    : 'You are up to date';
+  const updaterDetail = appUpdateState?.restartRequired
+    ? `The updated files are staged. Restart the app to finish loading ${appUpdateState.latestVersion ?? 'the latest version'}.`
+    : appUpdateState?.readyToInstall
+    ? 'Install the downloaded update, then restart the app once setup finishes.'
+    : appUpdateState?.available
+    ? `Download ${appUpdateState.assetName ?? 'the latest build'} directly in the app.`
+    : appUpdateState?.error
+    ? appUpdateState.error
+    : `Current version: ${appUpdateState?.currentVersion ?? 'unknown'}`;
+  const updaterProgressPercent = appUpdateState?.totalBytes && appUpdateState.totalBytes > 0
+    ? Math.min(100, Math.round((appUpdateState.downloadedBytes / appUpdateState.totalBytes) * 100))
+    : appUpdateState?.readyToInstall || appUpdateState?.restartRequired
+    ? 100
+    : 0;
 
   // ── Render ──────────────────────────────────────────────────
 
@@ -2712,75 +2746,72 @@ export default function App() {
                 </button>
               </div>
               <div className="w-full max-w-xl rounded-[1.6rem] border border-white/10 bg-white/[0.04] p-5 text-left backdrop-blur-md">
-                <div className="flex items-start justify-between gap-4">
-                  <div>
+                <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+                  <div className="min-w-0 flex-1">
                     <div className="text-[11px] font-bold uppercase tracking-[0.28em] text-white/35">Updater</div>
                     <div className="mt-2 text-lg font-bold text-white">
-                      {appUpdateState?.available
-                        ? `${appUpdateState.latestVersion} is ready`
-                        : appUpdateState?.checking
-                        ? 'Checking for updates…'
-                        : appUpdateState?.readyToInstall
-                        ? 'Update downloaded'
-                        : 'You are up to date'}
+                      {updaterHeadline}
                     </div>
                     <p className="mt-2 text-sm leading-relaxed text-white/50">
-                      {appUpdateState?.available
-                        ? `Download ${appUpdateState.assetName ?? 'the latest build'} directly in the app.`
-                        : appUpdateState?.readyToInstall
-                        ? 'The update is downloaded. Install it now.'
-                        : appUpdateState?.error
-                        ? appUpdateState.error
-                        : `Current version: ${appUpdateState?.currentVersion ?? 'unknown'}`}
+                      {updaterDetail}
                     </p>
                   </div>
                   <button
                     onClick={checkForAppUpdates}
-                    disabled={appUpdateState?.checking || appUpdateState?.downloading}
-                    className="inline-flex items-center gap-2 rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-xs font-semibold text-white/70 transition-colors hover:bg-white/10 hover:text-white disabled:cursor-not-allowed disabled:opacity-60"
+                    disabled={appUpdateState?.checking || appUpdateState?.downloading || appUpdateState?.installing}
+                    className="inline-flex min-h-11 shrink-0 items-center justify-center gap-2 rounded-2xl border border-blue-400/25 bg-blue-500/10 px-4 py-3 text-sm font-semibold text-blue-100 transition-all hover:bg-blue-500/16 hover:text-white disabled:cursor-not-allowed disabled:opacity-60"
                   >
-                    <RefreshCcw className={`w-3.5 h-3.5 ${appUpdateState?.checking ? 'animate-spin' : ''}`} />
-                    Check
+                    <RefreshCcw className={`w-4 h-4 ${appUpdateState?.checking ? 'animate-spin' : ''}`} />
+                    {appUpdateState?.checking ? 'Refreshing…' : 'Refresh'}
                   </button>
                 </div>
 
-                {(appUpdateState?.downloading || appUpdateState?.readyToInstall) && (
+                {(appUpdateState?.downloading || appUpdateState?.readyToInstall || appUpdateState?.restartRequired) && (
                   <div className="mt-4">
                     <div className="mb-2 flex items-center justify-between text-xs text-white/45">
-                      <span>{appUpdateState.downloading ? 'Downloading update…' : 'Download complete'}</span>
                       <span>
-                        {appUpdateState.totalBytes && appUpdateState.totalBytes > 0
-                          ? `${Math.min(100, Math.round((appUpdateState.downloadedBytes / appUpdateState.totalBytes) * 100))}%`
-                          : '—'}
+                        {appUpdateState.restartRequired
+                          ? 'Set up complete'
+                          : appUpdateState.downloading
+                          ? 'Downloading update…'
+                          : 'Download complete'}
+                      </span>
+                      <span>
+                        {updaterProgressPercent > 0 ? `${updaterProgressPercent}%` : '—'}
                       </span>
                     </div>
                     <div className="h-2 overflow-hidden rounded-full bg-white/8">
                       <div
                         className="h-full rounded-full bg-white transition-all"
-                        style={{
-                          width: `${appUpdateState.totalBytes && appUpdateState.totalBytes > 0
-                            ? Math.min(100, Math.round((appUpdateState.downloadedBytes / appUpdateState.totalBytes) * 100))
-                            : appUpdateState.readyToInstall ? 100 : 0}%`,
-                        }}
+                        style={{ width: `${updaterProgressPercent}%` }}
                       />
                     </div>
                   </div>
                 )}
 
-                <div className="mt-4 flex flex-wrap gap-3">
-                  {appUpdateState?.readyToInstall ? (
+                <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2">
+                  {appUpdateState?.restartRequired ? (
                     <button
-                      onClick={installLatestUpdate}
-                      className="inline-flex items-center gap-2 rounded-2xl bg-white px-5 py-3 text-sm font-bold text-black transition-transform hover:scale-[1.02] active:scale-[0.98]"
+                      onClick={quitForUpdate}
+                      className="inline-flex min-w-0 items-center justify-center gap-2 rounded-2xl bg-white px-5 py-3 text-sm font-bold text-black transition-transform hover:scale-[1.02] active:scale-[0.98]"
                     >
                       <Download className="w-4 h-4" />
-                      Install update
+                      Restart app
+                    </button>
+                  ) : appUpdateState?.readyToInstall ? (
+                    <button
+                      onClick={installLatestUpdate}
+                      disabled={appUpdateState?.installing}
+                      className="inline-flex min-w-0 items-center justify-center gap-2 rounded-2xl bg-white px-5 py-3 text-sm font-bold text-black transition-transform hover:scale-[1.02] active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-60"
+                    >
+                      <Download className="w-4 h-4" />
+                      {appUpdateState?.installing ? 'Preparing…' : 'Install update'}
                     </button>
                   ) : (
                     <button
                       onClick={downloadLatestUpdate}
-                      disabled={!appUpdateState?.available || appUpdateState?.downloading || !appUpdateState?.supported}
-                      className="inline-flex items-center gap-2 rounded-2xl bg-white px-5 py-3 text-sm font-bold text-black transition-transform hover:scale-[1.02] active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-60"
+                      disabled={!appUpdateState?.available || appUpdateState?.downloading || !appUpdateState?.supported || appUpdateState?.installing}
+                      className="inline-flex min-w-0 items-center justify-center gap-2 rounded-2xl bg-white px-5 py-3 text-sm font-bold text-black transition-transform hover:scale-[1.02] active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-60"
                     >
                       <Download className="w-4 h-4" />
                       {appUpdateState?.downloading ? 'Downloading…' : 'Download update'}
@@ -2788,7 +2819,7 @@ export default function App() {
                   )}
                   <button
                     onClick={openLatestReleasePage}
-                    className="inline-flex items-center gap-2 rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm font-semibold text-white/70 transition-colors hover:bg-white/10 hover:text-white"
+                    className="inline-flex min-w-0 items-center justify-center gap-2 rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm font-semibold text-white/70 transition-colors hover:bg-white/10 hover:text-white"
                   >
                     View release
                     <ArrowUpRight className="w-4 h-4 text-white/35" />
@@ -2898,6 +2929,10 @@ export default function App() {
                   <div className="text-xs font-semibold text-[#777]">{profile.smbios}</div>
                   <button
                     onClick={() => {
+                      if (appUpdateState?.restartRequired) {
+                        void quitForUpdate();
+                        return;
+                      }
                       if (appUpdateState?.readyToInstall) {
                         void installLatestUpdate();
                         return;
@@ -2912,16 +2947,18 @@ export default function App() {
                   >
                     <span className="flex items-center gap-2">
                       <Download className="w-3.5 h-3.5 text-white/40" />
-                      {appUpdateState?.readyToInstall
+                      {appUpdateState?.restartRequired
+                        ? 'Restart to finish update'
+                        : appUpdateState?.readyToInstall
                         ? 'Install downloaded update'
                         : appUpdateState?.available
                         ? 'Download latest update'
                         : 'Check for updates'}
                     </span>
-                    {appUpdateState?.available || appUpdateState?.readyToInstall ? (
+                    {appUpdateState?.restartRequired || appUpdateState?.available || appUpdateState?.readyToInstall ? (
                       <Download className="w-3.5 h-3.5 text-white/30" />
                     ) : (
-                      <RefreshCcw className="w-3.5 h-3.5 text-white/30" />
+                      <RefreshCcw className={`w-3.5 h-3.5 text-white/30 ${appUpdateState?.checking ? 'animate-spin' : ''}`} />
                     )}
                   </button>
                 </div>
