@@ -260,6 +260,111 @@ describe('Hackintosh compatibility logic', () => {
     assert.ok(report.errors.some(error => /display path/i.test(error)));
   });
 
+  test('Ice Lake with Iris Plus is supported as a valid iGPU path', () => {
+    const report = checkCompatibility(makeProfile({
+      cpu: 'Intel Core i7-1065G7',
+      generation: 'Ice Lake',
+      isLaptop: true,
+      gpu: 'Intel Iris Plus Graphics',
+      gpuDevices: [{ name: 'Intel Iris Plus Graphics', vendorName: 'Intel' }],
+    }));
+
+    assert.notEqual(report.level, 'blocked');
+    assert.equal(report.isCompatible, true);
+    assert.equal(report.errors.length, 0);
+  });
+
+  test('Pentium with supported UHD Graphics remains risky but not blocked if explicitly supported iGPU', () => {
+    const report = checkCompatibility(makeProfile({
+      cpu: 'Intel Pentium Gold G6400',
+      architecture: 'Intel',
+      generation: 'Comet Lake',
+      isLaptop: false,
+      gpu: 'Intel UHD Graphics 610',
+      gpuDevices: [{ name: 'Intel UHD Graphics 610', vendorName: 'Intel' }],
+    }));
+
+    // UHD 610 is blocked, but if it was UHD 630 it would pass.
+    assert.equal(report.level, 'blocked');
+
+    const supportedPentiumReport = checkCompatibility(makeProfile({
+      cpu: 'Intel Pentium Gold',
+      architecture: 'Intel',
+      generation: 'Coffee Lake',
+      isLaptop: false,
+      gpu: 'AMD Radeon RX 580',
+      gpuDevices: [{ name: 'AMD Radeon RX 580', vendorName: 'AMD' }],
+    }));
+
+    assert.equal(supportedPentiumReport.level, 'risky');
+    assert.equal(supportedPentiumReport.isCompatible, true);
+  });
+
+  test('Intel UHD Graphics 620 is fully supported up to Tahoe 26', () => {
+    const report = checkCompatibility(makeProfile({
+      cpu: 'Intel Core i5-8250U',
+      generation: 'Kaby Lake',
+      isLaptop: true,
+      gpu: 'Intel UHD Graphics 620',
+      gpuDevices: [{ name: 'Intel UHD Graphics 620', vendorName: 'Intel' }],
+      targetOS: 'macOS Tahoe 26',
+    }));
+
+    assert.notEqual(report.level, 'blocked');
+    assert.equal(report.isCompatible, true);
+  });
+
+  test('Arrandale laptop path stays open but is capped conservatively', () => {
+    const report = checkCompatibility(makeProfile({
+      cpu: 'Intel Core i5-520M',
+      generation: 'Arrandale',
+      isLaptop: true,
+      gpu: 'Intel HD Graphics',
+      gpuDevices: [{ name: 'Intel HD Graphics', vendorName: 'Intel' }],
+      motherboard: 'ThinkPad X201',
+      targetOS: 'macOS Big Sur 11',
+      smbios: 'MacBookPro6,2',
+    }));
+
+    assert.equal(report.level, 'risky');
+    assert.equal(report.isCompatible, true);
+    assert.equal(report.recommendedVersion, 'macOS Big Sur 11');
+    assert.equal(report.eligibleVersions[0]?.name, 'macOS Big Sur 11');
+  });
+
+  test('Yorkfield desktops stay buildable only for high sierra era targets', () => {
+    const report = checkCompatibility(makeProfile({
+      cpu: 'Intel Core 2 Quad Q9550',
+      generation: 'Yorkfield',
+      isLaptop: false,
+      gpu: 'NVIDIA GeForce GTX 560',
+      gpuDevices: [{ name: 'NVIDIA GeForce GTX 560', vendorName: 'NVIDIA' }],
+      motherboard: 'Gigabyte EP45-UD3R',
+      targetOS: 'macOS High Sierra 10.13',
+      smbios: 'iMac11,1',
+    }));
+
+    assert.equal(report.level, 'experimental');
+    assert.equal(report.isCompatible, true);
+    assert.equal(report.recommendedVersion, 'macOS High Sierra 10.13');
+    assert.equal(report.eligibleVersions[0]?.name, 'macOS High Sierra 10.13');
+  });
+
+  test('AMD Ryzen with Navi 22 (RX 6700) requires NootRX and remains risky', () => {
+    const report = checkCompatibility(makeProfile({
+      cpu: 'AMD Ryzen 5 5600X',
+      architecture: 'AMD',
+      generation: 'Ryzen',
+      gpu: 'AMD Radeon RX 6700 XT',
+      gpuDevices: [{ name: 'AMD Radeon RX 6700 XT', vendorName: 'AMD' }],
+      targetOS: 'macOS Sonoma 14',
+    }));
+
+    assert.equal(report.level, 'risky');
+    assert.equal(report.isCompatible, true);
+    assert.ok(report.warnings.some(warning => /Navi 22 requires NootRX/.test(warning)));
+  });
+
   test('Coffee Lake desktop SMBIOS stays on iMac19,1', () => {
     const smbios = getSMBIOSForProfile(makeProfile());
     assert.equal(smbios, 'iMac19,1');
@@ -315,6 +420,18 @@ describe('Hackintosh compatibility logic', () => {
     assert.notEqual(report.level, 'blocked');
     assert.equal(report.isCompatible, true);
     assert.equal(report.recommendedVersion, 'macOS Tahoe 26');
+  });
+
+  test('desktop systems do not get laptop battery kexts from mobile cpu suffix alone', () => {
+    const resources = getRequiredResources(makeProfile({
+      cpu: '13th Gen Intel(R) Core(TM) i7-13620H',
+      generation: 'Raptor Lake',
+      motherboard: 'MSI PRO B760M-A WIFI',
+      isLaptop: false,
+    }));
+
+    assert.ok(!resources.kexts.includes('SMCBatteryManager.kext'));
+    assert.ok(!resources.kexts.includes('VoodooPS2Controller.kext'));
   });
 
   test('persisted-state restore falls back to report when compatibility becomes blocked', () => {

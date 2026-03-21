@@ -35,16 +35,16 @@ type RestartState = 'idle' | 'confirming' | 'restarting' | 'unsupported';
 
 // ── Summary counts ───────────────────────────────────────────────────────────
 
-function useSummaryCounts(settings: BiosSettingPlan[]) {
+function useSummaryCounts(settings: BiosSettingPlan[], checked: Set<string>) {
   return useMemo(() => {
     const required = settings.filter(s => s.required);
-    const verified = settings.filter(s => s.verificationStatus === 'verified');
-    const unknown = settings.filter(s => s.required && s.verificationStatus === 'unknown');
+    const verified = settings.filter(s => s.verificationStatus === 'verified' || checked.has(s.id));
+    const unknown = settings.filter(s => s.required && s.verificationStatus === 'unknown' && !checked.has(s.id));
     const failed = settings.filter(s => s.required && s.verificationStatus === 'unverified');
     const manualOnly = settings.filter(s => s.supportLevel === 'manual');
     const autoEligible = settings.filter(s => s.supportLevel !== 'manual');
     return { total: settings.length, required: required.length, verified: verified.length, unknown: unknown.length, failed: failed.length, manualOnly: manualOnly.length, autoEligible: autoEligible.length };
-  }, [settings]);
+  }, [checked, settings]);
 }
 
 // ── Stage badge ──────────────────────────────────────────────────────────────
@@ -100,7 +100,7 @@ export default function BiosStep({
       const firstPending = orchestratorState.settings.find(s => s.verificationStatus !== 'verified' && s.required);
       setSelectedSettingId((firstPending ?? orchestratorState.settings[0]).id);
     }
-  }, [orchestratorState]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [orchestratorState, selectedSettingId]);
 
   // Derive settings list
   const allItems = useMemo(() => {
@@ -125,7 +125,7 @@ export default function BiosStep({
     ];
   }, [orchestratorState, biosConfig]);
 
-  const counts = useSummaryCounts(allItems as BiosSettingPlan[]);
+  const counts = useSummaryCounts(allItems as BiosSettingPlan[], checked);
   const isMacHost = firmwareInfo?.hostContext === 'running_on_mac';
   const restartSupported = restartCapability?.supported === true;
   const restartMethod = restartCapability?.method ?? 'none';
@@ -207,6 +207,13 @@ export default function BiosStep({
     setChecked(all);
     setActionMessage(null);
   };
+
+  useEffect(() => {
+    if (selectedSettingId && allItems.some(item => item.id === selectedSettingId)) return;
+    if (allItems.length === 0) return;
+    const firstPending = allItems.find(item => item.verificationStatus !== 'verified' && item.required);
+    setSelectedSettingId((firstPending ?? allItems[0]).id);
+  }, [allItems, selectedSettingId]);
 
   // ── Render ─────────────────────────────────────────────────────────────────
 

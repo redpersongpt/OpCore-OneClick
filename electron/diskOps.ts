@@ -111,13 +111,17 @@ export interface DiskOps {
   inspectExistingEfi(device: string): Promise<ExistingEfiInspection>;
   copyExistingEfi(device: string, destinationPath: string): Promise<ExistingEfiCopyResult>;
   flashUsb(options: FlashUsbOptions): Promise<void>;
-  shrinkPartition(disk: string, sizeGB: number): Promise<void>;
+  shrinkPartition(disk: string, sizeGB: number, confirmed: boolean): Promise<void>;
   createBootPartition(options: CreateBootPartitionOptions): Promise<void>;
   getHardDrives(): Promise<Array<{ name: string; device: string; size: string; type: string }>>;
   listUsbDevices(): Promise<Array<{ name: string; device: string; size: string }>>;
 }
 
 import { sim } from './simulation.js';
+
+export function buildLinuxFirstPartitionPath(device: string): string {
+  return /(?:nvme\d+n\d+|mmcblk\d+|loop\d+)$/i.test(device) ? `${device}p1` : `${device}1`;
+}
 
 export function createDiskOps(log: LogFunction): DiskOps {
 
@@ -160,6 +164,21 @@ export function createDiskOps(log: LogFunction): DiskOps {
       register
     );
     return stdout.trim();
+  }
+
+  async function waitForWindowsDriveLetterForLabel(
+    diskNum: string,
+    label: string,
+    register?: (child: any) => void,
+    attempts = 12,
+    delayMs = 500,
+  ): Promise<string> {
+    for (let attempt = 0; attempt < attempts; attempt += 1) {
+      const driveLetter = await getWindowsDriveLetterForLabel(diskNum, label, register);
+      if (driveLetter) return driveLetter;
+      await new Promise((resolve) => setTimeout(resolve, delayMs));
+    }
+    return '';
   }
 
   async function getWindowsPrimaryPartitionNumber(diskNum: string): Promise<string> {
@@ -793,46 +812,54 @@ export function createDiskOps(log: LogFunction): DiskOps {
 
     try {
       if (process.platform === 'darwin') {
-        onPhase('erase', `Unmounting ${device}`);
-        checkAborted();
-        log('DEBUG', 'usb-flash', 'Unmounting disk', { device });
-        await runCmd(`diskutil unmountDisk ${device}`, registerProcess);
-
-        onPhase('format', `Erasing ${device} as FAT32 GPT`);
-        checkAborted();
-        log('DEBUG', 'usb-flash', 'Erasing disk as FAT32 GPT', { device });
-        await runCmd(`diskutil eraseDisk FAT32 OPENCORE GPTFormat ${device}`, registerProcess);
-
-        const { mountPoint } = await resolveDarwinMountedVolume(device, 'OPENCORE', registerProcess);
-
-        onPhase('copy', `Copying EFI to ${mountPoint}`);
-        checkAborted();
-        log('DEBUG', 'usb-flash', 'Copying EFI', { mountPoint });
-        await runCmd(`cp -r "${path.join(efiPath, 'EFI')}" "${mountPoint}/"`, registerProcess);
-
-        // Copy recovery payload if present
-        const recoveryDir = path.join(efiPath, 'com.apple.recovery.boot');
-        if (fs.existsSync(recoveryDir)) {
-          onPhase('copy', `Copying recovery payload to ${mountPoint}`);
+        let mountedIdentifier: string | null = null;
+        try {
+          onPhase('erase', `Unmounting ${device}`);
           checkAborted();
-          log('DEBUG', 'usb-flash', 'Copying recovery payload', { mountPoint });
-          await runCmd(`cp -r "${recoveryDir}" "${mountPoint}/"`, registerProcess);
-        }
+          log('DEBUG', 'usb-flash', 'Unmounting disk', { device });
+          await runCmd(`diskutil unmountDisk ${device}`, registerProcess);
 
-        // Verify: EFI must exist on target
-        onPhase('verify', 'Verifying written files');
-        if (!fs.existsSync(path.join(mountPoint, 'EFI', 'OC', 'OpenCore.efi'))) {
-          throw new Error('Verification failed: EFI/OC/OpenCore.efi not found on USB after copy');
-        }
-        if (fs.existsSync(recoveryDir) && !fs.existsSync(path.join(mountPoint, 'com.apple.recovery.boot', 'BaseSystem.dmg'))) {
-          throw new Error('Verification failed: com.apple.recovery.boot/BaseSystem.dmg not found on USB after copy');
-        }
+          onPhase('format', `Erasing ${device} as FAT32 GPT`);
+          checkAborted();
+          log('DEBUG', 'usb-flash', 'Erasing disk as FAT32 GPT', { device });
+          await runCmd(`diskutil eraseDisk FAT32 OPENCORE GPTFormat ${device}`, registerProcess);
 
-        onPhase('eject', `Ejecting ${device}`);
-        await runCmd(`diskutil eject ${device}`, registerProcess);
+          const { identifier, mountPoint } = await resolveDarwinMountedVolume(device, 'OPENCORE', registerProcess);
+          mountedIdentifier = identifier;
 
+          onPhase('copy', `Copying EFI to ${mountPoint}`);
+          checkAborted();
+          log('DEBUG', 'usb-flash', 'Copying EFI', { mountPoint });
+          await runCmd(`cp -r "${path.join(efiPath, 'EFI')}" "${mountPoint}/"`, registerProcess);
+
+          // Copy recovery payload if present
+          const recoveryDir = path.join(efiPath, 'com.apple.recovery.boot');
+          if (fs.existsSync(recoveryDir)) {
+            onPhase('copy', `Copying recovery payload to ${mountPoint}`);
+            checkAborted();
+            log('DEBUG', 'usb-flash', 'Copying recovery payload', { mountPoint });
+            await runCmd(`cp -r "${recoveryDir}" "${mountPoint}/"`, registerProcess);
+          }
+
+          // Verify: EFI must exist on target
+          onPhase('verify', 'Verifying written files');
+          if (!fs.existsSync(path.join(mountPoint, 'EFI', 'OC', 'OpenCore.efi'))) {
+            throw new Error('Verification failed: EFI/OC/OpenCore.efi not found on USB after copy');
+          }
+          if (fs.existsSync(recoveryDir) && !fs.existsSync(path.join(mountPoint, 'com.apple.recovery.boot', 'BaseSystem.dmg'))) {
+            throw new Error('Verification failed: com.apple.recovery.boot/BaseSystem.dmg not found on USB after copy');
+          }
+
+          onPhase('eject', `Ejecting ${device}`);
+          await runCmd(`diskutil eject ${device}`, registerProcess);
+          mountedIdentifier = null;
+        } finally {
+          if (mountedIdentifier) {
+            try { await runCmd(`diskutil unmount ${mountedIdentifier}`, registerProcess); } catch (_) {}
+          }
+        }
       } else if (process.platform === 'linux') {
-        const part = `${device}1`;
+        const part = buildLinuxFirstPartitionPath(device);
         const tmpMount = path.join(os.tmpdir(), `oc_usb_${Date.now()}`);
 
         onPhase('format', `Partitioning and formatting ${device}`);
@@ -885,41 +912,44 @@ export function createDiskOps(log: LogFunction): DiskOps {
         const diskNum = getWindowsDiskNumber(device);
         if (!diskNum) throw new Error(`Invalid device path: ${device}`);
         const script = `select disk ${diskNum}\nclean\nconvert gpt\ncreate partition primary\nformat fs=fat32 quick label=OPENCORE\nassign\n`;
-        const scriptPath = path.join(os.tmpdir(), 'oc_diskpart.txt');
+        const scriptPath = path.join(os.tmpdir(), `oc-diskpart-${crypto.randomUUID()}.txt`);
         fs.writeFileSync(scriptPath, script);
 
-        onPhase('format', `Running diskpart on disk ${diskNum}`);
-        checkAborted();
-        log('DEBUG', 'usb-flash', 'Running diskpart', { diskNum });
-        await runCmd(`diskpart /s "${scriptPath}"`, registerProcess);
-
-        await new Promise(r => setTimeout(r, 1500));
-        // Resolve drive letter from the specific disk number, not a global label search.
-        // A global label search can match the wrong volume if another OPENCORE disk exists.
-        const driveLetter = await getWindowsDriveLetterForLabel(diskNum, 'OPENCORE', registerProcess);
-        if (!driveLetter) throw new Error(`Could not determine drive letter for disk ${diskNum} — diskpart may have failed`);
-
-        onPhase('copy', `Copying EFI to ${driveLetter}:`);
-        checkAborted();
-        log('DEBUG', 'usb-flash', 'Copying EFI', { driveLetter });
-        await runCmd(`xcopy /E /I /H /Y "${path.join(efiPath, 'EFI')}" "${driveLetter}:\\EFI"`, registerProcess);
-
-        // Copy recovery payload if present
-        const recoveryDir = path.join(efiPath, 'com.apple.recovery.boot');
-        if (fs.existsSync(recoveryDir)) {
-          onPhase('copy', `Copying recovery payload to ${driveLetter}:`);
+        try {
+          onPhase('format', `Running diskpart on disk ${diskNum}`);
           checkAborted();
-          log('DEBUG', 'usb-flash', 'Copying recovery payload', { driveLetter });
-          await runCmd(`xcopy /E /I /H /Y "${recoveryDir}" "${driveLetter}:\\com.apple.recovery.boot"`, registerProcess);
-        }
+          log('DEBUG', 'usb-flash', 'Running diskpart', { diskNum });
+          await runCmd(`diskpart /s "${scriptPath}"`, registerProcess);
 
-        // Verify: EFI must exist on target
-        onPhase('verify', 'Verifying written files');
-        if (!fs.existsSync(path.join(`${driveLetter}:`, 'EFI', 'OC', 'OpenCore.efi'))) {
-          throw new Error('Verification failed: EFI\\OC\\OpenCore.efi not found on USB after copy');
-        }
-        if (fs.existsSync(recoveryDir) && !fs.existsSync(path.join(`${driveLetter}:`, 'com.apple.recovery.boot', 'BaseSystem.dmg'))) {
-          throw new Error('Verification failed: com.apple.recovery.boot\\BaseSystem.dmg not found on USB after copy');
+          // Resolve drive letter from the specific disk number, not a global label search.
+          // A global label search can match the wrong volume if another OPENCORE disk exists.
+          const driveLetter = await waitForWindowsDriveLetterForLabel(diskNum, 'OPENCORE', registerProcess);
+          if (!driveLetter) throw new Error(`Could not determine drive letter for disk ${diskNum} — diskpart may have failed or Windows has not mounted the new volume yet`);
+
+          onPhase('copy', `Copying EFI to ${driveLetter}:`);
+          checkAborted();
+          log('DEBUG', 'usb-flash', 'Copying EFI', { driveLetter });
+          await runCmd(`xcopy /E /I /H /Y "${path.join(efiPath, 'EFI')}" "${driveLetter}:\\EFI"`, registerProcess);
+
+          // Copy recovery payload if present
+          const recoveryDir = path.join(efiPath, 'com.apple.recovery.boot');
+          if (fs.existsSync(recoveryDir)) {
+            onPhase('copy', `Copying recovery payload to ${driveLetter}:`);
+            checkAborted();
+            log('DEBUG', 'usb-flash', 'Copying recovery payload', { driveLetter });
+            await runCmd(`xcopy /E /I /H /Y "${recoveryDir}" "${driveLetter}:\\com.apple.recovery.boot"`, registerProcess);
+          }
+
+          // Verify: EFI must exist on target
+          onPhase('verify', 'Verifying written files');
+          if (!fs.existsSync(path.join(`${driveLetter}:`, 'EFI', 'OC', 'OpenCore.efi'))) {
+            throw new Error('Verification failed: EFI\\OC\\OpenCore.efi not found on USB after copy');
+          }
+          if (fs.existsSync(recoveryDir) && !fs.existsSync(path.join(`${driveLetter}:`, 'com.apple.recovery.boot', 'BaseSystem.dmg'))) {
+            throw new Error('Verification failed: com.apple.recovery.boot\\BaseSystem.dmg not found on USB after copy');
+          }
+        } finally {
+          try { fs.unlinkSync(scriptPath); } catch {}
         }
       } else {
         throw new Error(`flashUsb: unsupported platform ${process.platform}`);
@@ -932,16 +962,23 @@ export function createDiskOps(log: LogFunction): DiskOps {
     log('INFO', 'usb-flash', 'USB flash complete', { device });
   }
 
-  async function shrinkPartition(disk: string, sizeGB: number): Promise<void> {
+  async function shrinkPartition(disk: string, sizeGB: number, confirmed: boolean): Promise<void> {
+    if (!confirmed) {
+      throw new Error('SAFETY BLOCK: shrinkPartition requires explicit user confirmation (confirmed=true)');
+    }
     if (process.platform === 'win32') {
       const diskNum = getWindowsDiskNumber(disk);
       if (!diskNum) throw new Error(`Invalid disk identifier: ${disk}`);
       const partitionNum = await getWindowsPrimaryPartitionNumber(diskNum);
       if (!partitionNum) throw new Error(`Could not determine the primary data partition for disk ${diskNum}`);
       const script = `select disk ${diskNum}\nselect partition ${partitionNum}\nshrink desired=${sizeGB * 1024} minimum=8192\n`;
-      const scriptPath = path.join(os.tmpdir(), 'shrink.txt');
+      const scriptPath = path.join(os.tmpdir(), `shrink-${crypto.randomUUID()}.txt`);
       fs.writeFileSync(scriptPath, script);
-      await runCmd(`diskpart /s "${scriptPath}"`);
+      try {
+        await runCmd(`diskpart /s "${scriptPath}"`);
+      } finally {
+        try { fs.unlinkSync(scriptPath); } catch {}
+      }
     } else if (process.platform === 'darwin') {
       const { container } = await resolveDarwinApfsContainer(disk);
       await runCmd(`diskutil apfs resizeContainer ${container} ${sizeGB}g`);
@@ -961,27 +998,38 @@ export function createDiskOps(log: LogFunction): DiskOps {
       const diskNum = getWindowsDiskNumber(disk);
       if (!diskNum) throw new Error(`Invalid disk identifier: ${disk}`);
       const script = `select disk ${diskNum}\ncreate partition primary size=16384\nformat fs=fat32 quick label=BOOTSTRAP\nassign\n`;
-      const scriptPath = path.join(os.tmpdir(), 'create_part.txt');
+      const scriptPath = path.join(os.tmpdir(), `create-part-${crypto.randomUUID()}.txt`);
       fs.writeFileSync(scriptPath, script);
 
-      onPhase('create-partition', `Creating partition on disk ${diskNum}`);
-      await runCmd(`diskpart /s "${scriptPath}"`, registerProcess);
-      await new Promise(r => setTimeout(r, 1500));
+      try {
+        onPhase('create-partition', `Creating partition on disk ${diskNum}`);
+        await runCmd(`diskpart /s "${scriptPath}"`, registerProcess);
 
-      // Resolve drive letter from the specific disk, not a global label search
-      const driveLetter = await getWindowsDriveLetterForLabel(diskNum, 'BOOTSTRAP', registerProcess);
-      if (!driveLetter) throw new Error(`Could not determine BOOTSTRAP drive letter for disk ${diskNum}`);
+        // Resolve drive letter from the specific disk, not a global label search
+        const driveLetter = await waitForWindowsDriveLetterForLabel(diskNum, 'BOOTSTRAP', registerProcess);
+        if (!driveLetter) throw new Error(`Could not determine BOOTSTRAP drive letter for disk ${diskNum} — Windows has not mounted the new volume yet`);
 
-      onPhase('copy', `Copying EFI to ${driveLetter}:`);
-      await runCmd(`xcopy /E /Y /I /H "${path.join(efiPath, 'EFI')}" "${driveLetter}:\\EFI"`, registerProcess);
+        onPhase('copy', `Copying EFI to ${driveLetter}:`);
+        await runCmd(`xcopy /E /Y /I /H "${path.join(efiPath, 'EFI')}" "${driveLetter}:\\EFI"`, registerProcess);
+      } finally {
+        try { fs.unlinkSync(scriptPath); } catch {}
+      }
 
     } else if (process.platform === 'darwin') {
+      let mountedIdentifier: string | null = null;
       onPhase('create-partition', `Creating BOOTSTRAP partition on ${disk}`);
-      await runCmd(`diskutil addPartition ${disk} MS-DOS BOOTSTRAP 16G`, registerProcess);
-      const { mountPoint } = await resolveDarwinMountedVolume(disk, 'BOOTSTRAP', registerProcess);
+      try {
+        await runCmd(`diskutil addPartition ${disk} MS-DOS BOOTSTRAP 16G`, registerProcess);
+        const { identifier, mountPoint } = await resolveDarwinMountedVolume(disk, 'BOOTSTRAP', registerProcess);
+        mountedIdentifier = identifier;
 
-      onPhase('copy', `Copying EFI to ${mountPoint}`);
-      await runCmd(`cp -r "${path.join(efiPath, 'EFI')}" "${mountPoint}/"`, registerProcess);
+        onPhase('copy', `Copying EFI to ${mountPoint}`);
+        await runCmd(`cp -r "${path.join(efiPath, 'EFI')}" "${mountPoint}/"`, registerProcess);
+      } finally {
+        if (mountedIdentifier) {
+          try { await runCmd(`diskutil unmount ${mountedIdentifier}`, registerProcess); } catch {}
+        }
+      }
 
     } else if (process.platform === 'linux') {
       const beforePartitions = await listLinuxPartitions(disk, registerProcess);

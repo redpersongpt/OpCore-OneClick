@@ -342,7 +342,12 @@ export default function ProgressStep({
         {onCancel && (
           <button
             onClick={onCancel}
-            className="flex-1 py-4 bg-red-500/10 border border-red-500/20 text-red-400 rounded-2xl font-bold text-base hover:bg-red-500/20 transition-all cursor-pointer flex items-center justify-center gap-2"
+            disabled={dangerPhase}
+            className={`flex-1 py-4 rounded-2xl font-bold text-base transition-all flex items-center justify-center gap-2 ${
+              dangerPhase
+                ? 'bg-white/5 border border-white/10 text-white/25 cursor-not-allowed'
+                : 'bg-red-500/10 border border-red-500/20 text-red-400 hover:bg-red-500/20 cursor-pointer'
+            }`}
           >
             Go Back
           </button>

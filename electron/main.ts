@@ -73,6 +73,7 @@ import { runSafeSimulation, type SafeSimulationResult } from './safeSimulation.j
 import { sim } from './simulation.js';
 import { getCompatModeConfigPath, getPackagedRendererEntryPath, getPreloadScriptPath } from './runtimePaths.js';
 import { runEfiBuildFlow } from './efiBuildFlow.js';
+import { inferLaptopFormFactor } from './formFactor.js';
 import { generateFolderManifest, verifyFolderIntegrity } from './resourceIntegrity.js';
 import {
   APPLE_RECOVERY_MLB_ZERO,
@@ -474,7 +475,17 @@ function ipcHandle(
         code: err?.code,
       });
       if (logger) logger.flush();
-      throw err;
+      const sanitized = new Error(err?.message ?? `IPC handler '${channel}' failed`);
+      if (err?.code) {
+        Object.assign(sanitized, { code: err.code });
+      }
+      Object.defineProperty(sanitized, 'stack', {
+        value: undefined,
+        configurable: true,
+        enumerable: false,
+        writable: true,
+      });
+      throw sanitized;
     }
   });
 }
@@ -887,6 +898,7 @@ function detectCpuGeneration(cpuModel: string): HardwareProfile['generation'] {
   const match = model.match(/i\d-? ?(1?\d{4})/);
   if (match) {
     const num = parseInt(match[1]);
+    if (num >= 10000 && num < 11000 && (/\bg[147]\b/.test(model) || model.includes('ice lake'))) return 'Ice Lake';
     if (num >= 14000) return 'Raptor Lake';
     if (num >= 13000) return 'Raptor Lake';
     if (num >= 12000) return 'Alder Lake';
@@ -901,6 +913,20 @@ function detectCpuGeneration(cpuModel: string): HardwareProfile['generation'] {
     if (num >= 2000) return 'Sandy Bridge';
   }
 
+  const legacyCoreMatch = model.match(/i[357]-?\s*(\d{3,4})([a-z]{0,2})/);
+  if (legacyCoreMatch) {
+    const num = parseInt(legacyCoreMatch[1], 10);
+    const suffix = legacyCoreMatch[2] ?? '';
+    if (num >= 900 && num < 1000) return 'Nehalem';
+    if (num >= 800 && num < 900) return 'Nehalem';
+    if (num >= 700 && num < 800) return 'Westmere';
+    if (num >= 600 && num < 700) return 'Clarkdale';
+    if (num >= 400 && num < 600) {
+      if (/[lmqu]/.test(suffix)) return 'Arrandale';
+      return 'Clarkdale';
+    }
+  }
+
   // Budget Intel Desktop
   if (model.includes('pentium') || model.includes('celeron')) {
     if (model.includes('gold')) return 'Coffee Lake'; 
@@ -911,6 +937,8 @@ function detectCpuGeneration(cpuModel: string): HardwareProfile['generation'] {
   }
   
   // Legacy Intel Desktop
+  if (model.includes('core 2 quad') || /\bq9\d{3}\b/.test(model)) return 'Yorkfield';
+  if (model.includes('core 2 duo') || /\be8\d{3}\b/.test(model) || /\be7\d{3}\b/.test(model)) return 'Wolfdale';
   if (model.includes('core 2') || model.includes('quad') || model.includes('extreme')) return 'Penryn';
 
   // AMD Desktop
@@ -932,29 +960,29 @@ function detectArchitecture(cpuModel: string): HardwareProfile['architecture'] {
 
 async function getWindowsHardwareInfo(): Promise<HardwareProfile> {
   const psCommand = (cmd: string) => `powershell -NoProfile -Command "${cmd}"`;
-  const [cpuRaw, gpuRaw, baseboardRaw, coresRaw, chassisRaw, manufRaw] = await Promise.all([
+  const [cpuRaw, gpuRaw, baseboardRaw, coresRaw, chassisRaw, manufRaw, modelRaw, batteryRaw] = await Promise.all([
     execPromise(psCommand("Get-CimInstance CIM_Processor | Select-Object -ExpandProperty Name")),
     execPromise(psCommand("Get-CimInstance CIM_VideoController | Select-Object -ExpandProperty Name")),
     execPromise(psCommand("Get-CimInstance CIM_BaseBoard | Select-Object -ExpandProperty Product")),
     execPromise(psCommand("Get-CimInstance CIM_Processor | Select-Object -ExpandProperty NumberOfCores")),
     execPromise(psCommand("Get-CimInstance CIM_SystemEnclosure | Select-Object -ExpandProperty ChassisTypes")),
-    execPromise(psCommand("Get-CimInstance CIM_ComputerSystem | Select-Object -ExpandProperty Manufacturer"))
-  ]).catch(() => [{stdout: 'Unknown CPU'}, {stdout: 'Unknown GPU'}, {stdout: 'Unknown Board'}, {stdout: '4'}, {stdout: '3'}, {stdout: 'Unknown'}]);
+    execPromise(psCommand("Get-CimInstance CIM_ComputerSystem | Select-Object -ExpandProperty Manufacturer")),
+    execPromise(psCommand("Get-CimInstance CIM_ComputerSystem | Select-Object -ExpandProperty Model")),
+    execPromise(psCommand("Get-CimInstance Win32_Battery | Select-Object -First 1 | ConvertTo-Json -Compress"))
+  ]).catch(() => [{stdout: 'Unknown CPU'}, {stdout: 'Unknown GPU'}, {stdout: 'Unknown Board'}, {stdout: '4'}, {stdout: '3'}, {stdout: 'Unknown'}, {stdout: ''}, {stdout: ''}]);
 
   const cpuModel = cpuRaw.stdout.trim().split('\n')[0];
   const gpuModel = gpuRaw.stdout.trim().split('\n').join(' / ');
   const motherboard = baseboardRaw.stdout.trim().split('\n')[0] || 'Unknown';
   const coreCount = parseInt(coresRaw.stdout.trim()) || 4;
   
-  // SMBIOS Chassis types for laptops/portables: 8, 9, 10, 11, 12, 14, 18, 21, 31, 32
   const chassisTypes = chassisRaw.stdout.trim().split('\n').map(c => parseInt(c.trim()));
-  const laptopTypes = [8, 9, 10, 11, 12, 14, 18, 21, 31, 32];
-  let isLaptop = chassisTypes.some(t => laptopTypes.includes(t));
-  
-  // Fallback heuristic if SMBIOS is bad
-  if (!isLaptop && /(U|Y|HQ|MQ|G[1-7]|H|HS|HX|P)\s*(?:CPU|@|\b)/i.test(cpuModel)) {
-      isLaptop = true;
-  }
+  const isLaptop = inferLaptopFormFactor({
+    cpuName: cpuModel,
+    chassisTypes,
+    modelName: modelRaw.stdout.trim(),
+    batteryPresent: batteryRaw.stdout.trim().length > 0 && batteryRaw.stdout.trim() !== 'null',
+  });
 
   const manuf = manufRaw.stdout.trim().toLowerCase();
   const isVM = manuf.includes('vmware') || manuf.includes('qemu') || manuf.includes('innotek') || manuf.includes('microsoft corporation') || manuf.includes('parallels');
@@ -983,14 +1011,15 @@ async function getWindowsHardwareInfo(): Promise<HardwareProfile> {
 }
 
 async function getLinuxHardwareInfo(): Promise<HardwareProfile> {
-  const [cpuRaw, gpuRaw, baseboardRaw, memRaw, chassisRaw, vendorRaw] = await Promise.all([
+  const [cpuRaw, gpuRaw, baseboardRaw, memRaw, chassisRaw, vendorRaw, batteryRaw] = await Promise.all([
     execPromise('lscpu'),
     execPromise('lspci | grep -i vga'),
     execPromise('cat /sys/class/dmi/id/board_name 2>/dev/null || cat /sys/class/dmi/id/product_name 2>/dev/null'),
     execPromise('free -b | grep Mem'),
     execPromise('cat /sys/class/dmi/id/chassis_type 2>/dev/null'),
-    execPromise('cat /sys/class/dmi/id/sys_vendor 2>/dev/null')
-  ]).catch(() => [{stdout: ''}, {stdout: ''}, {stdout: 'Unknown'}, {stdout: '0 0'}, {stdout: '3'}, {stdout: 'Unknown'}]);
+    execPromise('cat /sys/class/dmi/id/sys_vendor 2>/dev/null'),
+    execPromise('ls /sys/class/power_supply 2>/dev/null | grep -E "^BAT"')
+  ]).catch(() => [{stdout: ''}, {stdout: ''}, {stdout: 'Unknown'}, {stdout: '0 0'}, {stdout: '3'}, {stdout: 'Unknown'}, {stdout: ''}]);
 
   const cpuLines = cpuRaw.stdout.split('\n');
   const cpuModel = (cpuLines.find(l => l.includes('Model name:')) || '').split(':')[1]?.trim() || 'Unknown CPU';
@@ -998,9 +1027,12 @@ async function getLinuxHardwareInfo(): Promise<HardwareProfile> {
   const memTotal = parseInt(memRaw.stdout.split(/\s+/)[1]) || 4294967296; // Fallback 4GB
   
   const chassisType = parseInt(chassisRaw.stdout.trim());
-  const laptopTypes = [8, 9, 10, 11, 12, 14, 18, 21, 31, 32];
-  let isLaptop = laptopTypes.includes(chassisType);
-  if (!isLaptop && /(U|Y|HQ|MQ|G[1-7]|H|HS|HX|P)\s*(?:CPU|@|\b)/i.test(cpuModel)) isLaptop = true;
+  const isLaptop = inferLaptopFormFactor({
+    cpuName: cpuModel,
+    chassisTypes: Number.isFinite(chassisType) && chassisType > 0 ? [chassisType] : [],
+    modelName: baseboardRaw.stdout.trim(),
+    batteryPresent: batteryRaw.stdout.trim().length > 0,
+  });
 
   const vendor = vendorRaw.stdout.trim().toLowerCase();
   const isVM = vendor.includes('vmware') || vendor.includes('qemu') || vendor.includes('innotek') || vendor.includes('microsoft') || vendor.includes('parallels');
@@ -2826,7 +2858,7 @@ app.whenReady().then(async () => {
     if (info.partitionTable === 'unknown') {
       throw new Error(`SAFETY BLOCK: Cannot read partition table for ${disk} — refusing to shrink an unidentified disk`);
     }
-    return withTimeout(diskOps.shrinkPartition(disk, size), 60_000, 'shrinkPartition');
+    return withTimeout(diskOps.shrinkPartition(disk, size, confirmed), 60_000, 'shrinkPartition');
   });
   ipcHandle('create-boot-partition', async (_e: Electron.IpcMainInvokeEvent, disk: string, efi: string, confirmed: boolean, profileData?: HardwareProfile | null) => {
     if (!confirmed) throw new Error('Partition creation requires explicit user confirmation');

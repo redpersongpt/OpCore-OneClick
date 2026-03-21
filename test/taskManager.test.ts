@@ -120,33 +120,41 @@ describe('taskManager', () => {
     assert.equal(registry.list().length, 3, 'list() must return all 3 created tasks');
   });
 
-  test('updateProgress after complete() throws (strict state machine)', () => {
-    const { registry } = makeRegistry();
+  test('updateProgress after complete() is ignored safely', () => {
+    const { registry, pushCalls } = makeRegistry();
     const token = registry.create('kext-fetch');
     registry.complete(token.taskId);
+    const callCount = pushCalls.length;
 
-    // Strict state machine: updateProgress on a terminal task must throw
-    assert.throws(
-      () => registry.updateProgress(token.taskId, {
-        kind: 'kext-fetch', kextName: 'Lilu', version: '1.6', index: 1, total: 5
-      }),
-      (err: Error) => err.message.includes('terminal task') && err.message.includes(token.taskId),
-      'Must throw with terminal task message'
-    );
+    registry.updateProgress(token.taskId, {
+      kind: 'kext-fetch', kextName: 'Lilu', version: '1.6', index: 1, total: 5
+    });
+
+    assert.equal(pushCalls.length, callCount);
+    assert.equal(registry.get(token.taskId)?.status, 'complete');
   });
 
-  test('updateProgress after cancel() throws (strict state machine)', () => {
-    const { registry } = makeRegistry();
+  test('updateProgress after cancel() is ignored safely', () => {
+    const { registry, pushCalls } = makeRegistry();
     const token = registry.create('recovery-download');
     registry.cancel(token.taskId);
+    const callCount = pushCalls.length;
 
-    assert.throws(
-      () => registry.updateProgress(token.taskId, {
-        kind: 'recovery-download', percent: 50, status: 'late event',
-        bytesDownloaded: 0, dmgDest: '', clDest: '',
-      }),
-      (err: Error) => err.message.includes('terminal task'),
-      'Must throw after cancel'
-    );
+    registry.updateProgress(token.taskId, {
+      kind: 'recovery-download', percent: 50, status: 'late event',
+      bytesDownloaded: 0, dmgDest: '', clDest: '',
+    });
+
+    assert.equal(pushCalls.length, callCount);
+    assert.equal(registry.get(token.taskId)?.status, 'cancelled');
+  });
+
+  test('cancel() on a terminal task is ignored', () => {
+    const { registry } = makeRegistry();
+    const token = registry.create('efi-build');
+    registry.complete(token.taskId);
+
+    assert.equal(registry.cancel(token.taskId), false);
+    assert.equal(registry.get(token.taskId)?.status, 'complete');
   });
 });

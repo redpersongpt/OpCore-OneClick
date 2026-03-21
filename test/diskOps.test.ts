@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
-import { createDiskOps } from '../electron/diskOps.js';
+import { buildLinuxFirstPartitionPath, createDiskOps } from '../electron/diskOps.js';
 
 // Null logger — we only care about violation output, not log calls
 const noop = () => {};
@@ -105,4 +105,16 @@ describe('diskOps.runSafetyChecks', () => {
   // test('SYSTEM_DISK — cannot flash the OS boot disk', async () => { /* requires exec + real disk */ });
   // test('MBR_PARTITION_TABLE — blocked for MBR disks', async () => { /* requires real disk */ });
   // test('PARTITION_IN_USE — warns when partitions are mounted', async () => { /* requires real disk */ });
+});
+
+describe('diskOps platform helpers', () => {
+  test('buildLinuxFirstPartitionPath handles classic sdX disks', () => {
+    assert.equal(buildLinuxFirstPartitionPath('/dev/sdb'), '/dev/sdb1');
+  });
+
+  test('buildLinuxFirstPartitionPath handles nvme and mmc devices', () => {
+    assert.equal(buildLinuxFirstPartitionPath('/dev/nvme0n1'), '/dev/nvme0n1p1');
+    assert.equal(buildLinuxFirstPartitionPath('/dev/mmcblk0'), '/dev/mmcblk0p1');
+    assert.equal(buildLinuxFirstPartitionPath('/dev/loop0'), '/dev/loop0p1');
+  });
 });

@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { startTransition, useState, useEffect, useCallback } from 'react';
 import type { TaskState, TaskKind, TaskUpdatePayload } from '../../electron/taskManager';
 
 export interface UseTaskManagerReturn {
@@ -13,14 +13,31 @@ export function useTaskManager(): UseTaskManagerReturn {
   useEffect(() => {
     // Hydrate in-flight tasks on mount (handles app reload mid-operation)
     window.electron.taskList().then((list: TaskState[]) => {
-      setTasks(new Map(list.map(t => [t.taskId, t])));
+      startTransition(() => {
+        setTasks(new Map(list.map(t => [t.taskId, t])));
+      });
     }).catch(() => {});
 
-    window.electron.onTaskUpdate((payload: TaskUpdatePayload) => {
-      setTasks(prev => new Map(prev).set(payload.task.taskId, payload.task));
+    const unsubscribe = window.electron.onTaskUpdate((payload: TaskUpdatePayload) => {
+      startTransition(() => {
+        setTasks(prev => {
+          const current = prev.get(payload.task.taskId);
+          if (current
+            && current.status === payload.task.status
+            && current.error === payload.task.error
+            && current.lastUpdateAt === payload.task.lastUpdateAt
+            && current.endedAt === payload.task.endedAt
+            && current.progress === payload.task.progress) {
+            return prev;
+          }
+          const next = new Map(prev);
+          next.set(payload.task.taskId, payload.task);
+          return next;
+        });
+      });
     });
 
-    return () => { window.electron.offTaskUpdate(); };
+    return unsubscribe;
   }, []);
 
   const activeTask = useCallback((kind: TaskKind): TaskState | undefined => {

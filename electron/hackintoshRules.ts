@@ -169,7 +169,17 @@ export function classifyGpu(device: HardwareGpuDeviceSummary): GpuAssessment {
       lower.includes('quadro k')
     ) {
       return assessment(name, vendor, 'supported_with_limit', 11, [
-        'Kepler is capped at Big Sur.',
+        'Kepler is capped at Big Sur natively. Can be patched with OCLP for newer macOS.',
+      ]);
+    }
+
+    if (
+      lower.includes('fermi') ||
+      lower.includes('tesla') ||
+      /\b(?:2[0-9]0|3[0-9]0|4[0-9]0|5[0-9]0|6[1-4]0)\b/.test(lower)
+    ) {
+      return assessment(name, vendor, 'supported_with_limit', 10.13, [
+        'Tesla/Fermi require NVIDIA Web Drivers or older macOS and are capped at High Sierra.',
       ]);
     }
 
@@ -184,17 +194,31 @@ export function classifyGpu(device: HardwareGpuDeviceSummary): GpuAssessment {
       lower.includes('iris xe') ||
       lower.includes(' xe ') ||
       lower.includes('ice lake g1') ||
+      lower.includes('uhd 710') ||
+      lower.includes('uhd 730') ||
+      lower.includes('uhd 750') ||
+      lower.includes('uhd 770') ||
       /\b(?:uhd|hd)(?:\s+graphics)?\s*(?:510|610|600|605)\b/.test(lower) ||
       lower.includes('hd 2500')
     ) {
       return assessment(name, vendor, 'unsupported', null, [
-        'This Intel graphics class is not supported by macOS.',
+        'This Intel graphics class is not supported by macOS (11th Gen+ or low-end Pentiums).',
       ], { isLikelyDiscrete: false });
     }
 
     if (lower.includes('hd 4000') || lower.includes('hd graphics 4000')) {
       return assessment(name, vendor, 'supported_with_limit', 11, [
-        'HD 4000 is capped at Big Sur.',
+        'HD 4000 is capped at Big Sur natively. OCLP can be used for newer versions.',
+      ], { isLikelyDiscrete: false });
+    }
+    
+    if (
+      lower.includes('hd 2000') || lower.includes('hd 3000') ||
+      lower.includes('hd graphics 2000') || lower.includes('hd graphics 3000') ||
+      lower.includes('gma hd') || lower.includes('arrandale') || lower.includes('clarkdale')
+    ) {
+      return assessment(name, vendor, 'supported_with_limit', 10.13, [
+        'Intel 1st/2nd Gen Core iGPUs are natively capped at High Sierra. Patching via OCLP is possible but very risky.',
       ], { isLikelyDiscrete: false });
     }
 
@@ -207,6 +231,7 @@ export function classifyGpu(device: HardwareGpuDeviceSummary): GpuAssessment {
       lower.includes('hd 4400') ||
       lower.includes('hd 4600') ||
       lower.includes('hd 5000') ||
+      lower.includes('hd 5300') ||
       lower.includes('hd 5500') ||
       lower.includes('hd 6000') ||
       lower.includes('iris 5100') ||
@@ -215,7 +240,7 @@ export function classifyGpu(device: HardwareGpuDeviceSummary): GpuAssessment {
       lower.includes('iris pro')
     ) {
       return assessment(name, vendor, 'supported_with_limit', 12, [
-        'This older Intel iGPU generation should be capped at Monterey for deterministic automation.',
+        'This older Intel iGPU generation should be capped at Monterey for deterministic automation, but OCLP can extend it.',
       ], { isLikelyDiscrete: false });
     }
 
@@ -227,6 +252,8 @@ export function classifyGpu(device: HardwareGpuDeviceSummary): GpuAssessment {
       lower.includes('iris 540') ||
       lower.includes('iris 550') ||
       lower.includes('iris plus') ||
+      lower.includes('ice lake g4') ||
+      lower.includes('ice lake g7') ||
       lower.includes('uhd')
     ) {
       return assessment(name, vendor, 'supported', 26, [], { isLikelyDiscrete: false });
@@ -302,7 +329,10 @@ export function classifyGpu(device: HardwareGpuDeviceSummary): GpuAssessment {
       lower.includes('rx 560') ||
       lower.includes('rx 570') ||
       lower.includes('rx 580') ||
-      lower.includes('rx 590')
+      lower.includes('rx 590') ||
+      lower.includes('lexa') ||
+      lower.includes('baffin') ||
+      lower.includes('ellesmere')
     ) {
       const olderPolarisOrVega =
         lower.includes('rx 460') ||
@@ -314,7 +344,10 @@ export function classifyGpu(device: HardwareGpuDeviceSummary): GpuAssessment {
         lower.includes('rx 580') ||
         lower.includes('rx 590') ||
         lower.includes('vega') ||
-        lower.includes('radeon vii');
+        lower.includes('radeon vii') ||
+        lower.includes('lexa') ||
+        lower.includes('baffin') ||
+        lower.includes('ellesmere');
 
       return assessment(
         name,
@@ -330,11 +363,21 @@ export function classifyGpu(device: HardwareGpuDeviceSummary): GpuAssessment {
       lower.includes('r9 ') ||
       lower.includes('r7 ') ||
       lower.includes('hd 7') ||
+      lower.includes('hd 8') ||
       lower.includes('firepro d') ||
       lower.includes('firepro w')
     ) {
       return assessment(name, vendor, 'supported_with_limit', 12, [
-        'Older AMD GCN paths should be capped at Monterey.',
+        'Older AMD GCN paths should be capped at Monterey natively, extensible via OCLP.',
+      ]);
+    }
+    
+    if (
+      lower.includes('hd 5') ||
+      lower.includes('hd 6')
+    ) {
+      return assessment(name, vendor, 'supported_with_limit', 10.13, [
+        'AMD TeraScale paths are capped at High Sierra natively.',
       ]);
     }
 
@@ -345,7 +388,8 @@ export function classifyGpu(device: HardwareGpuDeviceSummary): GpuAssessment {
       lower.includes('vega 9') ||
       lower.includes('vega 10') ||
       lower.includes('vega 11') ||
-      lower.includes('radeon graphics')
+      lower.includes('radeon graphics') ||
+      lower.includes('amd radeon(tm) graphics')
     ) {
       return assessment(name, vendor, 'partial_support', 15, [
         'AMD Vega APUs require NootedRed and remain lower-confidence than native display paths.',

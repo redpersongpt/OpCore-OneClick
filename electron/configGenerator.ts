@@ -15,7 +15,7 @@ import {
 export interface HardwareProfile {
     cpu: string;
     architecture: 'Intel' | 'AMD' | 'Apple Silicon' | 'Unknown';
-    generation: 'Penryn' | 'Bulldozer' | 'Sandy Bridge' | 'Ivy Bridge' | 'Haswell' | 'Broadwell' | 'Skylake' | 'Kaby Lake' | 'Coffee Lake' | 'Comet Lake' | 'Rocket Lake' | 'Alder Lake' | 'Raptor Lake' | 'Ivy Bridge-E' | 'Haswell-E' | 'Broadwell-E' | 'Cascade Lake-X' | 'Ryzen' | 'Threadripper' | 'Apple Silicon' | 'Unknown';
+    generation: 'Penryn' | 'Nehalem' | 'Arrandale' | 'Clarkdale' | 'Westmere' | 'Wolfdale' | 'Yorkfield' | 'Bulldozer' | 'Sandy Bridge' | 'Ivy Bridge' | 'Haswell' | 'Broadwell' | 'Skylake' | 'Kaby Lake' | 'Ice Lake' | 'Coffee Lake' | 'Comet Lake' | 'Rocket Lake' | 'Alder Lake' | 'Raptor Lake' | 'Ivy Bridge-E' | 'Haswell-E' | 'Broadwell-E' | 'Cascade Lake-X' | 'Ryzen' | 'Threadripper' | 'Apple Silicon' | 'Unknown';
     coreCount?: number;
     gpu: string;
     gpuDevices?: HardwareGpuDeviceSummary[];

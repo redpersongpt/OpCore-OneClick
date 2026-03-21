@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { motion } from 'motion/react';
-import { Check, Clock, Usb, WifiOff, HardDrive, Cpu, Download, Shield, PieChart } from 'lucide-react';
+import { Check, Clock, Usb, WifiOff, HardDrive, Cpu, Shield } from 'lucide-react';
 
 interface Props {
   onContinue: () => void;
@@ -78,9 +78,8 @@ const colorMap: Record<string, { bg: string; border: string; icon: string; check
 
 export default function PrereqStep({ onContinue }: Props) {
   const [checked, setChecked] = useState<Set<string>>(new Set());
-  const [targetMode, setTargetMode] = useState<'disk' | 'partition' | null>(null);
   const toggle = (id: string) => setChecked(p => { const n = new Set(p); n.has(id) ? n.delete(id) : n.add(id); return n; });
-  const allDone = REQUIREMENTS.every(r => checked.has(r.id)) && targetMode !== null;
+  const allDone = REQUIREMENTS.every(r => checked.has(r.id));
 
   return (
     <div className="flex flex-col h-full space-y-5">
@@ -158,32 +157,9 @@ export default function PrereqStep({ onContinue }: Props) {
           );
         })}
 
-        {/* Target Drive Selection */}
-        <div className="mt-4 pt-4 border-t border-white/10">
-          <div className="text-sm font-bold text-white mb-3 flex items-center gap-2 px-1">
-            <Download className="w-4 h-4 text-indigo-400" /> Target Installation Mode
-          </div>
-          <div className="grid grid-cols-2 gap-3">
-            <button 
-              onClick={() => setTargetMode('disk')}
-              className={`p-4 rounded-2xl border text-left transition-all ${targetMode === 'disk' ? 'bg-indigo-500/20 border-indigo-500/50' : 'bg-white/5 border-white/10 hover:bg-white/10'}`}>
-              <div className="font-bold text-sm text-white flex items-center gap-2">
-                <HardDrive className="w-4 h-4 text-indigo-400" /> Full Disk Wipe
-              </div>
-              <div className="text-xs text-white/50 mt-1.5 leading-relaxed">
-                <span className="text-indigo-300 font-medium">Recommended.</span> Wipes an entire drive. Bypasses all EFI size conflicts. Safest option.
-              </div>
-            </button>
-            <button 
-              onClick={() => setTargetMode('partition')}
-              className={`p-4 rounded-2xl border text-left transition-all ${targetMode === 'partition' ? 'bg-amber-500/20 border-amber-500/50' : 'bg-white/5 border-white/10 hover:bg-white/10'}`}>
-              <div className="font-bold text-sm text-white flex items-center gap-2">
-                <PieChart className="w-4 h-4 text-amber-400" /> Share Existing Disk
-              </div>
-              <div className="text-xs text-white/50 mt-1.5 leading-relaxed">
-                <span className="text-amber-400 font-medium">Advanced.</span> You must manually expand your Windows EFI partition to 200MB+ before installing.
-              </div>
-            </button>
+        <div className="mt-4 pt-4 border-t border-white/10 px-1">
+          <div className="text-xs text-white/45 leading-relaxed">
+            You will choose USB flash or local partition later in the setup flow.
           </div>
         </div>
       </div>

@@ -2,6 +2,7 @@ import { exec } from 'child_process';
 import util from 'util';
 import os from 'os';
 import fs from 'fs';
+import { inferLaptopFormFactor } from './formFactor.js';
 
 const execPromise = util.promisify(exec);
 
@@ -72,17 +73,12 @@ function resolveCpuVendor(vendorStr: string, rawName: string): { vendor: string;
   return { vendor: vendorStr || 'Unknown', vendorName: 'Unknown' };
 }
 
-// ── Laptop chassis types (SMBIOS) ─────────────────────────────────────────────
-
-const LAPTOP_CHASSIS = new Set([8, 9, 10, 11, 12, 14, 18, 21, 31, 32]);
-const LAPTOP_CPU_SUFFIX = /(U|Y|HQ|MQ|G[1-7]|H|HS|HX|P)\s*(?:CPU|@|\b)/i;
-
 // ── Windows ───────────────────────────────────────────────────────────────────
 
 export async function detectWindowsHardware(): Promise<DetectedHardware> {
   const ps = (cmd: string) => execPromise(`powershell -NoProfile -Command "${cmd}"`).catch(() => ({ stdout: '' }));
 
-  const [cpuRes, cpuVendorRes, gpuRes, boardRes, chassisRes, manufRes, coresRes] = await Promise.all([
+  const [cpuRes, cpuVendorRes, gpuRes, boardRes, chassisRes, manufRes, modelRes, batteryRes, coresRes] = await Promise.all([
     ps('(Get-CimInstance CIM_Processor).Name'),
     ps('(Get-CimInstance CIM_Processor).Manufacturer'),
     // PNPDeviceID gives "PCI\\VEN_10DE&DEV_2484&..." — extract vendor+device IDs
@@ -90,6 +86,8 @@ export async function detectWindowsHardware(): Promise<DetectedHardware> {
     ps('Get-CimInstance Win32_BaseBoard | Select-Object Manufacturer, Product | ConvertTo-Json -Compress'),
     ps('(Get-CimInstance CIM_SystemEnclosure).ChassisTypes'),
     ps('(Get-CimInstance CIM_ComputerSystem).Manufacturer'),
+    ps('(Get-CimInstance CIM_ComputerSystem).Model'),
+    ps('Get-CimInstance Win32_Battery | Select-Object -First 1 | ConvertTo-Json -Compress'),
     ps('(Get-CimInstance CIM_Processor).NumberOfCores'),
   ]);
 
@@ -134,7 +132,12 @@ export async function detectWindowsHardware(): Promise<DetectedHardware> {
 
   // Chassis / laptop detection
   const chassisNums = (chassisRes.stdout.match(/\d+/g) ?? []).map(Number);
-  const isLaptop = chassisNums.some(n => LAPTOP_CHASSIS.has(n)) || LAPTOP_CPU_SUFFIX.test(cpuName);
+  const isLaptop = inferLaptopFormFactor({
+    cpuName,
+    chassisTypes: chassisNums,
+    modelName: modelRes.stdout.trim(),
+    batteryPresent: batteryRes.stdout.trim().length > 0 && batteryRes.stdout.trim() !== 'null',
+  });
 
   // VM detection
   const manuf = manufRes.stdout.trim().toLowerCase();
@@ -160,13 +163,14 @@ export async function detectWindowsHardware(): Promise<DetectedHardware> {
 export async function detectLinuxHardware(): Promise<DetectedHardware> {
   const run = (cmd: string) => execPromise(cmd).catch(() => ({ stdout: '' }));
 
-  const [cpuRes, gpuRes, boardVendorRes, boardModelRes, chassisRes, sysVendorRes, memRes] = await Promise.all([
+  const [cpuRes, gpuRes, boardVendorRes, boardModelRes, chassisRes, sysVendorRes, batteryRes, memRes] = await Promise.all([
     run('cat /proc/cpuinfo'),
     run('lspci -nn 2>/dev/null | grep -iE "VGA|3D|Display"'),
     run('cat /sys/class/dmi/id/board_vendor 2>/dev/null'),
     run('cat /sys/class/dmi/id/board_name 2>/dev/null || cat /sys/class/dmi/id/product_name 2>/dev/null'),
     run('cat /sys/class/dmi/id/chassis_type 2>/dev/null'),
     run('cat /sys/class/dmi/id/sys_vendor 2>/dev/null'),
+    run('ls /sys/class/power_supply 2>/dev/null | grep -E "^BAT"'),
     run('grep MemTotal /proc/meminfo'),
   ]);
 
@@ -195,7 +199,12 @@ export async function detectLinuxHardware(): Promise<DetectedHardware> {
 
   // Chassis / laptop
   const chassisType = parseInt(chassisRes.stdout.trim()) || 0;
-  const isLaptop = LAPTOP_CHASSIS.has(chassisType) || LAPTOP_CPU_SUFFIX.test(cpuName);
+  const isLaptop = inferLaptopFormFactor({
+    cpuName,
+    chassisTypes: chassisType ? [chassisType] : [],
+    modelName: boardModelRes.stdout.trim(),
+    batteryPresent: batteryRes.stdout.trim().length > 0,
+  });
 
   // VM
   const sysVendor = sysVendorRes.stdout.trim().toLowerCase();

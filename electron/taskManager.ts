@@ -79,6 +79,10 @@ interface ThrottleState {
   lastPct: number;
 }
 
+function isTerminalStatus(status: TaskStatus): boolean {
+  return status === 'complete' || status === 'failed' || status === 'cancelled';
+}
+
 export function createTaskRegistry(
   pushFn: (p: TaskUpdatePayload) => void,
   logger: ILogger
@@ -134,17 +138,31 @@ export function createTaskRegistry(
     return token;
   }
 
-  const TERMINAL: TaskStatus[] = ['complete', 'failed', 'cancelled'];
+  function abortTask(taskId: string): TaskState | undefined {
+    const tokenState = tokens.get(taskId);
+    if (tokenState) {
+      tokenState.aborted = true;
+      tokenState.processes.forEach(p => {
+        try { p.kill('SIGKILL'); } catch (_) {}
+      });
+      tokenState.processes.clear();
+    }
+    tokens.delete(taskId);
+    throttleMap.delete(taskId);
+    return tasks.get(taskId);
+  }
 
   function updateProgress(taskId: string, progress: TaskProgress): void {
     const state = tasks.get(taskId);
     if (!state) return;
 
-    if (TERMINAL.includes(state.status)) {
-      throw new Error(
-        `updateProgress called on terminal task ${taskId} (status: ${state.status}) — ` +
-        `check that the task has not already completed before emitting progress`
-      );
+    if (isTerminalStatus(state.status)) {
+      logger.warn('task_manager', `Ignoring late progress for terminal task ${taskId}`, {
+        status: state.status,
+        kind: state.kind,
+        progressKind: progress.kind,
+      });
+      return;
     }
 
     // Per-kind throttle for recovery-download
@@ -170,48 +188,37 @@ export function createTaskRegistry(
   function complete(taskId: string): void {
     const state = tasks.get(taskId);
     if (!state) return;
+    if (isTerminalStatus(state.status)) return;
     state.status = 'complete';
     state.endedAt = Date.now();
     state.lastUpdateAt = Date.now();
     pushFn({ task: { ...state } });
     logger.timeline('task_complete', taskId, {});
-    tokens.delete(taskId);
-    throttleMap.delete(taskId);
+    abortTask(taskId);
   }
 
   function fail(taskId: string, error: string): void {
     const state = tasks.get(taskId);
     if (!state) return;
+    if (isTerminalStatus(state.status)) return;
     state.status = 'failed';
     state.error = error;
     state.endedAt = Date.now();
     state.lastUpdateAt = Date.now();
     pushFn({ task: { ...state } });
     logger.timeline('task_failed', taskId, { error });
-    tokens.delete(taskId);
-    throttleMap.delete(taskId);
+    abortTask(taskId);
   }
 
   function cancel(taskId: string): boolean {
-    const tokenState = tokens.get(taskId);
-    if (!tokenState) return false;
-    
-    tokenState.aborted = true;
-    tokenState.processes.forEach(p => {
-      try { p.kill('SIGKILL'); } catch (_) {}
-    });
-    tokenState.processes.clear();
-
     const state = tasks.get(taskId);
-    if (state) {
-      state.status = 'cancelled';
-      state.endedAt = Date.now();
-      state.lastUpdateAt = Date.now();
-      pushFn({ task: { ...state } });
-    }
+    if (!state || isTerminalStatus(state.status)) return false;
+    abortTask(taskId);
+    state.status = 'cancelled';
+    state.endedAt = Date.now();
+    state.lastUpdateAt = Date.now();
+    pushFn({ task: { ...state } });
     logger.timeline('task_cancelled', taskId, {});
-    tokens.delete(taskId);
-    throttleMap.delete(taskId);
     return true;
   }
 
@@ -224,12 +231,13 @@ export function createTaskRegistry(
           lastUpdate: new Date(state.lastUpdateAt).toISOString()
         });
         logger.timeline('watchdog_trigger', state.taskId, { kind: state.kind, lastUpdate: state.lastUpdateAt });
-        // Use cancel instead of fail so that tokens are marked aborted
-        cancel(state.taskId);
-        // Overwrite status to failed with a specific message
+        abortTask(state.taskId);
         state.status = 'failed';
         state.error = `Operation stalled: no progress received for 60 seconds. Please check your connection or try again.`;
+        state.endedAt = Date.now();
+        state.lastUpdateAt = Date.now();
         pushFn({ task: { ...state } });
+        logger.timeline('task_failed', state.taskId, { error: state.error });
       }
     }
   }, 10_000);

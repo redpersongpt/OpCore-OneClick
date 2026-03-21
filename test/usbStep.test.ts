@@ -27,6 +27,13 @@ describe('UsbStep drive classification', () => {
     assert.equal(result.reasons[0]?.code, 'UNVERIFIED');
   });
 
+  test('blocks drives whose size cannot be determined', () => {
+    const result = classifyDrive(makeDrive({ size: 'Unknown' }), true, { allowUnverifiedSelection: true });
+
+    assert.equal(result.tier, 'blocked');
+    assert.equal(result.reasons[0]?.code, 'DEVICE_SIZE_UNKNOWN');
+  });
+
   test('still blocks internal or system disks after verification', () => {
     const result = classifyDrive(makeDrive({
       isSystemDisk: true,

@@ -101,6 +101,8 @@ export default function ReportStep({
   onContinue,
 }: ReportStepProps) {
   const [showInterpretation, setShowInterpretation] = useState(false);
+  const [busyAction, setBusyAction] = useState<'import' | 'save' | 'export' | 'scan' | null>(null);
+  const [actionError, setActionError] = useState<string | null>(null);
 
   const isBadNVMe = profile.motherboard.toLowerCase().includes('pm981') || profile.motherboard.toLowerCase().includes('pm991') || profile.motherboard.toLowerCase().includes('2200s') || profile.motherboard.toLowerCase().includes('600p');
   const gpuDevices = getProfileGpuDevices(profile);
@@ -138,6 +140,19 @@ export default function ReportStep({
     ? 'Restored planning profile'
     : 'Live hardware scan';
 
+  const runAction = async (action: 'import' | 'save' | 'export' | 'scan', runner: () => Promise<void> | void) => {
+    if (busyAction) return;
+    setBusyAction(action);
+    setActionError(null);
+    try {
+      await runner();
+    } catch (error: any) {
+      setActionError(error?.message || 'That action could not be completed.');
+    } finally {
+      setBusyAction(null);
+    }
+  };
+
   return (
     <div className="h-full flex flex-col space-y-5">
       <div className="flex-shrink-0 flex items-start justify-between">
@@ -154,25 +169,28 @@ export default function ReportStep({
         </div>
         <div className="flex items-center gap-2">
           <button
-            onClick={() => void onImportProfile()}
-            className="px-3 py-2 rounded-xl border border-white/10 bg-white/4 text-[11px] font-semibold text-white/70 hover:text-white hover:bg-white/8 transition-colors cursor-pointer flex items-center gap-2"
+            onClick={() => void runAction('import', onImportProfile)}
+            disabled={busyAction !== null}
+            className="px-3 py-2 rounded-xl border border-white/10 bg-white/4 text-[11px] font-semibold text-white/70 hover:text-white hover:bg-white/8 transition-colors cursor-pointer flex items-center gap-2 disabled:cursor-not-allowed disabled:opacity-50"
           >
             <Upload className="w-3.5 h-3.5" />
-            Import Profile
+            {busyAction === 'import' ? 'Importing…' : 'Import Profile'}
           </button>
           <button
-            onClick={() => void onSaveProfile()}
-            className="px-3 py-2 rounded-xl border border-white/10 bg-white/4 text-[11px] font-semibold text-white/70 hover:text-white hover:bg-white/8 transition-colors cursor-pointer flex items-center gap-2"
+            onClick={() => void runAction('save', onSaveProfile)}
+            disabled={busyAction !== null}
+            className="px-3 py-2 rounded-xl border border-white/10 bg-white/4 text-[11px] font-semibold text-white/70 hover:text-white hover:bg-white/8 transition-colors cursor-pointer flex items-center gap-2 disabled:cursor-not-allowed disabled:opacity-50"
           >
             <Save className="w-3.5 h-3.5" />
-            Save Profile
+            {busyAction === 'save' ? 'Saving…' : 'Save Profile'}
           </button>
           <button
-            onClick={() => void onExportProfile()}
-            className="px-3 py-2 rounded-xl border border-white/10 bg-white/4 text-[11px] font-semibold text-white/70 hover:text-white hover:bg-white/8 transition-colors cursor-pointer flex items-center gap-2"
+            onClick={() => void runAction('export', onExportProfile)}
+            disabled={busyAction !== null}
+            className="px-3 py-2 rounded-xl border border-white/10 bg-white/4 text-[11px] font-semibold text-white/70 hover:text-white hover:bg-white/8 transition-colors cursor-pointer flex items-center gap-2 disabled:cursor-not-allowed disabled:opacity-50"
           >
             <Download className="w-3.5 h-3.5" />
-            Export Profile
+            {busyAction === 'export' ? 'Exporting…' : 'Export Profile'}
           </button>
           <button
             onClick={() => void onRunSimulation()}
@@ -184,6 +202,12 @@ export default function ReportStep({
           </button>
         </div>
       </div>
+
+      {actionError && (
+        <div className="flex-shrink-0 rounded-2xl border border-red-500/20 bg-red-500/8 px-4 py-3 text-xs text-red-300/80">
+          {actionError}
+        </div>
+      )}
 
       <div className={`flex-shrink-0 p-4 rounded-2xl border ${planningOnly ? 'bg-amber-500/6 border-amber-500/20' : 'bg-blue-500/5 border-blue-500/12'} space-y-2`}>
         <div className="flex items-center justify-between gap-4">
@@ -207,10 +231,11 @@ export default function ReportStep({
         {planningOnly && (
           <div className="flex items-center gap-3 pt-1">
             <button
-              onClick={() => void onRunLiveScan()}
-              className="px-4 py-2 rounded-xl bg-blue-600 text-white text-xs font-bold hover:bg-blue-500 transition-colors cursor-pointer"
+              onClick={() => void runAction('scan', onRunLiveScan)}
+              disabled={busyAction !== null}
+              className="px-4 py-2 rounded-xl bg-blue-600 text-white text-xs font-bold hover:bg-blue-500 transition-colors cursor-pointer disabled:cursor-not-allowed disabled:opacity-60"
             >
-              Run Live Scan
+              {busyAction === 'scan' ? 'Scanning…' : 'Run Live Scan'}
             </button>
             <span className="text-[11px] text-amber-200/55">
               Planning remains available, but destructive prerequisites stay locked until live scan state exists in main.
@@ -419,10 +444,11 @@ export default function ReportStep({
           </button>
         ) : planningOnly ? (
           <button
-            onClick={() => void onRunLiveScan()}
-            className="px-8 py-3 bg-amber-600/20 text-amber-200 rounded-xl text-sm font-bold border border-amber-500/20 hover:bg-amber-600/25 transition-colors cursor-pointer"
+            onClick={() => void runAction('scan', onRunLiveScan)}
+            disabled={busyAction !== null}
+            className="px-8 py-3 bg-amber-600/20 text-amber-200 rounded-xl text-sm font-bold border border-amber-500/20 hover:bg-amber-600/25 transition-colors cursor-pointer disabled:cursor-not-allowed disabled:opacity-60"
           >
-            Live Scan Required
+            {busyAction === 'scan' ? 'Scanning…' : 'Live Scan Required'}
           </button>
         ) : (
           <button

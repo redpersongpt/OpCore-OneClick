@@ -142,8 +142,7 @@ declare global {
       getDiskInfo: (device: string) => Promise<RendererDiskInfo>;
       runPreflight: () => Promise<{ ok: boolean; issues: Array<{ severity: string; message: string }>; adminPrivileges: boolean; binaries: Record<string, boolean>; freeSpaceMB: number }>;
       // Task manager
-      onTaskUpdate: (cb: (payload: { task: import('../electron/taskManager').TaskState }) => void) => void;
-      offTaskUpdate: () => void;
+      onTaskUpdate: (cb: (payload: { task: import('../electron/taskManager').TaskState }) => void) => () => void;
       taskList: () => Promise<import('../electron/taskManager').TaskState[]>;
       taskCancel: (taskId: string) => Promise<boolean>;
       // Enhanced logging
@@ -260,6 +259,8 @@ export default function App() {
   const [globalError, setGlobalError] = useState<string | null>(null);
   const [globalNotice, setGlobalNotice] = useState<string | null>(null);
   const lastRecovSaveRef = useRef(0);
+  const latestProfileRef = useRef<HardwareProfile | null>(null);
+  const latestEfiPathRef = useRef<string | null>(null);
   const isDeployingRef = useRef(false);
   const isScanningRef = useRef(false);
   const usbRefreshRequestRef = useRef(0);
@@ -308,6 +309,14 @@ export default function App() {
       manualVerificationNeeded: interpretation.manualVerificationNeeded,
     };
   };
+
+  useEffect(() => {
+    latestProfileRef.current = profile;
+  }, [profile]);
+
+  useEffect(() => {
+    latestEfiPathRef.current = efiPath;
+  }, [efiPath]);
 
   // ── Suggestion Engine State ──────────────────────────────────
   const [lastSuggestion, setLastSuggestion] = useState<{ code: string; category: string; title: string } | null>(null);
@@ -1102,16 +1111,18 @@ export default function App() {
       const now = Date.now();
       if (now - lastRecovSaveRef.current > 5000) {
         lastRecovSaveRef.current = now;
+        const latestProfile = latestProfileRef.current;
+        const latestEfiPath = latestEfiPathRef.current;
         try {
           window.electron.saveState({
             currentStep: 'recovery-download',
-            profile,
+            profile: latestProfile,
             timestamp: now,
-            efiPath,
+            efiPath: latestEfiPath ?? undefined,
             recoveryDownloadOffset: p.bytesDownloaded ?? recovOffset,
             recoveryDmgDest: persistedDmgDest ?? undefined,
             recoveryClDest: persistedClDest ?? undefined,
-            recoveryTargetOS: profile?.targetOS || 'macOS Sequoia 15',
+            recoveryTargetOS: latestProfile?.targetOS || 'macOS Sequoia 15',
           });
         } catch {}
       }

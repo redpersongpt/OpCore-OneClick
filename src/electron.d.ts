@@ -55,8 +55,7 @@ declare global {
       getDownloadResumeState: () => Promise<any>;
       runPreflight: () => Promise<any>;
       getDiskInfo: (device: string) => Promise<any>;
-      onTaskUpdate: (callback: (payload: any) => void) => void;
-      offTaskUpdate: () => void;
+      onTaskUpdate: (callback: (payload: any) => void) => () => void;
       taskList: () => Promise<any[]>;
       taskCancel: (taskId: string) => Promise<void>;
       getLogTail: (n: number) => Promise<any[]>;

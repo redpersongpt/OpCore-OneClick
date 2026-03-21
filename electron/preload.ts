@@ -118,10 +118,10 @@ try {
 
     // Task manager — unified task updates
     onTaskUpdate: (callback: (payload: import('./taskManager').TaskUpdatePayload) => void) => {
-      ipcRenderer.removeAllListeners('task:update');
-      ipcRenderer.on('task:update', (_event, data) => callback(data));
+      const listener = (_event: Electron.IpcRendererEvent, data: import('./taskManager').TaskUpdatePayload) => callback(data);
+      ipcRenderer.on('task:update', listener);
+      return () => ipcRenderer.removeListener('task:update', listener);
     },
-    offTaskUpdate: () => ipcRenderer.removeAllListeners('task:update'),
     taskList: () => ipcRenderer.invoke('task:list'),
     taskCancel: (taskId: string) => ipcRenderer.invoke('task:cancel', taskId),
 

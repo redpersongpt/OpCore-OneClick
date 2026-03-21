@@ -43,6 +43,7 @@ export function classifyDrive(
   let unreliable = false;
 
   const sizeGB = parseSizeGB(drive.size);
+  const hasKnownSize = Number.isFinite(sizeGB);
   
   // Unreliable markers
   const nameLower = drive.name.toLowerCase();
@@ -50,7 +51,16 @@ export function classifyDrive(
     unreliable = true;
   }
 
-  if (requireFullSize && sizeGB > 0 && sizeGB < 14.5) {
+  if (requireFullSize && !hasKnownSize) {
+    reasons.push({
+      code: 'DEVICE_SIZE_UNKNOWN',
+      label: 'Unknown drive size',
+      explanation: 'The drive size could not be verified. Re-scan the device before flashing.',
+      howToFix: 'Reconnect the USB drive, refresh the list, or choose another drive with a clearly detected size.',
+    });
+  }
+
+  if (requireFullSize && hasKnownSize && sizeGB < 14.5) {
     reasons.push({
       code: 'DEVICE_TOO_SMALL',
       label: 'Drive too small',
@@ -96,7 +106,7 @@ export function classifyDrive(
   }
 
   // Hard block: system disk, confirmed non-removable, MBR, or too small
-  const hardBlock = reasons.some(r => r.code === 'SYSTEM_DISK' || r.code === 'NOT_REMOVABLE' || r.code === 'MBR_PARTITION_TABLE' || r.code === 'DEVICE_TOO_SMALL');
+  const hardBlock = reasons.some(r => r.code === 'SYSTEM_DISK' || r.code === 'NOT_REMOVABLE' || r.code === 'MBR_PARTITION_TABLE' || r.code === 'DEVICE_TOO_SMALL' || r.code === 'DEVICE_SIZE_UNKNOWN');
   if (hardBlock) return { tier: 'blocked', reasons, unreliable };
 
   // Disk info not yet loaded — show as suspicious until confirmed
@@ -144,8 +154,9 @@ function formatPartitionTable(pt: 'gpt' | 'mbr' | 'unknown' | undefined): string
 
 function parseSizeGB(sizeStr: string): number {
   const match = sizeStr.match(/([\d.]+)\s*([KMGT]i?B?|B)?/i);
-  if (!match) return 0;
+  if (!match) return Number.NaN;
   const val = parseFloat(match[1]);
+  if (Number.isNaN(val)) return Number.NaN;
   const unit = (match[2] || '').toUpperCase();
   if (unit.startsWith('T')) return val * 1000;
   if (unit.startsWith('G')) return val;
@@ -290,6 +301,7 @@ function DriveCard({
   drive,
   selected,
   onSelect,
+  loading,
   beginnerBlocked,
   advancedAckGranted,
   requireFullSize,
@@ -298,6 +310,7 @@ function DriveCard({
   drive: DriveInfo;
   selected: boolean;
   onSelect: (dev: string) => void;
+  loading?: boolean;
   beginnerBlocked: boolean;
   advancedAckGranted: boolean;
   requireFullSize: boolean;
@@ -309,7 +322,7 @@ function DriveCard({
 
   // In beginner mode: blocked tier is always blocked; suspicious tier is blocked
   // unless the user has granted typed acknowledgement for this specific drive.
-  const isBlocked = tier === 'blocked' || (beginnerBlocked && !advancedAckGranted);
+  const isBlocked = !!loading || tier === 'blocked' || (beginnerBlocked && !advancedAckGranted);
   const isSuspicious = tier === 'suspicious';
 
   const tierStyles = {
@@ -458,10 +471,11 @@ interface AdvancedDriveRowProps {
   ackGranted: boolean;
   onAckGranted: () => void;
   requireFullSize: boolean;
+  loading?: boolean;
   key?: string;
 }
 
-function AdvancedDriveRow({ drive, selected, onSelect, ackGranted, onAckGranted, requireFullSize }: AdvancedDriveRowProps) {
+function AdvancedDriveRow({ drive, selected, onSelect, ackGranted, onAckGranted, requireFullSize, loading = false }: AdvancedDriveRowProps) {
   const [ackText, setAckText] = useState('');
   const ackValid = ackText.trim() === SUSPICIOUS_ACK_TEXT;
 
@@ -489,6 +503,7 @@ function AdvancedDriveRow({ drive, selected, onSelect, ackGranted, onAckGranted,
             drive={drive}
             selected={selected}
             onSelect={onSelect}
+            loading={loading}
             beginnerBlocked={false}
             advancedAckGranted={true}
             requireFullSize={requireFullSize}
@@ -509,10 +524,10 @@ function AdvancedDriveRow({ drive, selected, onSelect, ackGranted, onAckGranted,
             className="w-full px-3 py-2 bg-black/40 border border-white/10 rounded-xl text-xs font-mono text-white placeholder-white/15 focus:outline-none focus:border-amber-500/40 transition-colors"
           />
           <button
-            disabled={!ackValid}
+            disabled={!ackValid || loading}
             onClick={onAckGranted}
             className={`w-full py-2.5 rounded-xl text-xs font-bold transition-all ${
-              ackValid
+              ackValid && !loading
                 ? 'bg-amber-500/20 border border-amber-500/30 text-amber-300 hover:bg-amber-500/30 cursor-pointer'
                 : 'bg-white/4 border border-white/8 text-white/20 cursor-not-allowed'
             }`}
@@ -819,6 +834,7 @@ export default function UsbStep({
   // but show the "no longer detected" warning (handled by driveStillPresent).
 
   const handleSelect = (dev: string) => {
+    if (loading) return;
     onSelect(dev);
     // If a confirm callback is wired, immediately transition to the review panel
     if (onConfirmDrive) {
@@ -920,6 +936,7 @@ export default function UsbStep({
               drive={drive}
               selected={selected === drive.device}
               onSelect={handleSelect}
+              loading={loading}
               beginnerBlocked={false}
               advancedAckGranted={false}
               requireFullSize={requireFullSize}
@@ -934,6 +951,7 @@ export default function UsbStep({
               drive={drive}
               selected={false}
               onSelect={handleSelect}
+              loading={loading}
               beginnerBlocked={true}
               advancedAckGranted={false}
               requireFullSize={requireFullSize}
@@ -948,6 +966,7 @@ export default function UsbStep({
               drive={drive}
               selected={selected === drive.device}
               onSelect={handleSelect}
+              loading={loading}
               beginnerBlocked={false}
               advancedAckGranted={false}
               requireFullSize={requireFullSize}
@@ -1003,6 +1022,7 @@ export default function UsbStep({
                           ackGranted={ackGranted.has(drive.device)}
                           onAckGranted={() => setAckGranted(prev => new Set([...prev, drive.device]))}
                           requireFullSize={requireFullSize}
+                          loading={loading}
                         />
                       ))}
                     </div>

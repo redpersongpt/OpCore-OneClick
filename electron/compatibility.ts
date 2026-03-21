@@ -77,7 +77,8 @@ function capFromCpu(profile: HardwareProfile): number | null {
   const cpu = profile.cpu.toLowerCase();
 
   if (profile.architecture === 'Intel') {
-    if (profile.generation === 'Penryn') return 10.13;
+    if (['Penryn', 'Wolfdale', 'Yorkfield'].includes(profile.generation)) return 10.13;
+    if (['Nehalem', 'Arrandale', 'Clarkdale', 'Westmere'].includes(profile.generation)) return 11;
     if (['Sandy Bridge', 'Ivy Bridge', 'Unknown'].includes(profile.generation)) return 12;
     if (['Haswell', 'Broadwell', 'Haswell-E', 'Broadwell-E'].includes(profile.generation)) return 12;
     if (cpu.includes('pentium') || cpu.includes('celeron') || cpu.includes('atom')) return 12;
@@ -137,7 +138,7 @@ function setBlocked(report: CompatibilityReport, explanation: string): Compatibi
 function isOlderIntelLaptop(profile: HardwareProfile): boolean {
   return profile.architecture === 'Intel'
     && profile.isLaptop
-    && ['Penryn', 'Sandy Bridge', 'Ivy Bridge', 'Haswell', 'Broadwell', 'Unknown'].includes(profile.generation);
+    && ['Penryn', 'Nehalem', 'Arrandale', 'Clarkdale', 'Westmere', 'Sandy Bridge', 'Ivy Bridge', 'Haswell', 'Broadwell', 'Unknown'].includes(profile.generation);
 }
 
 function buildCommunityNote(evidence: CommunityEvidenceSummary | null): string {
@@ -470,7 +471,7 @@ function buildMostLikelyFailurePoints(
 
 function hasLegacyIntelPlanningValue(profile: HardwareProfile): boolean {
   return profile.architecture === 'Intel'
-    && ['Unknown', 'Penryn', 'Sandy Bridge', 'Ivy Bridge', 'Haswell', 'Broadwell', 'Skylake', 'Kaby Lake'].includes(profile.generation);
+    && ['Unknown', 'Penryn', 'Nehalem', 'Arrandale', 'Clarkdale', 'Westmere', 'Wolfdale', 'Yorkfield', 'Sandy Bridge', 'Ivy Bridge', 'Haswell', 'Broadwell', 'Skylake', 'Kaby Lake'].includes(profile.generation);
 }
 
 export function checkCompatibility(

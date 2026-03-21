@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import {
   CheckCircle2, XCircle, AlertTriangle, Loader2, RefreshCcw,
@@ -320,7 +320,7 @@ export default function PrecheckStep({ onContinue }: Props) {
   const [items, setItems] = useState<PrecheckItem[]>([]);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
-  const runChecks = async () => {
+  const runChecks = useCallback(async () => {
     setLoadState('running');
     setErrorMsg(null);
 
@@ -358,16 +358,16 @@ export default function PrecheckStep({ onContinue }: Props) {
         setErrorMsg(e?.message ?? 'Unknown error during system checks.');
       }
     }
-  };
+  }, []);
 
   useEffect(() => {
-    runChecks();
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+    void runChecks();
+  }, [runChecks]);
 
   const hasBlock = items.some(i => i.status === 'block');
   const hasWarn  = items.some(i => i.status === 'warn');
 
-  const canContinue = loadState === 'done' && !hasBlock;
+  const canContinue = (loadState === 'done' || loadState === 'timeout') && !hasBlock;
 
   // Group items
   const groupedItems = GROUP_ORDER.map(groupName => ({
@@ -397,7 +397,7 @@ export default function PrecheckStep({ onContinue }: Props) {
 
       {/* Top summary banner */}
       <AnimatePresence>
-        {loadState === 'done' && (
+        {(loadState === 'done' || loadState === 'timeout') && (
           <motion.div
             initial={{ opacity: 0, y: 6 }}
             animate={{ opacity: 1, y: 0 }}
@@ -428,17 +428,6 @@ export default function PrecheckStep({ onContinue }: Props) {
             </span>
           </motion.div>
         )}
-        {loadState === 'timeout' && (
-          <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}
-            className="flex-shrink-0 flex items-start gap-3 px-4 py-3 rounded-2xl bg-amber-500/8 border border-amber-500/20">
-            <AlertTriangle className="w-4 h-4 text-amber-400 flex-shrink-0 mt-0.5" />
-            <div className="text-xs text-amber-300/80 leading-relaxed">
-              <span className="font-bold">System check timed out.</span>{' '}
-              One or more checks did not return a result within {STEP_LOAD_TIMEOUT_MS / 1000} seconds.
-              Click Re-run to try again.
-            </div>
-          </motion.div>
-        )}
         {loadState === 'error' && errorMsg && (
           <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}
             className="flex-shrink-0 flex items-start gap-3 px-4 py-3 rounded-2xl bg-red-500/8 border border-red-500/20">
@@ -452,7 +441,7 @@ export default function PrecheckStep({ onContinue }: Props) {
 
       {/* Grouped check list */}
       <div className="flex-1 overflow-y-auto custom-scrollbar space-y-5 pr-1">
-        {loadState === 'running' && groupedItems.length === 0 ? (
+        {loadState === 'running' ? (
           // Show flat running list while waiting for groups to populate
           <div className="space-y-2">
             {items.map((item, i) => (

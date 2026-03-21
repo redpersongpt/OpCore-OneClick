@@ -172,6 +172,46 @@ export const COMMUNITY_KNOWLEDGE: CommunityIssue[] = [
     source: 'Dortania Post-Install Guide',
     severity: 'tip',
   },
+
+  // ── Storage ───────────────────────────────────────────────────────────────
+  {
+    id: 'nvme-samsung',
+    hardware: { formFactor: 'any' },
+    title: 'Samsung PM981/PM991 NVMe Kernel Panics',
+    description: 'Samsung PM981, PM991, and some other OEM NVMe drives are known to cause random kernel panics in macOS.',
+    fix: 'Use NVMeFix.kext. If issues persist, the drive may need to be replaced with a macOS-compatible one (e.g., WD SN850X). Avoid Samsung OEM drives if possible.',
+    source: 'Dortania NVMe Guide',
+    severity: 'critical',
+  },
+  {
+    id: 'nvme-micron',
+    hardware: { formFactor: 'any' },
+    title: 'Micron/Crucial NVMe slow boot times',
+    description: 'Some Micron 2200S and Crucial P2 drives experience extremely slow boot times or controller freezes.',
+    fix: 'Ensure the NVMeFix kext is loaded. If the drive continues to stall or freeze during boot, it may require replacement.',
+    source: 'Dortania NVMe Guide',
+    severity: 'common_fix',
+  },
+
+  // ── Network ───────────────────────────────────────────────────────────────
+  {
+    id: 'ethernet-i225',
+    hardware: { formFactor: 'desktop', cpuGen: ['Comet Lake', 'Rocket Lake', 'Alder Lake', 'Raptor Lake'] },
+    title: 'Intel I225-V Ethernet not working',
+    description: 'The Intel I225-V 2.5GbE controller needs specific boot arguments or kexts to work in macOS Monterey and later.',
+    fix: 'Use AppleIGC.kext for macOS Monterey and newer versions to ensure reliable connectivity.',
+    source: 'Dortania Ethernet Guide',
+    severity: 'common_fix',
+  },
+  {
+    id: 'wifi-broadcom-sonoma',
+    hardware: { formFactor: 'any' },
+    title: 'Broadcom Wi-Fi broken in macOS Sonoma',
+    description: 'Apple removed support for older Broadcom Wi-Fi cards (like BCM94360NG) in macOS Sonoma 14.',
+    fix: 'Use OpenCore Legacy Patcher (OCLP) to apply root patches for modern Broadcom Wi-Fi, or switch to Intel Wi-Fi via AirportItlwm if you prefer an unpatched system.',
+    source: 'OpenCore Legacy Patcher Documentation',
+    severity: 'critical',
+  }
 ];
 
 /** Find relevant community issues for a given hardware profile. */
