@@ -3,7 +3,7 @@ import { motion, AnimatePresence } from 'motion/react';
 import {
   CheckCircle, Usb, Search, Box, Download, Settings, ChevronRight,
   HardDrive, ShieldCheck, ShieldAlert, Check, Info, AlertTriangle,
-  X, HelpCircle, Package, RefreshCcw, ChevronDown, ChevronLeft, ArrowUpRight
+  X, HelpCircle, Package, RefreshCcw, ChevronDown, ChevronLeft
 } from 'lucide-react';
 import BrandIcon from './components/BrandIcon';
 import { getBIOSSettings, getRequiredResources, getSMBIOSForProfile, type HardwareProfile, type BIOSConfig } from '../electron/configGenerator';
@@ -90,6 +90,10 @@ import type { EfiBackupPolicy } from '../electron/efiBackup';
 import type { ResourcePlan } from '../electron/resourcePlanner';
 import type { AppUpdateState as ElectronAppUpdateState } from '../electron/appUpdater';
 import {
+  canRestoreLatestScannedArtifact,
+  reconcileHardwareScanProfile,
+} from '../electron/hardwareProfileState';
+import {
   pickSelectedDiskInfo,
   shouldRetryDiskInfoLookup,
   toExpectedDiskIdentity,
@@ -97,6 +101,8 @@ import {
 } from './lib/diskIdentityState.js';
 import type { SafeSimulationResult } from '../electron/safeSimulation';
 import type { PublicDiagnosticsSnapshot } from '../electron/releaseDiagnostics';
+import UpdaterPanel from './components/UpdaterPanel';
+import { resolveScanSuccessStep, type ScanSuccessStep } from './lib/scanFlow';
 type KextFetchResult = { name: string; version: string; source?: 'github' | 'embedded' | 'failed' };
 
 declare global {
@@ -268,8 +274,10 @@ export default function App() {
   const lastRecovSaveRef = useRef(0);
   const latestProfileRef = useRef<HardwareProfile | null>(null);
   const latestEfiPathRef = useRef<string | null>(null);
+  const latestPlanningContextRef = useRef<PlanningProfileContext>(null);
   const isDeployingRef = useRef(false);
   const isScanningRef = useRef(false);
+  const scanRequestIdRef = useRef(0);
   const usbRefreshRequestRef = useRef(0);
   const selectedUsbInfoRequestRef = useRef(0);
   const selectedUsbRef = useRef<string | null>(null);
@@ -322,12 +330,25 @@ export default function App() {
   }, [profile]);
 
   useEffect(() => {
+    latestPlanningContextRef.current = planningProfileContext;
+  }, [planningProfileContext]);
+
+  useEffect(() => {
     latestEfiPathRef.current = efiPath;
   }, [efiPath]);
 
   useEffect(() => {
-    void refreshAppUpdateState();
-    void checkForAppUpdates();
+    let cancelled = false;
+    const initUpdates = async () => {
+      await refreshAppUpdateState();
+      if (!cancelled) {
+        await checkForAppUpdates();
+      }
+    };
+    void initUpdates();
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   useEffect(() => {
@@ -609,8 +630,38 @@ export default function App() {
     }
   };
 
+  const withOptimisticAppUpdateState = (
+    updater: (current: ElectronAppUpdateState) => ElectronAppUpdateState,
+  ) => {
+    setAppUpdateState((current) => updater(current ?? {
+      currentVersion: 'unknown',
+      checking: false,
+      downloading: false,
+      installing: false,
+      lastCheckedAt: null,
+      available: false,
+      supported: platform === 'win32' || platform === 'linux',
+      latestVersion: null,
+      releaseUrl: null,
+      releaseNotes: null,
+      assetName: null,
+      assetSize: null,
+      downloadedBytes: 0,
+      totalBytes: null,
+      downloadedPath: null,
+      readyToInstall: false,
+      restartRequired: false,
+      error: null,
+    }));
+  };
+
   const checkForAppUpdates = async () => {
     try {
+      withOptimisticAppUpdateState((current) => ({
+        ...current,
+        checking: true,
+        error: null,
+      }));
       setAppUpdateState(await window.electron.checkForUpdates());
     } catch (e: any) {
       setErrorWithSuggestion(e?.message || 'Could not check for updates.', step);
@@ -619,6 +670,15 @@ export default function App() {
 
   const downloadLatestUpdate = async () => {
     try {
+      withOptimisticAppUpdateState((current) => ({
+        ...current,
+        checking: false,
+        downloading: true,
+        installing: false,
+        readyToInstall: false,
+        restartRequired: false,
+        error: null,
+      }));
       setAppUpdateState(await window.electron.downloadLatestUpdate());
     } catch (e: any) {
       setErrorWithSuggestion(e?.message || 'Could not download the latest update.', step);
@@ -627,6 +687,13 @@ export default function App() {
 
   const installLatestUpdate = async () => {
     try {
+      withOptimisticAppUpdateState((current) => ({
+        ...current,
+        checking: false,
+        downloading: false,
+        installing: true,
+        error: null,
+      }));
       setAppUpdateState(await window.electron.installLatestUpdate());
     } catch (e: any) {
       setErrorWithSuggestion(e?.message || 'Could not install the downloaded update.', step);
@@ -639,6 +706,22 @@ export default function App() {
     } catch (e: any) {
       setErrorWithSuggestion(e?.message || 'Could not restart the app to finish the update.', step);
     }
+  };
+
+  const handlePrimaryUpdateAction = () => {
+    if (appUpdateState?.restartRequired) {
+      void quitForUpdate();
+      return;
+    }
+    if (appUpdateState?.readyToInstall) {
+      void installLatestUpdate();
+      return;
+    }
+    if (appUpdateState?.available) {
+      void downloadLatestUpdate();
+      return;
+    }
+    void checkForAppUpdates();
   };
 
   const classifyRetryBucket = (errorMessage: string, trace?: ValidationTrace | null) => {
@@ -991,10 +1074,15 @@ export default function App() {
     }
   };
 
-  const refreshBiosState = async (activeProfile: HardwareProfile, options?: { redirectIfBlocked?: boolean }) => {
+  const refreshBiosState = async (
+    activeProfile: HardwareProfile,
+    options?: { redirectIfBlocked?: boolean; assumeLiveHardwareContext?: boolean; surfaceError?: boolean },
+  ) => {
     const requestId = biosRefreshRequestIdRef.current + 1;
     biosRefreshRequestIdRef.current = requestId;
-    if (!hasLiveHardwareContext) {
+    const liveContext = options?.assumeLiveHardwareContext === true
+      || latestPlanningContextRef.current === 'live_scan';
+    if (!liveContext) {
       setBiosState(null);
       setBiosAcceptedRuntime(false);
       return null;
@@ -1011,9 +1099,11 @@ export default function App() {
       }
       return nextState;
     } catch (e: any) {
-      openBiosRecoverySurface('bios_recheck_failed', {
-        detail: e?.message || 'Failed to evaluate BIOS preparation state.',
-      });
+      if (options?.surfaceError !== false) {
+        openBiosRecoverySurface('bios_recheck_failed', {
+          detail: e?.message || 'Failed to evaluate BIOS preparation state.',
+        });
+      }
       return null;
     }
   };
@@ -1372,20 +1462,18 @@ export default function App() {
       return;
     }
 
-    const s = await window.electron.getPersistedState();
-    let restoredCompatibilityBlocked = false;
-    let restoredBuildReady = false;
-    if (s && s.profile && s.currentStep && Date.now() - s.timestamp < 4 * 3600 * 1000) {
-      invalidateGeneratedBuild();
-      const restore = restoreFlowDecision(s.profile, s.currentStep);
-      const restoredPlanningContext = s.planningProfileContext ?? 'saved_artifact';
-      restoredCompatibilityBlocked = isCompatibilityBlocked(restore.compatibility);
-      const latestArtifact = s.profileArtifactDigest
-        ? await window.electron.getLatestHardwareProfile().catch(() => null)
-        : null;
+      const latestArtifact = await window.electron.getLatestHardwareProfile().catch(() => null);
+      const s = await window.electron.getPersistedState();
+      let restoredCompatibilityBlocked = false;
+      let restoredBuildReady = false;
+      if (s && s.profile && s.currentStep && Date.now() - s.timestamp < 4 * 3600 * 1000) {
+        invalidateGeneratedBuild();
+        const restore = restoreFlowDecision(s.profile, s.currentStep);
+        const restoredPlanningContext = s.planningProfileContext ?? 'saved_artifact';
+        restoredCompatibilityBlocked = isCompatibilityBlocked(restore.compatibility);
 
-      setPlanningProfileContext(restoredPlanningContext);
-      setProfileArtifact(latestArtifact && latestArtifact.digest === s.profileArtifactDigest ? latestArtifact : null);
+        setPlanningProfileContext(restoredPlanningContext);
+        setProfileArtifact(latestArtifact && latestArtifact.digest === s.profileArtifactDigest ? latestArtifact : null);
       setProfile(restore.profile);
       setCompat(restore.compatibility);
       setBiosConf(restore.biosConfig);
@@ -1406,10 +1494,21 @@ export default function App() {
             restoredBuildReady = true;
           }
         } catch {
-          restoredBuildReady = false;
+            restoredBuildReady = false;
+          }
         }
+      } else if (canRestoreLatestScannedArtifact(latestArtifact)) {
+        invalidateGeneratedBuild();
+        const restore = restoreFlowDecision(latestArtifact.profile, 'report');
+        restoredCompatibilityBlocked = isCompatibilityBlocked(restore.compatibility);
+        setPlanningProfileContext('saved_artifact');
+        setProfileArtifact(latestArtifact);
+        setProfile(restore.profile);
+        setCompat(restore.compatibility);
+        setBiosConf(restore.biosConfig);
+        setBiosState(null);
+        _setStepRaw('report');
       }
-    }
 
     // Auto-resume an interrupted recovery download
     try {
@@ -1462,14 +1561,35 @@ export default function App() {
 
   // ── Workflows ──────────────────────────────────────────────
 
-  const startScan = async () => {
+  const startScan = async (requestedSuccessStep?: ScanSuccessStep | unknown) => {
     if (isScanningRef.current) return;
+    const successStep = resolveScanSuccessStep(requestedSuccessStep);
+    const requestId = scanRequestIdRef.current + 1;
+    scanRequestIdRef.current = requestId;
     isScanningRef.current = true;
+    const previousProfile = latestProfileRef.current;
+    const previousCompat = compat;
+    const previousBiosConf = biosConf;
+    const previousArtifact = profileArtifact;
+    const previousPlanningContext = latestPlanningContextRef.current;
+    const previousInterpretation = hwInterpretation;
     try {
-      invalidateGeneratedBuild();
       setStep('scanning'); setProgress(20);
       const scanResult = await window.electron.scanHardware();
-      const hw = scanResult.profile;
+      if (scanRequestIdRef.current !== requestId) return;
+      const reconciled = reconcileHardwareScanProfile(previousProfile, scanResult.profile);
+      const hw = {
+        ...reconciled.profile,
+        targetOS: reconciled.likelySameMachine && previousProfile?.targetOS
+          ? previousProfile.targetOS
+          : reconciled.profile.targetOS,
+      };
+      const shouldInvalidateExistingBuild = !previousProfile
+        || reconciled.shouldInvalidateBuild
+        || previousPlanningContext !== 'live_scan';
+      if (shouldInvalidateExistingBuild) {
+        invalidateGeneratedBuild();
+      }
       setProfileArtifact(scanResult.artifact);
       setPlanningProfileContext('live_scan');
       setProfile(hw);
@@ -1486,17 +1606,38 @@ export default function App() {
       const report = checkCompatibility(hw);
       // Inject strategy into profile for config generation
       hw.strategy = report.strategy;
+      hw.smbios = getSMBIOSForProfile(hw);
       
       setCompat(report);
       setProfile(hw); // Update with strategy
       setBiosConf(getBIOSSettings(hw));
-      await refreshBiosState(hw);
+      await refreshBiosState(hw, { assumeLiveHardwareContext: true, surfaceError: false });
+      if (scanRequestIdRef.current !== requestId) return;
       setProgress(100);
-      setTimeout(() => setStep('version-select'), 700);
+      setTimeout(() => {
+        if (scanRequestIdRef.current !== requestId) return;
+        _setStepRaw(successStep);
+      }, 700);
     } catch (e: any) {
-      setErrorWithSuggestion(e.message || 'Hardware scan failed', 'scanning');
-      setStep('landing');
-    } finally { isScanningRef.current = false; }
+      if (scanRequestIdRef.current !== requestId) return;
+      if (previousProfile) {
+        setProfile(previousProfile);
+        setCompat(previousCompat);
+        setBiosConf(previousBiosConf);
+        setProfileArtifact(previousArtifact);
+        setPlanningProfileContext(previousPlanningContext);
+        setHwInterpretation(previousInterpretation);
+        setErrorWithSuggestion(e.message || 'Hardware scan failed', 'report');
+        _setStepRaw('report');
+      } else {
+        setErrorWithSuggestion(e.message || 'Hardware scan failed', 'precheck');
+        _setStepRaw('precheck');
+      }
+    } finally {
+      if (scanRequestIdRef.current === requestId) {
+        isScanningRef.current = false;
+      }
+    }
   };
 
   const applyPlanningProfileArtifact = (
@@ -2617,32 +2758,6 @@ export default function App() {
           : buildFlowAlert.reason,
       }
     : null;
-  const updaterHeadline = appUpdateState?.restartRequired
-    ? 'Set up complete - please restart the app'
-    : appUpdateState?.checking
-    ? 'Refreshing update status…'
-    : appUpdateState?.downloading
-    ? 'Downloading update…'
-    : appUpdateState?.readyToInstall
-    ? 'Update ready to finish'
-    : appUpdateState?.available
-    ? `${appUpdateState.latestVersion} is ready`
-    : 'You are up to date';
-  const updaterDetail = appUpdateState?.restartRequired
-    ? `The updated files are staged. Restart the app to finish loading ${appUpdateState.latestVersion ?? 'the latest version'}.`
-    : appUpdateState?.readyToInstall
-    ? 'Install the downloaded update, then restart the app once setup finishes.'
-    : appUpdateState?.available
-    ? `Download ${appUpdateState.assetName ?? 'the latest build'} directly in the app.`
-    : appUpdateState?.error
-    ? appUpdateState.error
-    : `Current version: ${appUpdateState?.currentVersion ?? 'unknown'}`;
-  const updaterProgressPercent = appUpdateState?.totalBytes && appUpdateState.totalBytes > 0
-    ? Math.min(100, Math.round((appUpdateState.downloadedBytes / appUpdateState.totalBytes) * 100))
-    : appUpdateState?.readyToInstall || appUpdateState?.restartRequired
-    ? 100
-    : 0;
-
   // ── Render ──────────────────────────────────────────────────
 
   return (
@@ -2745,86 +2860,13 @@ export default function App() {
                   <HelpCircle className="w-5 h-5 text-white/40" /> Troubleshoot
                 </button>
               </div>
-              <div className="w-full max-w-xl rounded-[1.6rem] border border-white/10 bg-white/[0.04] p-5 text-left backdrop-blur-md">
-                <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
-                  <div className="min-w-0 flex-1">
-                    <div className="text-[11px] font-bold uppercase tracking-[0.28em] text-white/35">Updater</div>
-                    <div className="mt-2 text-lg font-bold text-white">
-                      {updaterHeadline}
-                    </div>
-                    <p className="mt-2 text-sm leading-relaxed text-white/50">
-                      {updaterDetail}
-                    </p>
-                  </div>
-                  <button
-                    onClick={checkForAppUpdates}
-                    disabled={appUpdateState?.checking || appUpdateState?.downloading || appUpdateState?.installing}
-                    className="inline-flex min-h-11 shrink-0 items-center justify-center gap-2 rounded-2xl border border-blue-400/25 bg-blue-500/10 px-4 py-3 text-sm font-semibold text-blue-100 transition-all hover:bg-blue-500/16 hover:text-white disabled:cursor-not-allowed disabled:opacity-60"
-                  >
-                    <RefreshCcw className={`w-4 h-4 ${appUpdateState?.checking ? 'animate-spin' : ''}`} />
-                    {appUpdateState?.checking ? 'Refreshing…' : 'Refresh'}
-                  </button>
-                </div>
-
-                {(appUpdateState?.downloading || appUpdateState?.readyToInstall || appUpdateState?.restartRequired) && (
-                  <div className="mt-4">
-                    <div className="mb-2 flex items-center justify-between text-xs text-white/45">
-                      <span>
-                        {appUpdateState.restartRequired
-                          ? 'Set up complete'
-                          : appUpdateState.downloading
-                          ? 'Downloading update…'
-                          : 'Download complete'}
-                      </span>
-                      <span>
-                        {updaterProgressPercent > 0 ? `${updaterProgressPercent}%` : '—'}
-                      </span>
-                    </div>
-                    <div className="h-2 overflow-hidden rounded-full bg-white/8">
-                      <div
-                        className="h-full rounded-full bg-white transition-all"
-                        style={{ width: `${updaterProgressPercent}%` }}
-                      />
-                    </div>
-                  </div>
-                )}
-
-                <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2">
-                  {appUpdateState?.restartRequired ? (
-                    <button
-                      onClick={quitForUpdate}
-                      className="inline-flex min-w-0 items-center justify-center gap-2 rounded-2xl bg-white px-5 py-3 text-sm font-bold text-black transition-transform hover:scale-[1.02] active:scale-[0.98]"
-                    >
-                      <Download className="w-4 h-4" />
-                      Restart app
-                    </button>
-                  ) : appUpdateState?.readyToInstall ? (
-                    <button
-                      onClick={installLatestUpdate}
-                      disabled={appUpdateState?.installing}
-                      className="inline-flex min-w-0 items-center justify-center gap-2 rounded-2xl bg-white px-5 py-3 text-sm font-bold text-black transition-transform hover:scale-[1.02] active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-60"
-                    >
-                      <Download className="w-4 h-4" />
-                      {appUpdateState?.installing ? 'Preparing…' : 'Install update'}
-                    </button>
-                  ) : (
-                    <button
-                      onClick={downloadLatestUpdate}
-                      disabled={!appUpdateState?.available || appUpdateState?.downloading || !appUpdateState?.supported || appUpdateState?.installing}
-                      className="inline-flex min-w-0 items-center justify-center gap-2 rounded-2xl bg-white px-5 py-3 text-sm font-bold text-black transition-transform hover:scale-[1.02] active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-60"
-                    >
-                      <Download className="w-4 h-4" />
-                      {appUpdateState?.downloading ? 'Downloading…' : 'Download update'}
-                    </button>
-                  )}
-                  <button
-                    onClick={openLatestReleasePage}
-                    className="inline-flex min-w-0 items-center justify-center gap-2 rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm font-semibold text-white/70 transition-colors hover:bg-white/10 hover:text-white"
-                  >
-                    View release
-                    <ArrowUpRight className="w-4 h-4 text-white/35" />
-                  </button>
-                </div>
+              <div className="w-full max-w-xl">
+                <UpdaterPanel
+                  state={appUpdateState}
+                  onRefresh={() => { void checkForAppUpdates(); }}
+                  onPrimaryAction={handlePrimaryUpdateAction}
+                  onOpenRelease={() => { void openLatestReleasePage(); }}
+                />
               </div>
             </motion.div>
 
@@ -2928,39 +2970,43 @@ export default function App() {
                   <div className="text-[9px] text-[#444] font-bold uppercase tracking-widest mt-1">SMBIOS</div>
                   <div className="text-xs font-semibold text-[#777]">{profile.smbios}</div>
                   <button
-                    onClick={() => {
-                      if (appUpdateState?.restartRequired) {
-                        void quitForUpdate();
-                        return;
-                      }
-                      if (appUpdateState?.readyToInstall) {
-                        void installLatestUpdate();
-                        return;
-                      }
-                      if (appUpdateState?.available) {
-                        void downloadLatestUpdate();
-                        return;
-                      }
-                      void checkForAppUpdates();
-                    }}
-                    className="mt-3 flex w-full min-w-0 items-center justify-between gap-2 rounded-xl border border-white/10 bg-white/[0.04] px-3 py-2 text-left text-xs font-semibold text-white/65 transition-colors hover:bg-white/[0.08] hover:text-white cursor-pointer"
+                    onClick={handlePrimaryUpdateAction}
+                    disabled={appUpdateState?.checking || appUpdateState?.downloading || appUpdateState?.installing}
+                    className="mt-3 flex w-full min-w-0 items-center gap-2 rounded-xl border border-white/10 bg-white/[0.04] px-3 py-2 text-left text-xs font-semibold text-white/65 transition-colors hover:bg-white/[0.08] hover:text-white cursor-pointer disabled:cursor-not-allowed disabled:opacity-60"
                   >
                     <span className="flex min-w-0 flex-1 items-center gap-2">
-                      <Download className="w-3.5 h-3.5 text-white/40" />
-                      <span className="truncate">
-                      {appUpdateState?.restartRequired
-                        ? 'Restart to finish update'
-                        : appUpdateState?.readyToInstall
-                        ? 'Install downloaded update'
-                        : appUpdateState?.available
-                        ? 'Download latest update'
-                        : 'Check for updates'}
+                      {appUpdateState?.checking || (!appUpdateState?.restartRequired && !appUpdateState?.readyToInstall && !appUpdateState?.available) ? (
+                        <RefreshCcw className={`w-3.5 h-3.5 flex-shrink-0 text-white/40 ${appUpdateState?.checking ? 'animate-spin' : ''}`} />
+                      ) : (
+                        <Download className="w-3.5 h-3.5 flex-shrink-0 text-white/40" />
+                      )}
+                      <span className="min-w-0 flex-1">
+                        <span className="block break-words leading-snug">
+                          {appUpdateState?.restartRequired
+                            ? 'Restart to finish update'
+                            : appUpdateState?.readyToInstall
+                            ? 'Install downloaded update'
+                            : appUpdateState?.available
+                            ? 'Download latest update'
+                            : appUpdateState?.checking
+                            ? 'Refreshing update status'
+                            : 'Check for updates'}
+                        </span>
+                        <span className="mt-0.5 block text-[10px] font-medium text-white/35">
+                          {appUpdateState?.checking
+                            ? 'Checking the latest release now'
+                            : appUpdateState?.latestVersion && appUpdateState.available
+                            ? `${appUpdateState.latestVersion} is available`
+                            : appUpdateState?.lastCheckedAt
+                            ? `Checked at ${new Date(appUpdateState.lastCheckedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`
+                            : 'See the latest published build'}
+                        </span>
                       </span>
                     </span>
                     {appUpdateState?.restartRequired || appUpdateState?.available || appUpdateState?.readyToInstall ? (
-                      <Download className="w-3.5 h-3.5 text-white/30" />
+                      <Download className="w-3.5 h-3.5 flex-shrink-0 text-white/30" />
                     ) : (
-                      <RefreshCcw className={`w-3.5 h-3.5 text-white/30 ${appUpdateState?.checking ? 'animate-spin' : ''}`} />
+                      <RefreshCcw className={`w-3.5 h-3.5 flex-shrink-0 text-white/30 ${appUpdateState?.checking ? 'animate-spin' : ''}`} />
                     )}
                   </button>
                 </div>
@@ -3019,7 +3065,7 @@ export default function App() {
                 {/* SYSTEM PRECHECK */}
                 {step === 'precheck' && (
                   <motion.div key="precheck" initial={stepEnter} animate={stepActive} exit={stepExit} transition={STEP_TRANSITION} className="h-full">
-                    <PrecheckStep onContinue={startScan} />
+                    <PrecheckStep onContinue={() => { void startScan(); }} />
                   </motion.div>
                 )}
 
@@ -3080,7 +3126,7 @@ export default function App() {
                       onExportProfile={exportCurrentPlanningProfile}
                       onImportProfile={importPlanningProfile}
                       onRunSimulation={runSafeSimulationPreview}
-                      onRunLiveScan={startScan}
+                      onRunLiveScan={() => startScan('report')}
                       onContinue={() => setStep('bios')}
                     />
                   </motion.div>

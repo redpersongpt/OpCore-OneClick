@@ -16,6 +16,7 @@ export interface AppUpdateState {
   checking: boolean;
   downloading: boolean;
   installing: boolean;
+  lastCheckedAt: number | null;
   available: boolean;
   supported: boolean;
   latestVersion: string | null;

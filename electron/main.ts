@@ -66,6 +66,7 @@ import { createTaskRegistry, type OpToken } from './taskManager.js';
 import type { TaskUpdatePayload } from './taskManager.js';
 import { detectHardware } from './hardwareDetect.js';
 import { interpretHardware, type HardwareInterpretation } from './hardwareInterpret.js';
+import { canRestoreLatestScannedArtifact, reconcileHardwareScanProfile } from './hardwareProfileState.js';
 import { probeFirmware } from './firmwarePreflight.js';
 import { runPreflightChecks, recordFailure, getFailureCount, shouldSkipRetry, getFailureMemory, clearFailureMemory, type PreflightReport, type ConfidenceLevel } from './preventionLayer.js';
 import { simulateBuild, dryRunRecovery, verifyBuildState, verifyEfiBuildSuccess, verifyRecoverySuccess, type BuildPlan, type RecoveryDryRun, type StateVerification, type SuccessContract, type Certainty } from './deterministicLayer.js';
@@ -519,6 +520,7 @@ function createInitialAppUpdateState(): AppUpdateState {
     checking: false,
     downloading: false,
     installing: false,
+    lastCheckedAt: null,
     available: false,
     supported: process.platform === 'win32' || process.platform === 'linux',
     latestVersion: null,
@@ -602,6 +604,7 @@ async function checkForAppUpdates(): Promise<AppUpdateState> {
     return setAppUpdateState({ checking: false, available: false, error: null });
   }
   setAppUpdateState({ checking: true, error: null });
+  const checkedAt = Date.now();
   try {
     const release = await fetchLatestAppRelease();
     const asset = selectLatestReleaseAsset(release);
@@ -609,6 +612,7 @@ async function checkForAppUpdates(): Promise<AppUpdateState> {
     return setAppUpdateState({
       checking: false,
       installing: false,
+      lastCheckedAt: checkedAt,
       available,
       latestVersion: release.tag_name ?? null,
       releaseUrl: release.html_url ?? 'https://github.com/redpersongpt/macOS-One-Click/releases/latest',
@@ -626,6 +630,7 @@ async function checkForAppUpdates(): Promise<AppUpdateState> {
     return setAppUpdateState({
       checking: false,
       installing: false,
+      lastCheckedAt: checkedAt,
       available: false,
       latestVersion: null,
       releaseUrl: 'https://github.com/redpersongpt/macOS-One-Click/releases/latest',
@@ -1808,14 +1813,14 @@ function buildCurrentDiagnosticsSnapshot() {
   }
 
   const scanErrorFound = (logger?.readTail(100) ?? []).some((entry) => entry.ctx === 'scan' && entry.level === 'ERROR');
-  const hwStatus = lastHardwareProfile
-    ? formatHardwareSummary(lastHardwareProfile)
+  const hwStatus = lastScannedProfile
+    ? formatHardwareSummary(lastScannedProfile)
     : scanErrorFound
       ? 'Hardware scan failed — check logs for details'
       : 'Hardware scan not completed';
 
-  const confidenceStatus = lastHardwareProfile
-    ? (lastHardwareProfile.scanConfidence || 'unknown')
+  const confidenceStatus = lastScannedProfile
+    ? (lastScannedProfile.scanConfidence || 'unknown')
     : scanErrorFound
       ? 'Unavailable (scan failed)'
       : 'Not yet scanned';
@@ -2930,7 +2935,14 @@ app.whenReady().then(async () => {
   ipcHandle('clear-state', () => { if (fs.existsSync(STATE_FILE)) fs.unlinkSync(STATE_FILE); });
 
   // Hardware profile artifacts — advisory planning inputs only
-  ipcHandle('hardware-profile:get-latest', () => hardwareProfileStore.loadLatest());
+  ipcHandle('hardware-profile:get-latest', () => {
+    const artifact = hardwareProfileStore.loadLatest();
+    if (artifact && canRestoreLatestScannedArtifact(artifact)) {
+      lastScannedProfile = artifact.profile;
+      lastLiveHardwareProfileArtifact = artifact;
+    }
+    return artifact;
+  });
   ipcHandle('hardware-profile:save', (_event: Electron.IpcMainInvokeEvent, payload: {
     profile: HardwareProfile;
     interpretation?: HardwareProfileInterpretationMetadata | null;
@@ -3142,11 +3154,9 @@ app.whenReady().then(async () => {
   ipcHandle('scan-hardware', async () => {
     try {
       const hw = await withTimeout(detectHardware(), 30_000, 'detectHardware');
-      lastHardwareProfile = hw;
 
       // Build interpretation layer — separates facts from inferences
       const interpretation = interpretHardware(hw);
-      lastHardwareInterpretation = interpretation;
 
       log('INFO', 'scan', 'Hardware detected', {
         cpu: hw.cpu.name,
@@ -3163,31 +3173,38 @@ app.whenReady().then(async () => {
 
       // Map DetectedHardware → HardwareProfile (legacy shape used by configGenerator)
       const legacyResult = mapDetectedToProfile(hw);
-      lastScannedProfile = legacyResult;
+      const reconciled = reconcileHardwareScanProfile(lastScannedProfile, legacyResult);
+      const effectiveProfile = reconciled.profile;
+      lastHardwareProfile = hw;
+      lastHardwareInterpretation = interpretation;
+      lastScannedProfile = effectiveProfile;
       const artifact = savePlanningHardwareProfileArtifact({
-        profile: legacyResult,
+        profile: effectiveProfile,
         interpretation: extractHardwareProfileInterpretationMetadata(interpretation),
         source: 'live_scan',
       });
       lastLiveHardwareProfileArtifact = artifact;
-      return { profile: legacyResult, interpretation, artifact };
+      return { profile: effectiveProfile, interpretation, artifact };
     } catch (err: any) {
       log('ERROR', 'scan', 'Hardware detection failed, falling back to legacy scanner', { error: err?.message });
-      lastHardwareProfile = null;
-      lastHardwareInterpretation = null;
       // Fallback to old per-platform functions
       let profile: HardwareProfile;
       if (process.platform === 'darwin') profile = await getMacHardwareInfo();
       else if (process.platform === 'win32') profile = await getWindowsHardwareInfo();
       else profile = await getLinuxHardwareInfo();
-      lastScannedProfile = profile;
+      const reconciled = reconcileHardwareScanProfile(lastScannedProfile, profile);
+      lastScannedProfile = reconciled.profile;
+      if (!reconciled.usedExistingFields) {
+        lastHardwareProfile = null;
+        lastHardwareInterpretation = null;
+      }
       const artifact = savePlanningHardwareProfileArtifact({
-        profile,
+        profile: reconciled.profile,
         interpretation: null,
         source: 'legacy_scan',
       });
       lastLiveHardwareProfileArtifact = artifact;
-      return { profile, interpretation: null, artifact };
+      return { profile: reconciled.profile, interpretation: null, artifact };
     }
   });
 
