@@ -35,4 +35,15 @@ describe('inferLaptopFormFactor', () => {
 
     assert.equal(result, true);
   });
+
+  test('classifies thinkpad-class models as laptops even when battery probing is unavailable', () => {
+    const result = inferLaptopFormFactor({
+      cpuName: 'Intel(R) Core(TM) i5-4300U CPU @ 1.90GHz',
+      chassisTypes: [3],
+      modelName: 'ThinkPad T440',
+      batteryPresent: false,
+    });
+
+    assert.equal(result, true);
+  });
 });

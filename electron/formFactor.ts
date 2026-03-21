@@ -1,6 +1,6 @@
 const LAPTOP_CHASSIS = new Set([8, 9, 10, 11, 12, 14, 18, 21, 31, 32]);
 const LAPTOP_CPU_SUFFIX = /(U|Y|HQ|MQ|G[1-7]|H|HS|HX|P)\s*(?:CPU|@|\b)/i;
-const PORTABLE_MODEL_HINT = /\b(book|laptop|notebook|ultrabook|surface)\b/i;
+const PORTABLE_MODEL_HINT = /\b(book|laptop|notebook|ultrabook|surface|thinkpad|ideapad|yoga|elitebook|probook|latitude|precision|xps|zenbook|vivobook|travelmate|lifebook)\b/i;
 
 export interface FormFactorEvidence {
   cpuName: string;

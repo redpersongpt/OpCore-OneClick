@@ -960,16 +960,22 @@ function detectArchitecture(cpuModel: string): HardwareProfile['architecture'] {
 
 async function getWindowsHardwareInfo(): Promise<HardwareProfile> {
   const psCommand = (cmd: string) => `powershell -NoProfile -Command "${cmd}"`;
+  const runWindowsProbe = (cmd: string, fallback = '') =>
+    execPromise(psCommand(cmd), {
+      timeout: 5_000,
+      maxBuffer: 1024 * 1024,
+    }).catch(() => ({ stdout: fallback }));
+
   const [cpuRaw, gpuRaw, baseboardRaw, coresRaw, chassisRaw, manufRaw, modelRaw, batteryRaw] = await Promise.all([
-    execPromise(psCommand("Get-CimInstance CIM_Processor | Select-Object -ExpandProperty Name")),
-    execPromise(psCommand("Get-CimInstance CIM_VideoController | Select-Object -ExpandProperty Name")),
-    execPromise(psCommand("Get-CimInstance CIM_BaseBoard | Select-Object -ExpandProperty Product")),
-    execPromise(psCommand("Get-CimInstance CIM_Processor | Select-Object -ExpandProperty NumberOfCores")),
-    execPromise(psCommand("Get-CimInstance CIM_SystemEnclosure | Select-Object -ExpandProperty ChassisTypes")),
-    execPromise(psCommand("Get-CimInstance CIM_ComputerSystem | Select-Object -ExpandProperty Manufacturer")),
-    execPromise(psCommand("Get-CimInstance CIM_ComputerSystem | Select-Object -ExpandProperty Model")),
-    execPromise(psCommand("Get-CimInstance Win32_Battery | Select-Object -First 1 | ConvertTo-Json -Compress"))
-  ]).catch(() => [{stdout: 'Unknown CPU'}, {stdout: 'Unknown GPU'}, {stdout: 'Unknown Board'}, {stdout: '4'}, {stdout: '3'}, {stdout: 'Unknown'}, {stdout: ''}, {stdout: ''}]);
+    runWindowsProbe("Get-CimInstance CIM_Processor | Select-Object -ExpandProperty Name", 'Unknown CPU'),
+    runWindowsProbe("Get-CimInstance CIM_VideoController | Select-Object -ExpandProperty Name", 'Unknown GPU'),
+    runWindowsProbe("Get-CimInstance CIM_BaseBoard | Select-Object -ExpandProperty Product", 'Unknown Board'),
+    runWindowsProbe("Get-CimInstance CIM_Processor | Select-Object -ExpandProperty NumberOfCores", '4'),
+    runWindowsProbe("Get-CimInstance CIM_SystemEnclosure | Select-Object -ExpandProperty ChassisTypes", '3'),
+    runWindowsProbe("Get-CimInstance CIM_ComputerSystem | Select-Object -ExpandProperty Manufacturer", 'Unknown'),
+    runWindowsProbe("Get-CimInstance CIM_ComputerSystem | Select-Object -ExpandProperty Model"),
+    runWindowsProbe("Get-CimInstance Win32_Battery | Select-Object -First 1 | ConvertTo-Json -Compress"),
+  ]);
 
   const cpuModel = cpuRaw.stdout.trim().split('\n')[0];
   const gpuModel = gpuRaw.stdout.trim().split('\n').join(' / ');
@@ -2680,7 +2686,7 @@ app.whenReady().then(async () => {
   // result is normalised into HardwareProfile for the rest of the app
   ipcHandle('scan-hardware', async () => {
     try {
-      const hw = await withTimeout(detectHardware(), 45_000, 'detectHardware');
+      const hw = await withTimeout(detectHardware(), 18_000, 'detectHardware');
       lastHardwareProfile = hw;
 
       // Build interpretation layer — separates facts from inferences

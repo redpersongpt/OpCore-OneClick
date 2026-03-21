@@ -76,10 +76,14 @@ function resolveCpuVendor(vendorStr: string, rawName: string): { vendor: string;
 // ── Windows ───────────────────────────────────────────────────────────────────
 
 export async function detectWindowsHardware(): Promise<DetectedHardware> {
-  const ps = (cmd: string) => execPromise(`powershell -NoProfile -Command "${cmd}"`).catch(() => ({ stdout: '' }));
+  const ps = (cmd: string, fallback = '') =>
+    execPromise(`powershell -NoProfile -Command "${cmd}"`, {
+      timeout: 5_000,
+      maxBuffer: 1024 * 1024,
+    }).catch(() => ({ stdout: fallback }));
 
   const [cpuRes, cpuVendorRes, gpuRes, boardRes, chassisRes, manufRes, modelRes, batteryRes, coresRes] = await Promise.all([
-    ps('(Get-CimInstance CIM_Processor).Name'),
+    ps('(Get-CimInstance CIM_Processor).Name', 'Unknown CPU'),
     ps('(Get-CimInstance CIM_Processor).Manufacturer'),
     // PNPDeviceID gives "PCI\\VEN_10DE&DEV_2484&..." — extract vendor+device IDs
     ps('Get-CimInstance CIM_VideoController | Select-Object Name, PNPDeviceID | ConvertTo-Json -Compress'),
@@ -161,7 +165,11 @@ export async function detectWindowsHardware(): Promise<DetectedHardware> {
 // ── Linux ─────────────────────────────────────────────────────────────────────
 
 export async function detectLinuxHardware(): Promise<DetectedHardware> {
-  const run = (cmd: string) => execPromise(cmd).catch(() => ({ stdout: '' }));
+  const run = (cmd: string, fallback = '') =>
+    execPromise(cmd, {
+      timeout: 5_000,
+      maxBuffer: 1024 * 1024,
+    }).catch(() => ({ stdout: fallback }));
 
   const [cpuRes, gpuRes, boardVendorRes, boardModelRes, chassisRes, sysVendorRes, batteryRes, memRes] = await Promise.all([
     run('cat /proc/cpuinfo'),
