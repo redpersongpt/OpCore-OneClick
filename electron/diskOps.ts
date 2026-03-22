@@ -144,6 +144,49 @@ export function windowsWmiDiskStyleOutput(stdout: string): 'gpt' | 'mbr' | null 
   return null;
 }
 
+/**
+ * Select the best shrink target from a list of Windows partitions.
+ * Excludes EFI System, MSR, and Windows Recovery partitions by GPT type GUID.
+ * Requires the candidate to be at least 20 GB so we never accidentally target
+ * a recovery stub or utility partition.
+ * Returns the partition number of the largest qualifying candidate, or null.
+ */
+export function selectWindowsPrimaryDataPartition(partitions: Array<{
+  partitionNumber: number;
+  sizeBytes: number;
+  gptType?: string;
+}>): number | null {
+  const EXCLUDED_GUIDS = new Set([
+    '{c12a7328-f81f-11d2-ba4b-00a0c93ec93b}', // EFI System Partition
+    '{e3c9e316-0b5c-4db8-817d-f92df00215ae}', // Microsoft Reserved (MSR)
+    '{de94bba4-06d1-4d40-a16a-bfd50179d6ac}', // Windows Recovery Environment
+  ]);
+  const MIN_BYTES = 20 * 1024 * 1024 * 1024; // 20 GB minimum
+  const candidates = partitions
+    .filter(p =>
+      p.partitionNumber > 0 &&
+      p.sizeBytes >= MIN_BYTES &&
+      !EXCLUDED_GUIDS.has((p.gptType ?? '').toLowerCase()),
+    )
+    .sort((a, b) => b.sizeBytes - a.sizeBytes);
+  return candidates[0]?.partitionNumber ?? null;
+}
+
+/**
+ * Build the diskpart script that assigns a drive letter to the target partition.
+ * Does NOT set a GPT type GUID — setting the EFI GUID (c12a7328-…) prevents
+ * Windows from assigning a drive letter, which was the root cause of issue #23.
+ */
+export function buildWindowsAssignLetterDiskpartScript(diskNum: string, partitionNum: number): string {
+  return [
+    `select disk ${diskNum}`,
+    `select partition ${partitionNum}`,
+    'assign noerr',
+    'rescan',
+    '',
+  ].join('\n');
+}
+
 export function buildLinuxFirstPartitionPath(device: string): string {
   return /(?:nvme\d+n\d+|mmcblk\d+|loop\d+)$/i.test(device) ? `${device}p1` : `${device}1`;
 }
@@ -449,42 +492,70 @@ export function createDiskOps(log: LogFunction): DiskOps {
     diskNum: string,
     register?: (child: any) => void,
   ): Promise<void> {
+    // Try soft dismount (/D) first, then hard-remove (/P) for any handle-locked volume.
+    // /P is safe here: this function is only called immediately before a destructive
+    // diskpart clean that wipes the entire disk anyway.
     await runCmd(
-      `powershell -NoProfile -Command "Get-Partition -DiskNumber ${diskNum} | Where-Object { $_.DriveLetter } | ForEach-Object { try { mountvol ($_.DriveLetter + ':') /D } catch {} }"`,
+      `powershell -NoProfile -Command "Get-Partition -DiskNumber ${diskNum} | Where-Object { $_.DriveLetter } | ForEach-Object { $letter = $_.DriveLetter + ':'; try { mountvol $letter /D } catch {}; try { mountvol $letter /P } catch {} }"`,
       register,
     );
   }
 
   async function assignWindowsDriveLetter(
     diskNum: string,
+    partitionNumber: number | null,
     label: string,
     register?: (child: any) => void,
   ): Promise<string> {
-    const script = [
-      `select disk ${diskNum}`,
-      'select partition 1',
-      `set id=c12a7328-f81f-11d2-ba4b-00a0c93ec93b noerr`,
-      `assign noerr`,
-      'rescan',
-      '',
-    ].join('\n');
+    const partNum = partitionNumber ?? 1;
+    // Approach 1: diskpart assign.
+    // NOTE: do NOT use `set id=c12a7328-…` (EFI GUID) here — setting that GUID
+    // causes Windows to hide the partition from the drive-letter registry,
+    // making the subsequent `assign` silently produce no letter (issue #23).
+    const script = buildWindowsAssignLetterDiskpartScript(diskNum, partNum);
     const scriptPath = path.join(os.tmpdir(), `assign-letter-${crypto.randomUUID()}.txt`);
     fs.writeFileSync(scriptPath, script);
     try {
       await runCmd(`diskpart /s "${scriptPath}"`, register);
     } catch (e) {
-      log('WARN', 'diskOps', 'diskpart assign-letter failed (non-fatal)', { diskNum, error: (e as Error).message });
+      log('WARN', 'diskOps', 'diskpart assign-letter failed', { diskNum, partNum, error: (e as Error).message });
     } finally {
       try { fs.unlinkSync(scriptPath); } catch {}
     }
+    const letter = await waitForWindowsDriveLetterForLabel(diskNum, label, register, 5, 400);
+    if (letter) return letter;
+    // Approach 2: PowerShell Set-Partition as fallback (more reliable on some systems).
+    try {
+      await runCmd(
+        `powershell -NoProfile -Command "try { Set-Partition -DiskNumber ${diskNum} -PartitionNumber ${partNum} -AssignDriveLetter -ErrorAction Stop } catch {}"`,
+        register,
+      );
+    } catch {}
     return await waitForWindowsDriveLetterForLabel(diskNum, label, register, 10, 500);
   }
 
   async function getWindowsPrimaryPartitionNumber(diskNum: string): Promise<string> {
+    // Fetch all partitions with their size and GPT type GUID as JSON, then
+    // select the best shrink target using selectWindowsPrimaryDataPartition.
+    // Filtering by $_.Type -eq 'Basic' is unreliable: some Windows versions
+    // return 'Unknown' for a valid data partition (issue #24).
     const { stdout } = await runCmd(
-      `powershell -NoProfile -Command "(Get-Partition -DiskNumber ${diskNum} | Where-Object { $_.Type -eq 'Basic' -and $_.Size -gt 50GB } | Sort-Object -Property Size -Descending | Select-Object -First 1 -ExpandProperty PartitionNumber)"`
+      `powershell -NoProfile -Command "try { Get-Partition -DiskNumber ${diskNum} -ErrorAction Stop | Select-Object PartitionNumber, Size, GptType | ConvertTo-Json -Compress } catch { '[]' }"`
     );
-    return stdout.trim();
+    let target: number | null = null;
+    try {
+      const raw = JSON.parse(stdout.trim() || '[]');
+      const rows: any[] = Array.isArray(raw) ? raw : (raw ? [raw] : []);
+      const partitions = rows
+        .map((r) => ({
+          partitionNumber: Number(r.PartitionNumber),
+          sizeBytes: Number(r.Size ?? 0),
+          gptType: typeof r.GptType === 'string' ? r.GptType.trim().toLowerCase() : '',
+        }))
+        .filter((p) => Number.isFinite(p.partitionNumber) && p.partitionNumber > 0);
+      target = selectWindowsPrimaryDataPartition(partitions);
+    } catch {}
+    return target != null ? String(target) : '';
   }
 
   function hashFile(filePath: string): string {
@@ -1302,7 +1373,7 @@ export function createDiskOps(log: LogFunction): DiskOps {
               });
 
               if (lastAssessment.status === 'failed' && lastAssessment.stage === 'assign') {
-                const assignedLetter = await assignWindowsDriveLetter(diskNum, 'OPENCORE', registerProcess);
+                const assignedLetter = await assignWindowsDriveLetter(diskNum, lastAssessment.targetPartitionNumber, 'OPENCORE', registerProcess);
                 if (assignedLetter) {
                   lastObservedPartitions = await getWindowsPreparedPartitions(diskNum, registerProcess);
                   lastAssessment = assessWindowsFlashPreparationState({
@@ -1430,7 +1501,12 @@ export function createDiskOps(log: LogFunction): DiskOps {
       const diskNum = getWindowsDiskNumber(disk);
       if (!diskNum) throw new Error(`Invalid disk identifier: ${disk}`);
       const partitionNum = await getWindowsPrimaryPartitionNumber(diskNum);
-      if (!partitionNum) throw new Error(`Could not determine the primary data partition for disk ${diskNum}`);
+      if (!partitionNum) throw new Error(
+        `Could not determine the primary data partition for disk ${diskNum}. ` +
+        'The disk has no basic data partition of 20 GB or more that qualifies as a shrink target. ' +
+        'Confirm the correct disk is selected, that it has a main Windows installation partition (C:) ' +
+        'larger than 20 GB, and that it is not an EFI, MSR, or recovery-only partition.',
+      );
       const script = `select disk ${diskNum}\nselect partition ${partitionNum}\nshrink desired=${sizeGB * 1024} minimum=8192\n`;
       const scriptPath = path.join(os.tmpdir(), `shrink-${crypto.randomUUID()}.txt`);
       fs.writeFileSync(scriptPath, script);

@@ -181,6 +181,15 @@ const ERROR_MAP: Array<{
     },
   },
   {
+    test: m => m.includes('could not determine the primary data partition'),
+    structured: {
+      title: 'Cannot find data partition to shrink',
+      what: 'The app could not identify a qualifying data partition on the selected disk.',
+      nextStep: 'Make sure the correct disk is selected, that it has a main Windows installation partition (C:) larger than 20 GB, and that it is not an EFI, MSR, or recovery-only disk. Open Disk Management to verify the layout.',
+      retryable: false,
+    },
+  },
+  {
     test: m => m.includes('cannot read partition table') || m.includes('unknown_partition_table'),
     structured: {
       title: 'Cannot read partition table',

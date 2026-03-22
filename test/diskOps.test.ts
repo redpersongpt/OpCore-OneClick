@@ -10,6 +10,8 @@ import {
   buildWindowsBootPartitionDiskpartScript,
   windowsGetDiskStyleOutput,
   windowsWmiDiskStyleOutput,
+  selectWindowsPrimaryDataPartition,
+  buildWindowsAssignLetterDiskpartScript,
 } from '../electron/diskOps.js';
 
 // ─── Windows disk path normalization ─────────────────────────────────────────
@@ -486,5 +488,119 @@ describe('windowsWmiDiskStyleOutput', () => {
 
   it('returns null for empty string', () => {
     expect(windowsWmiDiskStyleOutput('')).toBeNull();
+  });
+});
+
+// ─── #23 regression: drive letter assignment — no EFI GUID ───────────────────
+// The old assignWindowsDriveLetter set id=c12a7328-… (EFI GUID), which caused
+// Windows to refuse drive letter assignment on the OPENCORE partition.
+
+describe('buildWindowsAssignLetterDiskpartScript', () => {
+  it('does not contain the EFI partition GUID', () => {
+    const script = buildWindowsAssignLetterDiskpartScript('4', 1);
+    expect(script).not.toContain('c12a7328');
+    expect(script).not.toContain('set id');
+  });
+
+  it('selects the correct disk', () => {
+    const script = buildWindowsAssignLetterDiskpartScript('4', 1);
+    expect(script).toContain('select disk 4');
+  });
+
+  it('selects the assessed partition number, not always partition 1', () => {
+    const script = buildWindowsAssignLetterDiskpartScript('2', 3);
+    expect(script).toContain('select partition 3');
+    expect(script).not.toContain('select partition 1');
+  });
+
+  it('contains assign noerr', () => {
+    const script = buildWindowsAssignLetterDiskpartScript('0', 1);
+    expect(script).toContain('assign noerr');
+  });
+
+  it('ends with rescan so Windows registers the new letter', () => {
+    const script = buildWindowsAssignLetterDiskpartScript('1', 2);
+    expect(script).toContain('rescan');
+  });
+});
+
+// ─── #24 regression: primary data partition selection ────────────────────────
+// Old code filtered $_.Type -eq 'Basic' (unreliable) and $_.Size -gt 50GB
+// (fails small disks). New code excludes by GPT GUID and min 20 GB.
+
+const GB = 1024 * 1024 * 1024;
+
+describe('selectWindowsPrimaryDataPartition', () => {
+  it('selects the largest non-system partition on a typical Windows GPT disk', () => {
+    const result = selectWindowsPrimaryDataPartition([
+      { partitionNumber: 1, sizeBytes: 100 * 1024 * 1024, gptType: '{c12a7328-f81f-11d2-ba4b-00a0c93ec93b}' }, // EFI
+      { partitionNumber: 2, sizeBytes: 16 * 1024 * 1024, gptType: '{e3c9e316-0b5c-4db8-817d-f92df00215ae}' },  // MSR
+      { partitionNumber: 3, sizeBytes: 220 * GB, gptType: '{ebd0a0a2-b9e5-4433-87c0-68b6b72699c7}' },           // C:
+      { partitionNumber: 4, sizeBytes: 700 * 1024 * 1024, gptType: '{de94bba4-06d1-4d40-a16a-bfd50179d6ac}' }, // Recovery
+    ]);
+    expect(result).toBe(3);
+  });
+
+  it('excludes the EFI System Partition by GUID', () => {
+    const result = selectWindowsPrimaryDataPartition([
+      { partitionNumber: 1, sizeBytes: 500 * GB, gptType: '{c12a7328-f81f-11d2-ba4b-00a0c93ec93b}' },
+    ]);
+    expect(result).toBeNull();
+  });
+
+  it('excludes the MSR partition by GUID', () => {
+    const result = selectWindowsPrimaryDataPartition([
+      { partitionNumber: 1, sizeBytes: 500 * GB, gptType: '{e3c9e316-0b5c-4db8-817d-f92df00215ae}' },
+    ]);
+    expect(result).toBeNull();
+  });
+
+  it('excludes Windows Recovery by GUID', () => {
+    const result = selectWindowsPrimaryDataPartition([
+      { partitionNumber: 1, sizeBytes: 500 * GB, gptType: '{de94bba4-06d1-4d40-a16a-bfd50179d6ac}' },
+    ]);
+    expect(result).toBeNull();
+  });
+
+  it('returns null when all qualifying candidates are below 20 GB', () => {
+    const result = selectWindowsPrimaryDataPartition([
+      { partitionNumber: 1, sizeBytes: 10 * GB, gptType: '' },
+    ]);
+    expect(result).toBeNull();
+  });
+
+  it('accepts a 25 GB data partition (smaller than the old 50 GB floor)', () => {
+    const result = selectWindowsPrimaryDataPartition([
+      { partitionNumber: 1, sizeBytes: 100 * 1024 * 1024, gptType: '{c12a7328-f81f-11d2-ba4b-00a0c93ec93b}' },
+      { partitionNumber: 2, sizeBytes: 25 * GB, gptType: '' },
+    ]);
+    expect(result).toBe(2);
+  });
+
+  it('returns null for an empty partition list', () => {
+    expect(selectWindowsPrimaryDataPartition([])).toBeNull();
+  });
+
+  it('picks the largest when multiple data partitions exist', () => {
+    const result = selectWindowsPrimaryDataPartition([
+      { partitionNumber: 2, sizeBytes: 50 * GB, gptType: '' },
+      { partitionNumber: 3, sizeBytes: 200 * GB, gptType: '' },
+      { partitionNumber: 4, sizeBytes: 80 * GB, gptType: '' },
+    ]);
+    expect(result).toBe(3);
+  });
+
+  it('is case-insensitive for GptType (PowerShell may return uppercase GUIDs)', () => {
+    const result = selectWindowsPrimaryDataPartition([
+      { partitionNumber: 1, sizeBytes: 200 * GB, gptType: '{C12A7328-F81F-11D2-BA4B-00A0C93EC93B}' }, // uppercase EFI
+    ]);
+    expect(result).toBeNull();
+  });
+
+  it('treats missing gptType as a non-system partition (MBR disk case)', () => {
+    const result = selectWindowsPrimaryDataPartition([
+      { partitionNumber: 1, sizeBytes: 200 * GB },
+    ]);
+    expect(result).toBe(1);
   });
 });

@@ -112,3 +112,19 @@ describe('structureError — recovery and download errors', () => {
     expect(e.retryable).toBe(true);
   });
 });
+
+describe('structureError — #23 drive letter assignment', () => {
+  it('classifies "did not assign a drive letter" with retryable=true', () => {
+    const e = structureError('Disk 4 has a FAT32 OPENCORE partition, but Windows did not assign a drive letter to it.');
+    expect(e.title).toContain('drive letter');
+    expect(e.retryable).toBe(true);
+  });
+});
+
+describe('structureError — #24 primary data partition detection', () => {
+  it('classifies "Could not determine the primary data partition" with retryable=false', () => {
+    const e = structureError('Could not determine the primary data partition for disk 2. The disk has no basic data partition of 20 GB or more that qualifies as a shrink target.');
+    expect(e.title).toContain('Cannot find data partition');
+    expect(e.retryable).toBe(false);
+  });
+});
