@@ -1009,7 +1009,73 @@ function withTimeout<T>(p: Promise<T>, ms: number, label: string): Promise<T> {
 // Classify OS error codes into structured user-friendly messages
 function classifyError(e: unknown): ClassifiedError {
   const err = e as NodeJS.ErrnoException;
-  const message = err.message ?? String(e);
+  const rawMessage = err.message ?? String(e);
+  const message = (() => {
+    let normalized = rawMessage;
+    let previous = '';
+    while (normalized !== previous) {
+      previous = normalized;
+      normalized = normalized
+        .replace(/^Error invoking remote method '[^']+':\s*/i, '')
+        .replace(/^Error:\s*/i, '')
+        .trim();
+    }
+    return normalized;
+  })();
+
+  if (message.includes('SAFETY BLOCK: BIOS readiness is no longer satisfied')) {
+    return {
+      category: 'app_error',
+      message: 'Flash preparation is blocked by BIOS readiness',
+      explanation: 'The firmware checklist no longer passes at the destructive flash boundary, so the USB write step was stopped before it started.',
+      suggestion: 'Return to the BIOS step, recheck the required firmware settings, then reopen the flash confirmation dialog.'
+    };
+  }
+
+  if (message.includes('Compatibility is blocked') || message.includes('No supported display path')) {
+    return {
+      category: 'app_error',
+      message: 'Flash preparation is blocked by compatibility',
+      explanation: 'The selected macOS target is no longer deployable for the current hardware path, so retrying the USB write step will not fix it.',
+      suggestion: 'Return to the report step, fix the compatibility blocker, then reopen the flash confirmation dialog.'
+    };
+  }
+
+  if (message.includes('No target disk is selected for flashing')) {
+    return {
+      category: 'app_error',
+      message: 'Flash preparation is blocked by a missing selected drive',
+      explanation: 'The destructive flash step was reached without a live selected target disk.',
+      suggestion: 'Go back to USB selection, refresh the drive list, and select the target drive again before flashing.'
+    };
+  }
+
+  if (message.includes('Disk identity could not be confirmed') || message.includes('No disk identity fingerprint was captured')) {
+    return {
+      category: 'app_error',
+      message: 'Flash preparation is blocked by missing disk identity',
+      explanation: 'The app could not confirm the physical identity of the target drive immediately before the destructive write step.',
+      suggestion: 'Reconnect the drive, re-select it, wait for its details to load, then reopen the flash confirmation dialog.'
+    };
+  }
+
+  if (message.includes('Operation stalled') || message.includes('no progress received for 60 seconds')) {
+    return {
+      category: 'app_error',
+      message: 'Operation stalled',
+      explanation: 'A background flash step stopped reporting progress before the app could confirm the final state. This is not enough evidence to blame permissions or the USB drive.',
+      suggestion: 'Retry the interrupted step once. If it stalls again, copy the diagnostics instead of retrying blindly.'
+    };
+  }
+
+  if (/^Task .* was cancelled$/i.test(message)) {
+    return {
+      category: 'app_error',
+      message: 'Operation was cancelled before completion',
+      explanation: 'The flash task ended before the app could confirm the final state on disk. This is not a proven permission or hardware failure.',
+      suggestion: 'Retry the interrupted step once. If the same cancellation repeats, copy the diagnostics and report it.'
+    };
+  }
 
   // 1. Hardware Errors
   if (message.includes('lost') || message.includes('disconnected') || message.includes('rejected write block')) {
@@ -3431,22 +3497,29 @@ app.whenReady().then(async () => {
     efiPath: string,
     expectedIdentity: Partial<DiskInfo> | undefined,
   ) => {
+    const throwClassified = (message: string): never => {
+      const error = new Error(message);
+      throw createClassifiedIpcError(classifyError(error), error);
+    };
+
     const { buildProfile, hardwareFingerprint, hardwareProfileDigest } = requireFlashAuthorizationContext();
     const resolvedEfiPath = path.resolve(efiPath);
     const currentDisk = await diskOps.getDiskInfo(device);
+    lastSelectedDisk = currentDisk;
     const capturedIdentity = resolveFlashPreparationIdentity(expectedIdentity ?? null, currentDisk);
 
     if (!capturedIdentity) {
-      throw new Error('SAFETY BLOCK: Disk identity could not be confirmed for this target. Re-select the drive and wait for its details to load before flashing.');
+      throwClassified('SAFETY BLOCK: Disk identity could not be confirmed for this target. Re-select the drive and wait for its details to load before flashing.');
     }
+    const confirmedIdentity = capturedIdentity as NonNullable<typeof capturedIdentity>;
     const deployGuard = await getDeployFlowGuard(buildProfile, resolvedEfiPath);
     const biosState = await getBiosStateForProfile(buildProfile);
     const validation = await runEfiValidation(resolvedEfiPath, buildProfile);
-    const collisionDevices = await getFlashCollisionDevices(capturedIdentity, device);
+    const collisionDevices = await getFlashCollisionDevices(confirmedIdentity, device);
     const decision = canProceedWithFlash({
       selectedDevice: device,
       currentDisk,
-      expectedIdentity: capturedIdentity,
+      expectedIdentity: confirmedIdentity,
       collisionDevices,
       deployGuardAllowed: deployGuard.allowed,
       deployGuardReason: deployGuard.reason,
@@ -3462,22 +3535,22 @@ app.whenReady().then(async () => {
         decision,
         collisionDevices,
         currentDisk,
-        expectedIdentity: capturedIdentity,
+        expectedIdentity: confirmedIdentity,
       });
-      throw new Error(decision.reason ?? 'SAFETY BLOCK: Flash preparation failed.');
+      throwClassified(decision.reason ?? 'SAFETY BLOCK: Flash preparation failed.');
     }
 
     const backupPolicy = await withTimeout(
       captureEfiBackupForFlash({
         device,
-        expectedIdentity: capturedIdentity,
+        expectedIdentity: confirmedIdentity,
         hardwareProfileDigest,
       }),
       15_000,
       'captureEfiBackupForFlash',
     );
     if (backupPolicy.status === 'blocked') {
-      throw new Error(backupPolicy.reason);
+      throwClassified(backupPolicy.reason ?? 'SAFETY BLOCK: Existing EFI backup policy blocked the flash confirmation step.');
     }
 
     const snapshot = buildCurrentFlashSnapshot({
@@ -3497,15 +3570,18 @@ app.whenReady().then(async () => {
         device,
         snapshot: summarizeSnapshot(snapshot),
       });
-      throw new Error(reason);
+      throwClassified(reason);
     }
+    const snapshotEfiStateHash = snapshot.efiStateHash as string;
+    const snapshotDiskFingerprint = snapshot.diskFingerprint as NonNullable<typeof snapshot.diskFingerprint>;
+    const snapshotHardwareFingerprint = snapshot.hardwareFingerprint as string;
 
     const record = flashConfirmationStore.issue({
       device,
-      expectedIdentity: snapshot.diskFingerprint,
-      efiStateHash: snapshot.efiStateHash,
-      payloadStateHash: snapshot.payloadStateHash,
-      hardwareFingerprint,
+      expectedIdentity: snapshotDiskFingerprint,
+      efiStateHash: snapshotEfiStateHash,
+      payloadStateHash: snapshot.payloadStateHash ?? undefined,
+      hardwareFingerprint: snapshotHardwareFingerprint,
     });
     logFlashAuthorizationEvent('INFO', 'Issued flash confirmation token', {
       device,
@@ -3617,12 +3693,16 @@ app.whenReady().then(async () => {
       log('INFO', 'usb-flash', 'USB flash complete', { device });
       return true;
     } catch (e: any) {
-      const classified = classifyError(e);
-      logger.timeline('flash_fail', token.taskId, { category: classified.category, error: e.message });
+      const taskState = registry.get(token.taskId);
+      const surfacedError = token.aborted && taskState?.error
+        ? new Error(taskState.error)
+        : e;
+      const classified = classifyError(surfacedError);
+      logger.timeline('flash_fail', token.taskId, { category: classified.category, error: surfacedError.message });
       if (!token.aborted) registry.fail(token.taskId, classified.message);
-      else registry.cancel(token.taskId);
+      else if (taskState?.status !== 'failed' && taskState?.status !== 'cancelled') registry.cancel(token.taskId);
       if (logger) logger.flush();
-      throw createClassifiedIpcError(classified, e);
+      throw createClassifiedIpcError(classified, surfacedError);
     }
   });
 

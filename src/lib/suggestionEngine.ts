@@ -13,6 +13,7 @@ import {
   hasUnsupportedModernNvidia,
   parseMacOSVersion,
 } from '../../electron/hackintoshRules.js';
+import { normalizeErrorMessage } from './errorMessage.js';
 import { structureError } from './structuredErrors';
 
 // ─── Types ──────────────────────────────────────────────────────────────────
@@ -639,6 +640,103 @@ const TEMPLATES: SuggestionTemplate[] = [
     },
   },
 
+  // ── Flash prepare blocked by BIOS readiness ───────────────────
+  {
+    test: m => m.includes('bios readiness is no longer satisfied'),
+    code: 'bios_readiness_blocked',
+    category: 'validation_error',
+    build: () => ({
+      title: 'Flashing is blocked by BIOS readiness',
+      explanation: 'The app rechecked the firmware prerequisites right before the destructive flash step, and they are no longer satisfied.',
+      severity: 'critical',
+      decisionSummary: '',
+      primaryAction: act(
+        'Return to the BIOS step and run Recheck BIOS',
+        'high',
+        'The flash never started — the firmware gate blocked it first',
+        'fix_now',
+        'Retrying the USB step will not help until the firmware checklist is valid again',
+        'The BIOS state is refreshed and flashing can be prepared safely again',
+      ),
+      alternatives: [
+        act(
+          'Go back to the report step if the target compatibility also changed',
+          'medium',
+          'A BIOS block can coexist with a compatibility block after the target or hardware path changes',
+          'try_alternative',
+          'If the machine is no longer bootable for the selected macOS target, the BIOS step alone is not the only blocker',
+          'You return to the step that shows the current machine-level blocker clearly',
+        ),
+      ],
+    }),
+  },
+
+  // ── Flash prepare blocked by compatibility / display path ────
+  {
+    test: m => m.includes('compatibility is blocked') || m.includes('no supported display path'),
+    code: 'compatibility_blocked',
+    category: 'validation_error',
+    build: () => ({
+      title: 'Selected macOS target is no longer deployable',
+      explanation: 'Flashing was stopped before any USB write because the current machine no longer has a supported deployment path for the selected macOS target.',
+      severity: 'critical',
+      decisionSummary: '',
+      primaryAction: act(
+        'Return to the report step and fix the compatibility blocker',
+        'high',
+        'Retrying the USB step will not make an unsupported target bootable',
+        'fix_now',
+        'The blocker is in compatibility, not USB write access',
+        'You end up back on a supported target or hardware path before flashing again',
+      ),
+      alternatives: [],
+    }),
+  },
+
+  // ── Flash prepare blocked by missing selected disk ────────────
+  {
+    test: m => m.includes('no target disk is selected for flashing') || m.includes('target disk') && m.includes('no longer available'),
+    code: 'selected_disk_missing',
+    category: 'device_error',
+    build: () => ({
+      title: 'Target drive is no longer selected',
+      explanation: 'The flash confirmation step was reached without a currently selected, readable target drive.',
+      severity: 'actionable',
+      decisionSummary: '',
+      primaryAction: act(
+        'Return to USB selection, refresh the drive list, and select the drive again',
+        'high',
+        'The destructive flash step cannot continue without a live selected device',
+        'fix_now',
+        'This is a missing-device precondition failure, not a write failure',
+        'The app regains a current disk handle before you reopen the flash confirmation dialog',
+      ),
+      alternatives: [],
+    }),
+  },
+
+  // ── Flash prepare blocked by missing disk identity ────────────
+  {
+    test: m => m.includes('disk identity could not be confirmed') || m.includes('no disk identity fingerprint was captured'),
+    code: 'disk_identity_missing',
+    category: 'validation_error',
+    build: () => ({
+      title: 'Target drive identity could not be confirmed',
+      explanation: 'The app stopped at the destructive flash boundary because it could not prove which physical drive is selected.',
+      severity: 'critical',
+      decisionSummary: '',
+      primaryAction: act(
+        'Reconnect the drive, re-select it, and wait for its details to load',
+        'high',
+        'Drive identity must be confirmed again immediately before a destructive write',
+        'fix_now',
+        'This safety check prevents the app from guessing which physical drive you meant',
+        'The drive gets a fresh identity snapshot before the flash confirmation dialog opens again',
+      ),
+      alternatives: [],
+    }),
+  },
+
   // ── Drive letter assignment failure — issue #30 ───────────────
   {
     test: m => m.includes('did not assign a drive letter') || m.includes('add-partitionaccesspath'),
@@ -679,7 +777,7 @@ const TEMPLATES: SuggestionTemplate[] = [
     category: 'device_error',
     build: (ctx) => {
       const tier = getEscalationTier(ctx.retryCount ?? 0);
-      const msg = ctx.errorMessage.toLowerCase();
+      const msg = normalizeErrorMessage(ctx.errorMessage).toLowerCase();
       const looksLikePermissionError = msg.includes('permission denied') || msg.includes('eacces') || msg.includes('eperm') || msg.includes('administrator') || msg.includes('sudo');
       const looksLikeTimeoutError = msg.includes('timeout') || msg.includes('timed out');
       const looksLikeVerificationError = msg.includes('verification failed') || msg.includes('not found on usb after copy');
@@ -1288,7 +1386,15 @@ function enhanceWithContext(suggestion: Suggestion, ctx: SuggestionContext): Sug
       'AMD laptops cannot run macOS — the kernel does not support AMD mobile platforms.';
   }
 
-  if (!hasAnySupportedDisplayPath) {
+  const allowCompatibilityContextNote = ![
+    'bios_readiness_blocked',
+    'selected_disk_missing',
+    'disk_identity_missing',
+    'flash_write_error',
+    'watchdog_trigger',
+  ].includes(suggestion.code);
+
+  if (!hasAnySupportedDisplayPath && allowCompatibilityContextNote) {
     enhanced.severity = 'critical';
     enhanced.contextNote = (enhanced.contextNote ? enhanced.contextNote + ' ' : '') +
       'No supported display path remains for the selected macOS target. Retrying other steps will not make this machine bootable.';
@@ -1631,24 +1737,28 @@ function buildValidationSuggestion(ctx: SuggestionContext): Suggestion | null {
 // ─── Public API ─────────────────────────────────────────────────────────────
 
 export function getSuggestion(ctx: SuggestionContext): Suggestion {
-  const msg = (ctx.errorMessage || '').toLowerCase();
-  const validationSuggestion = buildValidationSuggestion(ctx);
+  const normalizedCtx: SuggestionContext = {
+    ...ctx,
+    errorMessage: normalizeErrorMessage(ctx.errorMessage),
+  };
+  const msg = normalizedCtx.errorMessage.toLowerCase();
+  const validationSuggestion = buildValidationSuggestion(normalizedCtx);
   if (validationSuggestion) return validationSuggestion;
 
   for (const tmpl of TEMPLATES) {
     if (tmpl.test(msg)) {
-      const built = tmpl.build(ctx);
+      const built = tmpl.build(normalizedCtx);
       const suggestion: Suggestion = {
         code: tmpl.code,
         category: tmpl.category,
         ...built,
       };
-      const enhanced = enhanceWithContext(suggestion, ctx);
-      return applyRecommendation(enhanced, ctx);
+      const enhanced = enhanceWithContext(suggestion, normalizedCtx);
+      return applyRecommendation(enhanced, normalizedCtx);
     }
   }
 
-  return buildUnknownFallback(ctx);
+  return buildUnknownFallback(normalizedCtx);
 }
 
 export interface ActionPayload {

@@ -79,6 +79,12 @@ interface ThrottleState {
   lastPct: number;
 }
 
+const WATCHDOG_IDLE_MS = 60_000;
+const WATCHDOG_ACTIVE_PROCESS_MS: Partial<Record<TaskKind, number>> = {
+  'usb-flash': 15 * 60_000,
+  'partition-prep': 5 * 60_000,
+};
+
 function isTerminalStatus(status: TaskStatus): boolean {
   return status === 'complete' || status === 'failed' || status === 'cancelled';
 }
@@ -222,18 +228,24 @@ export function createTaskRegistry(
     return true;
   }
 
-  // Watchdog timer to detect stalled tasks (no updates for > 60s)
+  // Watchdog timer to detect stalled tasks.
   const watchdog = setInterval(() => {
     const now = Date.now();
     for (const state of tasks.values()) {
-      if (state.status === 'running' && (now - state.lastUpdateAt) > 60_000) {
-        logger.warn('task_manager', `Task ${state.taskId} (${state.kind}) stalled — no update for 60s`, {
-          lastUpdate: new Date(state.lastUpdateAt).toISOString()
+      const activeProcesses = tokens.get(state.taskId)?.processes.size ?? 0;
+      const stallThreshold = activeProcesses > 0
+        ? (WATCHDOG_ACTIVE_PROCESS_MS[state.kind] ?? WATCHDOG_IDLE_MS)
+        : WATCHDOG_IDLE_MS;
+      if (state.status === 'running' && (now - state.lastUpdateAt) > stallThreshold) {
+        logger.warn('task_manager', `Task ${state.taskId} (${state.kind}) stalled — no update for ${Math.round(stallThreshold / 1000)}s`, {
+          lastUpdate: new Date(state.lastUpdateAt).toISOString(),
+          activeProcesses,
+          stallThresholdMs: stallThreshold,
         });
         logger.timeline('watchdog_trigger', state.taskId, { kind: state.kind, lastUpdate: state.lastUpdateAt });
         abortTask(state.taskId);
         state.status = 'failed';
-        state.error = `Operation stalled: no progress received for 60 seconds. Please check your connection or try again.`;
+        state.error = `Operation stalled: no progress received for ${Math.round(stallThreshold / 1000)} seconds. Please check the current step and try again.`;
         state.endedAt = Date.now();
         state.lastUpdateAt = Date.now();
         pushFn({ task: { ...state } });

@@ -2,6 +2,30 @@ import { describe, it, expect } from 'vitest';
 import { structureError } from '../src/lib/structuredErrors.js';
 
 describe('structureError — Windows flash path errors', () => {
+  it('classifies flash prepare BIOS blockers separately from write failures', () => {
+    const e = structureError("Error invoking remote method 'flash:prepare-confirmation': Error: SAFETY BLOCK: BIOS readiness is no longer satisfied. Re-verify firmware settings before flashing.");
+    expect(e.title).toContain('BIOS readiness');
+    expect(e.retryable).toBe(true);
+  });
+
+  it('classifies flash prepare compatibility blockers separately from write failures', () => {
+    const e = structureError("Error invoking remote method 'flash:prepare-confirmation': Error: Compatibility is blocked. Fix the compatibility report before deployment.");
+    expect(e.title).toContain('compatibility');
+    expect(e.retryable).toBe(true);
+  });
+
+  it('classifies missing flash disk identity separately from write failures', () => {
+    const e = structureError("Error invoking remote method 'flash:prepare-confirmation': Error: SAFETY BLOCK: No disk identity fingerprint was captured for this selection. Re-select the drive before flashing.");
+    expect(e.title).toContain('Disk identity');
+    expect(e.retryable).toBe(true);
+  });
+
+  it('classifies stalled operations separately from write failures', () => {
+    const e = structureError("Error invoking remote method 'flash-usb': Error: Operation stalled: no progress received for 900 seconds. Please check the current step and try again.");
+    expect(e.title).toContain('stalled');
+    expect(e.retryable).toBe(true);
+  });
+
   it('classifies diskpart partition creation failure', () => {
     const e = structureError('diskpart failed to create a partition on disk 2');
     expect(e.title).toContain('partition creation');

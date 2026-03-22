@@ -44,6 +44,8 @@ import { useTaskManager } from './hooks/useTaskManager';
 import type { TaskKind, TaskState } from '../electron/taskManager';
 import { BEGINNER_SAFETY_MODE } from './config';
 import { getSuggestionPayload, type Suggestion } from './lib/suggestionEngine';
+import { getFlashFailureTargetStep } from './lib/flashErrorRouting.js';
+import { normalizeErrorMessage } from './lib/errorMessage.js';
 import { buildFailureRecoveryViewModel, parseFailureRecoveryPayload } from './lib/failureRecovery.js';
 import {
   buildBiosRecoveryPayload,
@@ -743,7 +745,7 @@ export default function App() {
   };
 
   const classifyRetryBucket = (errorMessage: string, trace?: ValidationTrace | null) => {
-    const msgLower = errorMessage.toLowerCase();
+    const msgLower = normalizeErrorMessage(errorMessage).toLowerCase();
     if (trace?.code) return trace.code;
     if (msgLower.includes('401') || msgLower.includes('403')) return 'recovery_auth';
     if (msgLower.includes('recovery')) return 'recovery_dl';
@@ -2572,7 +2574,9 @@ export default function App() {
       setFlashConfirmationToken(prepared.token);
       setFlashConfirmationExpiresAt(prepared.expiresAt);
     } catch (e: any) {
-      setErrorWithSuggestion(e.message || 'Flash confirmation could not be prepared. Re-select the drive and try again.', 'usb-select');
+      const targetStep = getFlashFailureTargetStep(e?.message || '', profile);
+      setErrorWithSuggestion(e.message || 'Flash confirmation could not be prepared. Re-select the drive and try again.', targetStep);
+      setStep(targetStep);
       setFlashConfirmBusy(false);
       return;
     }
@@ -2625,8 +2629,9 @@ export default function App() {
       } catch (e: any) {
         (window.electron as any).recordFailure('flash_write', e.message || 'Flash failed').catch(() => {});
         clearFlashConfirmationState();
-        setErrorWithSuggestion(e.message || 'USB flash write failed. Check that the drive is not write-protected and try a different USB drive.');
-        setStep('usb-select');
+        const targetStep = getFlashFailureTargetStep(e?.message || '', profile);
+        setErrorWithSuggestion(e.message || 'USB flash write failed. Check that the drive is not write-protected and try a different USB drive.', targetStep);
+        setStep(targetStep);
         return;
       }
       // Flash succeeded — backend verified files on disk before returning

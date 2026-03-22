@@ -2,6 +2,14 @@
 
 Project note: the app is now branded as `OpCore-OneClick`. Legacy repo/update coordinates and the persisted app-data path remain unchanged for continuity.
 
+## 2.7.2 - 2026-03-23
+
+### Windows flash error-surface fix
+- The Windows flash watchdog no longer fails an active USB flash after 60 seconds just because a long-running child process is still copying data without app-level progress updates.
+- Stalled or cancelled Windows flash tasks no longer fall back to generic USB/admin failure guidance when the real problem is task state handling.
+- Flash prepare blockers now stay classified as BIOS, compatibility, or disk-selection/identity precondition failures instead of surfacing as generic USB write failures.
+- Diagnostics now retain the selected disk context for prepare-time flash failures, even if the destructive write never starts.
+
 ## 2.5.6 - 2026-03-22
 
 ### Windows flash-prep correctness fix

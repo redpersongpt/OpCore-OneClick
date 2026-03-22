@@ -1,3 +1,5 @@
+import { normalizeErrorMessage, normalizeErrorMessageLower } from './errorMessage.js';
+
 // ── Structured error types ─────────────────────────────────────────────────────
 
 export interface StructuredError {
@@ -75,6 +77,60 @@ const ERROR_MAP: Array<{
       what: 'macOS has no supported GPU output path on this machine.',
       nextStep: 'Use a supported Intel iGPU or supported AMD GPU, or disable the unsupported dGPU only if another supported output path remains.',
       retryable: false,
+    },
+  },
+  {
+    test: m => m.includes('bios readiness is no longer satisfied'),
+    structured: {
+      title: 'Flashing is blocked by BIOS readiness',
+      what: 'The app rechecked the firmware prerequisites immediately before flashing, and they are no longer satisfied.',
+      nextStep: 'Return to the BIOS step, fix or recheck the required firmware settings, then reopen the flash confirmation dialog.',
+      retryable: true,
+    },
+  },
+  {
+    test: m => m.includes('compatibility is blocked') && m.includes('deployment'),
+    structured: {
+      title: 'Flashing is blocked by compatibility',
+      what: 'The selected macOS target is no longer deployable from the current compatibility state.',
+      nextStep: 'Return to the report step, fix the compatibility blocker, then reopen the flash confirmation dialog.',
+      retryable: true,
+    },
+  },
+  {
+    test: m => m.includes('no target disk is selected for flashing'),
+    structured: {
+      title: 'No target disk selected',
+      what: 'The flash confirmation step was reached without a selected target disk.',
+      nextStep: 'Go back to USB selection, refresh the drive list, and select the target drive again before flashing.',
+      retryable: true,
+    },
+  },
+  {
+    test: m => m.includes('disk identity could not be confirmed') || m.includes('no disk identity fingerprint was captured'),
+    structured: {
+      title: 'Disk identity is missing',
+      what: 'The app could not confirm the physical identity of the selected drive at the destructive flash boundary.',
+      nextStep: 'Reconnect the drive, re-select it, wait for the details to load, then reopen the flash confirmation dialog.',
+      retryable: true,
+    },
+  },
+  {
+    test: m => m.includes('operation stalled') || m.includes('no progress received for 60 seconds'),
+    structured: {
+      title: 'Operation stalled',
+      what: 'A long-running background task stopped reporting progress before the app could confirm the final state.',
+      nextStep: 'Retry the interrupted step once. If it stalls again, copy the diagnostics instead of retrying blindly.',
+      retryable: true,
+    },
+  },
+  {
+    test: m => m.includes('was cancelled'),
+    structured: {
+      title: 'Operation cancelled',
+      what: 'The current task was cancelled before the app could finish or confirm the final on-disk state.',
+      nextStep: 'Retry the interrupted step once. If the same cancellation repeats, copy the diagnostics and report it.',
+      retryable: true,
     },
   },
   {
@@ -340,8 +396,8 @@ const ERROR_MAP: Array<{
  * Falls back to a generic structure if no pattern matches.
  */
 export function structureError(raw: string | Error): StructuredError {
-  const msg = raw instanceof Error ? raw.message : String(raw ?? '');
-  const lower = msg.toLowerCase();
+  const msg = normalizeErrorMessage(raw);
+  const lower = normalizeErrorMessageLower(raw);
 
   for (const entry of ERROR_MAP) {
     if (entry.test(lower)) return entry.structured;
