@@ -1299,13 +1299,22 @@ export function createDiskOps(log: LogFunction): DiskOps {
           log('DEBUG', 'usb-flash', 'Copying EFI to USB', { tmpMount });
           await runCmd(elevateCommand(`cp -r "${path.join(efiPath, 'EFI')}" "${tmpMount}/"`), registerProcess);
 
-          // Copy recovery payload if present
+          // Copy recovery payload if present — non-fatal so EFI flash still succeeds
           const recoveryDir = path.join(efiPath, 'com.apple.recovery.boot');
+          let recoveryCopyOk = false;
           if (fs.existsSync(recoveryDir)) {
             onPhase('copy', `Copying recovery payload to ${tmpMount}`);
             checkAborted();
             log('DEBUG', 'usb-flash', 'Copying recovery payload', { tmpMount });
-            await runCmd(elevateCommand(`cp -r "${recoveryDir}" "${tmpMount}/"`), registerProcess);
+            try {
+              await runCmd(elevateCommand(`cp -r "${recoveryDir}" "${tmpMount}/"`), registerProcess);
+              recoveryCopyOk = true;
+            } catch (recErr) {
+              log('WARN', 'usb-flash', 'Recovery payload copy failed — EFI is still valid without it', {
+                tmpMount,
+                error: (recErr as Error).message,
+              });
+            }
           }
 
           await runCmd('sync', registerProcess);
@@ -1315,8 +1324,8 @@ export function createDiskOps(log: LogFunction): DiskOps {
           if (!fs.existsSync(path.join(tmpMount, 'EFI', 'OC', 'OpenCore.efi'))) {
             throw new Error('Verification failed: EFI/OC/OpenCore.efi not found on USB after copy');
           }
-          if (fs.existsSync(recoveryDir) && !fs.existsSync(path.join(tmpMount, 'com.apple.recovery.boot', 'BaseSystem.dmg'))) {
-            throw new Error('Verification failed: com.apple.recovery.boot/BaseSystem.dmg not found on USB after copy');
+          if (recoveryCopyOk && !fs.existsSync(path.join(tmpMount, 'com.apple.recovery.boot', 'BaseSystem.dmg'))) {
+            log('WARN', 'usb-flash', 'Recovery payload was copied but BaseSystem.dmg not found on target — recovery may be incomplete', { tmpMount });
           }
         } finally {
           onPhase('eject', `Unmounting ${tmpMount}`);
@@ -1536,13 +1545,22 @@ export function createDiskOps(log: LogFunction): DiskOps {
           log('DEBUG', 'usb-flash', 'Copying EFI', { driveLetter });
           await runCmd(`xcopy /E /I /H /Y "${path.join(efiPath, 'EFI')}" "${driveLetter}:\\EFI"`, registerProcess);
 
-          // Copy recovery payload if present
+          // Copy recovery payload if present — non-fatal so EFI flash still succeeds
           const recoveryDir = path.join(efiPath, 'com.apple.recovery.boot');
+          let recoveryCopyOk = false;
           if (fs.existsSync(recoveryDir)) {
             onPhase('copy', `Copying recovery payload to ${driveLetter}:`);
             checkAborted();
             log('DEBUG', 'usb-flash', 'Copying recovery payload', { driveLetter });
-            await runCmd(`xcopy /E /I /H /Y "${recoveryDir}" "${driveLetter}:\\com.apple.recovery.boot"`, registerProcess);
+            try {
+              await runCmd(`xcopy /E /I /H /Y "${recoveryDir}" "${driveLetter}:\\com.apple.recovery.boot"`, registerProcess);
+              recoveryCopyOk = true;
+            } catch (recErr) {
+              log('WARN', 'usb-flash', 'Recovery payload copy failed — EFI is still valid without it', {
+                driveLetter,
+                error: (recErr as Error).message,
+              });
+            }
           }
 
           // Verify: EFI must exist on target
@@ -1550,8 +1568,8 @@ export function createDiskOps(log: LogFunction): DiskOps {
           if (!fs.existsSync(path.join(`${driveLetter}:`, 'EFI', 'OC', 'OpenCore.efi'))) {
             throw new Error('Verification failed: EFI\\OC\\OpenCore.efi not found on USB after copy');
           }
-          if (fs.existsSync(recoveryDir) && !fs.existsSync(path.join(`${driveLetter}:`, 'com.apple.recovery.boot', 'BaseSystem.dmg'))) {
-            throw new Error('Verification failed: com.apple.recovery.boot\\BaseSystem.dmg not found on USB after copy');
+          if (recoveryCopyOk && !fs.existsSync(path.join(`${driveLetter}:`, 'com.apple.recovery.boot', 'BaseSystem.dmg'))) {
+            log('WARN', 'usb-flash', 'Recovery payload was copied but BaseSystem.dmg not found on target — recovery may be incomplete', { driveLetter });
           }
         } catch (e) {
           throw e;
