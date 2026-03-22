@@ -2,6 +2,11 @@
 
 Project note: the app is now branded as `OpCore-OneClick`. Legacy repo/update coordinates and the persisted app-data path remain unchanged for continuity.
 
+## 2.5.5 - 2026-03-22
+
+### Release workflow fix
+- Fixed the direct `gh release create` publish step by passing the repository explicitly in the publish job, which runs without a checked-out `.git` directory.
+
 ## 2.5.4 - 2026-03-22
 
 ### Release workflow cleanup

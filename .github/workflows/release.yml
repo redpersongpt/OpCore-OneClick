@@ -104,5 +104,6 @@ jobs:
             exit 1
           fi
           gh release create "$tag" "${files[@]}" \
+            --repo "$GITHUB_REPOSITORY" \
             --title "$tag" \
             --latest
