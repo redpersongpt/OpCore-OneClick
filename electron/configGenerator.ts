@@ -458,12 +458,13 @@ export function getRequiredResources(profile: HardwareProfile) {
     }
 
     const mb = profile.motherboard.toLowerCase();
+    const needsAmdCpuSsdt = /\b(a520|b550|a620|b650|x670|x670e|b850|x870|x870e)\b/.test(mb);
 
     // SSDTs by platform — Source: per-gen config.plist pages
     if (profile.architecture === 'Intel') {
         if (['Alder Lake', 'Raptor Lake'].includes(profile.generation)) {
             pushSsdt('SSDT-PLUG-ALT.aml');
-            pushSsdt('SSDT-RTCAWAC.aml');
+            pushSsdt('SSDT-AWAC.aml');
             pushSsdt('SSDT-EC-USBX.aml');
             pushUnique('CPUTopologyRebuild.kext');
         } else if (['Coffee Lake', 'Comet Lake', 'Rocket Lake'].includes(profile.generation)) {
@@ -482,8 +483,8 @@ export function getRequiredResources(profile: HardwareProfile) {
             pushSsdt('SSDT-EC.aml');
         }
     } else if (profile.architecture === 'AMD') {
-        pushSsdt('SSDT-EC-USBX-AMD.aml');
-        if (mb.includes('b550') || mb.includes('a520')) {
+        pushSsdt('SSDT-EC-USBX-DESKTOP.aml');
+        if (needsAmdCpuSsdt) {
             pushSsdt('SSDT-CPUR.aml');
         }
     }

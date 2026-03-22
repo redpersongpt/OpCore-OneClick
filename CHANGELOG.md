@@ -2,6 +2,16 @@
 
 Project note: the app is now branded as `OpCore-OneClick`. Legacy repo/update coordinates and the persisted app-data path remain unchanged for continuity.
 
+## 2.5.2 - 2026-03-22
+
+### SSDT sourcing follow-up
+- Fixed the SSDT source-policy regression in the in-progress follow-up patch so the Electron build path matches the source-policy module again.
+- Added explicit source coverage for the shipped AMD desktop, Coffee Lake, Alder Lake, and Raptor Lake SSDT sets.
+- EFI build now fails clearly if a required SSDT has no supported source policy instead of falling into a type/runtime mismatch.
+
+### Release workflow cleanup
+- Updated the release workflow action versions to current Node 24-capable majors to clear the GitHub Actions Node 20 deprecation warnings from the release pipeline.
+
 ## 2.5.1 - 2026-03-22
 
 ### Product rebrand

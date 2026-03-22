@@ -6,6 +6,7 @@ import {
   generateConfigPlist,
 } from '../electron/configGenerator.js';
 import type { HardwareProfile } from '../electron/configGenerator.js';
+import { getUnsupportedSsdtRequests } from '../electron/ssdtSourcePolicy.js';
 
 function fakeProfile(overrides: Partial<HardwareProfile> = {}): HardwareProfile {
   return {
@@ -293,5 +294,89 @@ describe('getRequiredResources', () => {
     const r = getRequiredResources(fakeProfile({ isLaptop: true }));
     expect(r.kexts).toContain('SMCBatteryManager.kext');
     expect(r.kexts).toContain('VoodooPS2Controller.kext');
+  });
+
+  it('uses SSDT-AWAC for Coffee Lake desktops', () => {
+    const r = getRequiredResources(fakeProfile({
+      architecture: 'Intel',
+      generation: 'Coffee Lake',
+      motherboard: 'ASUS Z390',
+    }));
+    expect(r.ssdts).toContain('SSDT-AWAC.aml');
+  });
+
+  it('uses the canonical AMD desktop EC/USBX SSDT name', () => {
+    const r = getRequiredResources(fakeProfile({
+      architecture: 'AMD',
+      generation: 'Ryzen',
+      motherboard: 'MSI B650',
+    }));
+    expect(r.ssdts).toContain('SSDT-EC-USBX-DESKTOP.aml');
+    expect(r.ssdts).not.toContain('SSDT-EC-USBX-AMD.aml');
+  });
+
+  it('includes SSDT-CPUR for newer AMD chipsets that require it', () => {
+    const r = getRequiredResources(fakeProfile({
+      architecture: 'AMD',
+      generation: 'Ryzen',
+      motherboard: 'Gigabyte B650 AORUS',
+    }));
+    expect(r.ssdts).toContain('SSDT-CPUR.aml');
+  });
+
+  it('does not include SSDT-CPUR for older AMD chipsets', () => {
+    const r = getRequiredResources(fakeProfile({
+      architecture: 'AMD',
+      generation: 'Ryzen',
+      motherboard: 'ASUS X570',
+    }));
+    expect(r.ssdts).not.toContain('SSDT-CPUR.aml');
+  });
+
+  it('keeps the shipped SSDT matrix sourceable for AMD desktop, Coffee Lake, Alder Lake, and Raptor Lake', () => {
+    const scenarios = [
+      {
+        name: 'AMD desktop',
+        profile: fakeProfile({
+          architecture: 'AMD',
+          generation: 'Ryzen',
+          motherboard: 'MSI B650',
+        }),
+        expectedSsdts: ['SSDT-EC-USBX-DESKTOP.aml', 'SSDT-CPUR.aml'],
+      },
+      {
+        name: 'Coffee Lake',
+        profile: fakeProfile({
+          architecture: 'Intel',
+          generation: 'Coffee Lake',
+          motherboard: 'ASUS Prime Z390-A',
+        }),
+        expectedSsdts: ['SSDT-PLUG.aml', 'SSDT-AWAC.aml', 'SSDT-EC-USBX.aml', 'SSDT-PMC.aml'],
+      },
+      {
+        name: 'Alder Lake',
+        profile: fakeProfile({
+          architecture: 'Intel',
+          generation: 'Alder Lake',
+          motherboard: 'MSI Z690 Tomahawk',
+        }),
+        expectedSsdts: ['SSDT-PLUG-ALT.aml', 'SSDT-AWAC.aml', 'SSDT-EC-USBX.aml'],
+      },
+      {
+        name: 'Raptor Lake',
+        profile: fakeProfile({
+          architecture: 'Intel',
+          generation: 'Raptor Lake',
+          motherboard: 'Gigabyte Z790 AORUS',
+        }),
+        expectedSsdts: ['SSDT-PLUG-ALT.aml', 'SSDT-AWAC.aml', 'SSDT-EC-USBX.aml'],
+      },
+    ];
+
+    for (const scenario of scenarios) {
+      const resources = getRequiredResources(scenario.profile);
+      expect(resources.ssdts, scenario.name).toEqual(scenario.expectedSsdts);
+      expect(getUnsupportedSsdtRequests(resources.ssdts), scenario.name).toEqual([]);
+    }
   });
 });

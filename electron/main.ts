@@ -32,6 +32,7 @@ import { buildHardwareFingerprint, clearBiosSession, loadBiosSession, saveBiosSe
 import type { BiosOrchestratorState, BiosSessionState, BiosSettingSelection } from './bios/types.js';
 import { detectCpuGeneration, detectArchitecture, mapDetectedToProfile } from './hardwareMapper.js';
 import { detectElevationMethod, canElevate, elevationDescription } from './linuxElevate.js';
+import { getSsdtSourcePolicy, getUnsupportedSsdtRequests } from './ssdtSourcePolicy.js';
 import { createLogger } from './logger.js';
 import {
   createClassifiedIpcError,
@@ -1310,6 +1311,7 @@ async function createEfiStructure(
   onPhase?: (phase: string, detail: string) => void,
 ) {
   const { ocExtractedDir } = await ensureOpenCoreBinaries(basePath, token, onPhase);
+  const openCoreCacheDir = path.resolve(app.getPath('userData'), 'OpenCore_Cache');
 
   const { kexts, ssdts } = getRequiredResources(profile);
   const dirs = [
@@ -1337,30 +1339,70 @@ async function createEfiStructure(
     path.resolve(ocExtractedDir, 'Docs', 'AcpiSamples'),
   ];
   onPhase?.('Placing ACPI tables…', `${ssdts.length} SSDT files required.`);
+  const unsupportedSsdts = getUnsupportedSsdtRequests(ssdts);
+  if (unsupportedSsdts.length > 0) {
+    log('ERROR', 'efi', 'Required SSDT has no supported source policy', {
+      unsupportedSsdts,
+      requestedSsdts: ssdts,
+    });
+    throw new Error(
+      `EFI build failed: required SSDT files have no supported source policy for this hardware profile: ${unsupportedSsdts.join(', ')}.`
+    );
+  }
   const missingSsdts: string[] = [];
   for (const s of ssdts) {
     const destPath = path.resolve(basePath, 'EFI/OC/ACPI', s);
     if (fs.existsSync(destPath) && fs.statSync(destPath).size > 0) continue;
+    const policy = getSsdtSourcePolicy(s);
+    if (!policy) {
+      missingSsdts.push(s);
+      log('ERROR', 'efi', `Required SSDT has no supported source policy: ${s}`);
+      continue;
+    }
     let found = false;
     for (const sampleDir of ssdtSampleDirs) {
-      const src = path.resolve(sampleDir, s);
-      if (fs.existsSync(src) && fs.statSync(src).size > 0) {
-        fs.copyFileSync(src, destPath);
+      for (const candidate of policy.packageCandidates) {
+        const src = path.resolve(sampleDir, candidate);
+        if (fs.existsSync(src) && fs.statSync(src).size > 0) {
+          fs.copyFileSync(src, destPath);
+          found = true;
+          break;
+        }
+      }
+      if (found) break;
+    }
+    if (!found && policy.supplementalDownload) {
+      const supplementalDir = path.resolve(openCoreCacheDir, 'Supplemental_ACPI');
+      const cachedSupplementalPath = path.resolve(supplementalDir, policy.supplementalDownload.fileName);
+      if (!fs.existsSync(cachedSupplementalPath) || fs.statSync(cachedSupplementalPath).size === 0) {
+        fs.mkdirSync(supplementalDir, { recursive: true });
+        onPhase?.('Fetching supplemental ACPI tables…', policy.supplementalDownload.fileName);
+        await downloadFileWithProgress(
+          policy.supplementalDownload.url,
+          cachedSupplementalPath,
+          () => {},
+          0,
+          () => token?.check(),
+        );
+      }
+      if (fs.existsSync(cachedSupplementalPath) && fs.statSync(cachedSupplementalPath).size > 0) {
+        fs.copyFileSync(cachedSupplementalPath, destPath);
         found = true;
-        break;
       }
     }
     if (!found) {
       missingSsdts.push(s);
-      log('ERROR', 'efi', `Required SSDT not found in OpenCore package: ${s}`, {
+      log('ERROR', 'efi', `Required SSDT not found in package or supplemental sources: ${s}`, {
         searchedDirs: ssdtSampleDirs,
+        candidateNames: policy.packageCandidates,
+        supplementalUrl: policy.supplementalDownload?.url ?? null,
       });
     }
   }
   if (missingSsdts.length > 0) {
     throw new Error(
-      `EFI build failed: required SSDT files are missing from the OpenCore package: ${missingSsdts.join(', ')}. ` +
-      'The OpenCore cache may be corrupt — try deleting the OpenCore_Cache folder and rebuilding.'
+      `EFI build failed: required SSDT files could not be sourced for this hardware profile: ${missingSsdts.join(', ')}. ` +
+      'The OpenCore cache or supplemental ACPI cache may be incomplete — rebuild after clearing OpenCore_Cache.'
     );
   }
 
