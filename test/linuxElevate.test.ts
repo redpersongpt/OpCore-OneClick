@@ -38,10 +38,11 @@ describe('linuxElevate — elevation method detection', () => {
 describe('linuxElevate — privilege guidance', () => {
   it('never tells users to run the full Electron GUI as root', async () => {
     const { elevationDescription } = await import('../electron/linuxElevate.js');
-    // After detection, the description should not contain "run as root" or "sudo ./macOS-One-Click"
+    // After detection, the description should not contain "run as root" or a suggestion to sudo-launch the GUI.
     const desc = elevationDescription().toLowerCase();
     expect(desc).not.toContain('run as root');
     expect(desc).not.toContain('sudo ./macos-one-click');
+    expect(desc).not.toContain('sudo ./opcore-oneclick');
     expect(desc).not.toContain('run the entire app as root');
   });
 });

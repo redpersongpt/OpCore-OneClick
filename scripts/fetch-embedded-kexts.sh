@@ -32,7 +32,7 @@ fetch_kext() {
   # Get latest release asset URL
   local api_url="https://api.github.com/repos/$repo/releases/latest"
   local release_json
-  release_json=$(curl -sL -H "User-Agent: macOS-One-Click/1.0" "$api_url")
+  release_json=$(curl -sL -H "User-Agent: OpCore-OneClick/1.0" "$api_url")
 
   # Find matching zip asset
   local asset_url

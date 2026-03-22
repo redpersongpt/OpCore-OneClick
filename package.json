@@ -1,11 +1,12 @@
 {
-  "name": "macos-one-click",
+  "name": "opcore-oneclick",
   "private": true,
-  "version": "2.5.0",
-  "description": "macOS One-Click Deployment Utility",
-  "author": "macOS-One-Click contributors",
+  "version": "2.5.1",
+  "description": "OpCore-OneClick deployment utility",
+  "author": "OpCore-OneClick contributors",
   "main": "dist-electron/electron/main.js",
   "bin": {
+    "opcore-oneclick": "dist-electron/electron/cli.js",
     "macos-oneclick": "dist-electron/electron/cli.js"
   },
   "type": "module",
@@ -24,7 +25,7 @@
   },
   "build": {
     "appId": "com.redpersongpt.macosoneclick",
-    "productName": "macOS-OneClick",
+    "productName": "OpCore-OneClick",
     "directories": {
       "output": "release"
     },
@@ -61,7 +62,7 @@
       ],
       "icon": "assets/icons/image.png",
       "category": "System",
-      "maintainer": "macOS-One-Click contributors",
+      "maintainer": "OpCore-OneClick contributors",
       "vendor": "redpersongpt",
       "executableArgs": []
     },

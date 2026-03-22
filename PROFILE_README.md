@@ -8,10 +8,10 @@
 
 ---
 
-## macOS One-Click
+## OpCore-OneClick
 [macos-install.one](https://macos-install.one)
 
-Automated utility for deploying macOS on PC hardware.
+Automated utility for deploying macOS on PC hardware. Formerly macOS One-Click.
 
 - Automated hardware analysis and OpenCore synthesis.
 - Direct recovery image streaming from Apple.

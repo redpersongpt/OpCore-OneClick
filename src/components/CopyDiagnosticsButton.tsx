@@ -34,7 +34,7 @@ export default function CopyDiagnosticsButton({ extraContext, className }: Props
         : 'No disk selected';
 
       const lines = [
-        'macOS One-Click Diagnostics',
+        'OpCore-OneClick Diagnostics',
         '===========================',
         `Timestamp:     ${d.timestamp}`,
         `App Version:   ${d.version}`,

@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * macOS One-Click CLI — headless hardware scan, compatibility check, and report.
+ * OpCore-OneClick CLI — headless hardware scan, compatibility check, and report.
  *
  * Usage:
  *   node dist-electron/electron/cli.js scan [--json]
@@ -58,7 +58,7 @@ function getVersion(): string {
 function usage(): void {
   const v = getVersion();
   printHuman([
-    `macOS One-Click CLI v${v}`,
+    `OpCore-OneClick CLI v${v}`,
     '',
     'Commands:',
     '  scan         Detect hardware and print the machine profile',
@@ -72,10 +72,13 @@ function usage(): void {
     '  --target     Target macOS version (e.g. "macOS Sequoia 15.x", "macOS Tahoe 26")',
     '',
     'Examples:',
-    '  macos-oneclick scan --json',
-    '  macos-oneclick compatible --target "macOS Tahoe 26"',
-    '  macos-oneclick report',
-    '  macos-oneclick matrix --json',
+    '  opcore-oneclick scan --json',
+    '  opcore-oneclick compatible --target "macOS Tahoe 26"',
+    '  opcore-oneclick report',
+    '  opcore-oneclick matrix --json',
+    '',
+    'Legacy alias:',
+    '  macos-oneclick … (still supported for continuity)',
     '',
     'Note: This CLI performs read-only operations only.',
     '      Destructive operations (flash, build) require the GUI app.',

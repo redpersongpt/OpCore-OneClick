@@ -34,7 +34,7 @@ describe('UpdaterPanel – action visibility across states', () => {
   it('available update: shows Download button and Release link', () => {
     render(
       <UpdaterPanel
-        state={baseState({ available: true, latestVersion: '2.5.0', assetName: 'macOS-One-Click-2.5.0.dmg' })}
+        state={baseState({ available: true, latestVersion: '2.5.0', assetName: 'OpCore-OneClick-2.5.0.dmg' })}
         onRefresh={noop}
         onPrimaryAction={noop}
         onOpenRelease={noop}

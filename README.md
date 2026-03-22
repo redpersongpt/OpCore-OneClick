@@ -1,9 +1,9 @@
-# macOS One-Click
+# OpCore-OneClick
 
 <div align="center">
 
 <a href="https://macos-install.one/">
-  <img src="./image.png" alt="macOS One-Click" width="100%">
+  <img src="./image.png" alt="OpCore-OneClick" width="100%">
 </a>
 
 <br/>
@@ -23,7 +23,7 @@
 
 Review-first desktop utility for building and validating OpenCore-based macOS installer workflows on supported PC hardware.
 
-macOS One-Click scans the target machine, validates the hardware path, builds the EFI, fetches required recovery resources where applicable, and prepares deployment media without hiding the risky parts.
+OpCore-OneClick, formerly macOS One-Click, scans the target machine, validates the hardware path, builds the EFI, fetches required recovery resources where applicable, and prepares deployment media without hiding the risky parts.
 
 ## Overview
 

@@ -143,7 +143,7 @@ function checkGitHubRateLimit(): Promise<GitHubRateLimitInfo | null> {
     const req = https.request({
       hostname: 'api.github.com',
       path: '/rate_limit',
-      headers: { 'User-Agent': 'macOS-One-Click/1.0' },
+      headers: { 'User-Agent': 'OpCore-OneClick/1.0' },
       timeout: 8000,
     }, (res) => {
       let data = '';
@@ -191,7 +191,7 @@ function probeUrl(urlString: string, timeoutMs = 10_000): Promise<{ reachable: b
       port: parsed.port || (isHttps ? 443 : 80),
       path: parsed.pathname + parsed.search,
       method: 'HEAD',
-      headers: { 'User-Agent': 'macOS-One-Click/1.0' },
+      headers: { 'User-Agent': 'OpCore-OneClick/1.0' },
       timeout: timeoutMs,
     }, (res: any) => {
       if ([301, 302, 307, 308].includes(res.statusCode) && res.headers.location) {
@@ -251,7 +251,7 @@ function checkKextAvailability(
     const req = https.request({
       hostname: 'api.github.com',
       path: `/repos/${entry.repo}/releases/latest`,
-      headers: { 'User-Agent': 'macOS-One-Click/1.0' },
+      headers: { 'User-Agent': 'OpCore-OneClick/1.0' },
       timeout: 10000,
     }, (res) => {
       if (res.statusCode === 403 || res.statusCode === 429) {

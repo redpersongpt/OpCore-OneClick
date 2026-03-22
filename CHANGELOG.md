@@ -1,5 +1,14 @@
 # Changelog
 
+Project note: the app is now branded as `OpCore-OneClick`. Legacy repo/update coordinates and the persisted app-data path remain unchanged for continuity.
+
+## 2.5.1 - 2026-03-22
+
+### Product rebrand
+- The app is now branded as `OpCore-OneClick` across the packaged app, window title, diagnostics, support logs, updater copy, and CLI usage text.
+- Existing updater/release continuity was preserved. The app still checks releases from `redpersongpt/macOS-One-Click` because the GitHub repo slug is unchanged.
+- Internal compatibility-sensitive paths were intentionally kept where needed. The existing `appId`, persisted `userData` path, and legacy `macos-oneclick` CLI alias remain in place for continuity.
+
 ## 2.5.0 - 2026-03-22
 
 ### Linux privilege model rewrite (#18)
@@ -8,7 +17,7 @@
 - Updated all privilege-related error messages, suggestions, and remediations to say "install polkit" instead of "run with sudo."
 
 ### CLI support (#14)
-- Added a headless CLI entry point (`macos-oneclick` / `node dist-electron/electron/cli.js`).
+- Added a headless CLI entry point (`opcore-oneclick`, legacy alias `macos-oneclick`, or `node dist-electron/electron/cli.js`).
 - Commands: `scan`, `compatible`, `report`, `matrix`, `version`.
 - JSON (`--json`) and human-readable output. Correct exit codes (0=ok, 1=error/blocked, 2=usage).
 - `--target` flag for specifying macOS version on `compatible` and `report` commands.

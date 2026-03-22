@@ -111,6 +111,14 @@ import {
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
+const PRODUCT_DISPLAY_NAME = 'OpCore-OneClick';
+const PRODUCT_HTTP_NAME = 'OpCore-OneClick';
+const LEGACY_USER_DATA_DIR_NAME = 'macOS-OneClick';
+const LEGACY_REPO_SLUG = 'redpersongpt/macOS-One-Click';
+const LEGACY_REPO_WEB_BASE_URL = `https://github.com/${LEGACY_REPO_SLUG}`;
+
+app.setName(PRODUCT_DISPLAY_NAME);
+app.setPath('userData', path.resolve(app.getPath('appData'), LEGACY_USER_DATA_DIR_NAME));
 
 const execPromise = util.promisify(exec);
 
@@ -472,7 +480,7 @@ function getCurrentCompatibilityReport(): ReturnType<typeof checkCompatibility> 
   return profile ? checkCompatibility(profile) : null;
 }
 
-const REPO_RELEASE_API_PATH = '/repos/redpersongpt/macOS-One-Click/releases/latest';
+const REPO_RELEASE_API_PATH = `/repos/${LEGACY_REPO_SLUG}/releases/latest`;
 const APP_UPDATE_RESULT_FILE = path.resolve(app.getPath('userData'), 'app-update-result.json');
 
 interface AppUpdateResultMarker {
@@ -581,7 +589,7 @@ async function fetchLatestAppRelease(): Promise<LatestReleaseInfo> {
       path: REPO_RELEASE_API_PATH,
       method: 'GET',
       headers: {
-        'User-Agent': 'macOS-OneClick-Updater/1.0',
+        'User-Agent': `${PRODUCT_HTTP_NAME}-Updater/1.0`,
         Accept: 'application/vnd.github+json',
       },
       timeout: 15_000,
@@ -627,7 +635,7 @@ async function checkForAppUpdates(): Promise<AppUpdateState> {
       lastCheckedAt: checkedAt,
       available,
       latestVersion: release.tag_name ?? null,
-      releaseUrl: release.html_url ?? 'https://github.com/redpersongpt/macOS-One-Click/releases/latest',
+      releaseUrl: release.html_url ?? `${LEGACY_REPO_WEB_BASE_URL}/releases/latest`,
       releaseNotes: release.body ?? null,
       assetName: asset?.name ?? null,
       assetSize: typeof asset?.size === 'number' ? asset.size : null,
@@ -645,7 +653,7 @@ async function checkForAppUpdates(): Promise<AppUpdateState> {
       lastCheckedAt: checkedAt,
       available: false,
       latestVersion: null,
-      releaseUrl: 'https://github.com/redpersongpt/macOS-One-Click/releases/latest',
+      releaseUrl: `${LEGACY_REPO_WEB_BASE_URL}/releases/latest`,
       releaseNotes: null,
       assetName: null,
       assetSize: null,
@@ -692,7 +700,7 @@ async function downloadLatestAppUpdate(): Promise<AppUpdateState> {
     });
   }
 
-  const downloadsDir = path.resolve(app.getPath('downloads'), 'macOS-OneClick-Updates');
+  const downloadsDir = path.resolve(app.getPath('downloads'), 'OpCore-OneClick-Updates');
   fs.mkdirSync(downloadsDir, { recursive: true });
   const finalPath = path.resolve(downloadsDir, asset.name);
   const tempPath = `${finalPath}.download`;
@@ -729,7 +737,7 @@ async function downloadLatestAppUpdate(): Promise<AppUpdateState> {
           hostname: targetUrl.hostname,
           port: targetUrl.port || (targetUrl.protocol === 'https:' ? 443 : 80),
           path: `${targetUrl.pathname}${targetUrl.search}`,
-          headers: { 'User-Agent': 'macOS-OneClick-Updater/1.0' },
+          headers: { 'User-Agent': `${PRODUCT_HTTP_NAME}-Updater/1.0` },
           timeout: 30_000,
         }, (response) => {
           if (response.statusCode && [301, 302, 307, 308].includes(response.statusCode)) {
@@ -1574,7 +1582,7 @@ async function downloadToTemp(url: string, dest: string, timeoutMs = 120_000, ch
             hostname: parsedUrl.hostname,
             port: parsedUrl.port || (isHttps ? 443 : 80),
             path: parsedUrl.pathname + parsedUrl.search,
-            headers: { 'User-Agent': 'macOS-One-Click/1.0' },
+            headers: { 'User-Agent': `${PRODUCT_HTTP_NAME}/1.0` },
             timeout: timeoutMs,
             ...(socket ? { socket, agent: false } : {}),
           };
@@ -1785,7 +1793,7 @@ function saveSupportLogToDesktop(extraContext?: string | null): { fileName: stri
   const snapshot = buildCurrentDiagnosticsSnapshot();
   const logBody = buildSavedSupportLog(snapshot, logger?.readOpsTail(200) ?? [], extraContext ?? null);
   const timestamp = new Date().toISOString().replace(/[:]/g, '-');
-  const fileName = `macos-one-click-support-log-${timestamp}.txt`;
+  const fileName = `opcore-oneclick-support-log-${timestamp}.txt`;
   const destination = path.join(app.getPath('desktop'), fileName);
 
   fs.writeFileSync(destination, logBody, 'utf-8');
@@ -2252,7 +2260,7 @@ async function fetchKextFromGitHub(
         hostname: 'api.github.com',
         port: 443,
         path: `/repos/${entry.repo}/releases/latest`,
-        headers: { 'User-Agent': 'macOS-One-Click/1.0' },
+        headers: { 'User-Agent': `${PRODUCT_HTTP_NAME}/1.0` },
         timeout: 30_000,
       };
       function doQuery(socket?: net.Socket | tls.TLSSocket): void {
@@ -2634,6 +2642,7 @@ function createWindow() {
     width: 1200, height: 800,
     minWidth: 960, minHeight: 650,
     show: false,
+    title: PRODUCT_DISPLAY_NAME,
     // hiddenInset is macOS-only; use default on Windows/Linux to avoid init crash
     titleBarStyle: process.platform === 'darwin' ? 'hiddenInset' : 'default',
     backgroundColor: '#050505',
@@ -2921,7 +2930,7 @@ app.whenReady().then(async () => {
 
     const result = await dialog.showSaveDialog({
       title: 'Export Hardware Profile',
-      defaultPath: path.resolve(app.getPath('documents'), `macos-one-click-hardware-profile-${artifact.digest.slice(0, 12)}.json`),
+      defaultPath: path.resolve(app.getPath('documents'), `opcore-oneclick-hardware-profile-${artifact.digest.slice(0, 12)}.json`),
       filters: [{ name: 'Hardware Profile Artifact', extensions: ['json'] }],
     });
     if (result.canceled || !result.filePath) return null;
@@ -4135,7 +4144,7 @@ app.whenReady().then(async () => {
   ipcHandle('report-issue', async (_event: Electron.IpcMainInvokeEvent, extraContext?: string | null) => {
     const snapshot = buildCurrentDiagnosticsSnapshot();
     const draft = buildIssueReportDraft(snapshot, extraContext ?? null);
-    const baseUrl = 'https://github.com/redpersongpt/macOS-One-Click/issues/new';
+    const baseUrl = `${LEGACY_REPO_WEB_BASE_URL}/issues/new`;
     // Only put the short title in the URL — body goes to clipboard to avoid
     // URL-length truncation issues across platforms/browsers.
     const url = `${baseUrl}?title=${encodeURIComponent(draft.title)}&labels=bug`;
@@ -4147,7 +4156,7 @@ app.whenReady().then(async () => {
   });
 
   ipcHandle('app:open-latest-release', async () => {
-    const url = 'https://github.com/redpersongpt/macOS-One-Click/releases/latest';
+    const url = `${LEGACY_REPO_WEB_BASE_URL}/releases/latest`;
     if (!isSafeExternalTarget(url)) {
       throw new Error('Latest release URL is not a safe external target.');
     }

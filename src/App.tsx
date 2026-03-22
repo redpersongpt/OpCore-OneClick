@@ -2912,7 +2912,7 @@ export default function App() {
               transition={{ delay: 1 }}
               className="mt-8 text-[10px] text-white/20 font-mono uppercase tracking-[0.4em]"
             >
-              macOS OneClick
+              OpCore-OneClick
             </motion.p>
           </motion.div>
         )}
@@ -2935,7 +2935,7 @@ export default function App() {
                 className="flex items-center gap-2.5 mb-8 px-2 hover:opacity-75 transition-opacity cursor-pointer text-left"
               >
                 <BrandIcon className="w-5 h-5 text-white" />
-                <span className="font-bold text-sm tracking-wide text-white">macOS OneClick</span>
+                <span className="font-bold text-sm tracking-wide text-white">OpCore-OneClick</span>
               </button>
 
               {SIDEBAR_STEPS.map(s => (React.createElement(SidebarItem as any, { key: s.id, id: s.id, label: s.label, icon: s.icon })))}
@@ -3054,7 +3054,7 @@ export default function App() {
               <div className="relative flex-shrink-0 px-6 pt-8 pb-4 sm:px-8 xl:px-12">
                 <div className="absolute top-4 right-8 opacity-10 pointer-events-none flex items-center gap-2">
                   <BrandIcon className="w-4 h-4 text-white" />
-                  <span className="text-[10px] font-bold uppercase tracking-widest">macOS OneClick</span>
+                  <span className="text-[10px] font-bold uppercase tracking-widest">OpCore-OneClick</span>
                 </div>
                 {(() => {
                   const backMap: Partial<Record<StepId, StepId>> = {
@@ -3542,7 +3542,7 @@ export default function App() {
               </div>
               <div className="space-y-3 text-sm text-white/60 leading-relaxed">
                 <p>
-                  <span className="text-white font-semibold">macOS OneClick</span> is a community project and is not affiliated with Apple.
+                  <span className="text-white font-semibold">OpCore-OneClick</span> is a community project and is not affiliated with Apple.
                 </p>
                 <p>
                   Continue only if you are okay changing boot settings.

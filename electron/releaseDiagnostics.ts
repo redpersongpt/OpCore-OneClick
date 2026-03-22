@@ -375,7 +375,7 @@ export function buildSavedSupportLog(
     });
 
   const sections = [
-    'macOS One-Click Support Log',
+    'OpCore-OneClick Support Log',
     '===========================',
     `Generated: ${snapshot.timestamp}`,
     `Session: ${snapshot.sessionFingerprint}`,

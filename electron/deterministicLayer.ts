@@ -81,7 +81,7 @@ function verifyUrl(url: string, timeoutMs = 10000): Promise<{ reachable: boolean
         port: parsedUrl.port || (parsedUrl.protocol === 'https:' ? 443 : 80),
         path: parsedUrl.pathname + parsedUrl.search,
         method: 'HEAD',
-        headers: { 'User-Agent': 'macOS-One-Click/1.0' },
+        headers: { 'User-Agent': 'OpCore-OneClick/1.0' },
         timeout: timeoutMs,
       }, (res: any) => {
         // Follow redirects
@@ -112,7 +112,7 @@ function queryGitHubRelease(repo: string, assetFilter?: string): Promise<{ versi
     const req = https.request({
       hostname: 'api.github.com',
       path: `/repos/${repo}/releases/latest`,
-      headers: { 'User-Agent': 'macOS-One-Click/1.0' },
+      headers: { 'User-Agent': 'OpCore-OneClick/1.0' },
       timeout: 10000,
     }, (res) => {
       if (res.statusCode === 403 || res.statusCode === 429) {
