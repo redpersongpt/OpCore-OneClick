@@ -2548,11 +2548,24 @@ export default function App() {
     } finally {
       setValidationRunning(false);
     }
+    // Issue #31: ensure we always have disk identity before calling prepare.
+    // If both selectedDiskInfo and diskInfo are null, the main process will
+    // receive no identity, causing either a throw or a weak fallback that
+    // can trigger false collision detection.
+    const resolvedIdentity = pickSelectedDiskInfo(selectedUsb, selectedDiskInfo, diskInfo);
+    if (!resolvedIdentity) {
+      setErrorWithSuggestion(
+        'Could not read disk identity for the selected drive. Unplug the drive, reconnect it, re-select it, and try again.',
+        'usb-select',
+      );
+      setFlashConfirmBusy(false);
+      return;
+    }
     try {
       const prepared = await window.electron.prepareFlashConfirmation(
         selectedUsb,
         efiPath,
-        toExpectedDiskIdentity(pickSelectedDiskInfo(selectedUsb, selectedDiskInfo, diskInfo)),
+        toExpectedDiskIdentity(resolvedIdentity),
       );
       setDiskInfoIfCurrent(selectedUsb, prepared.diskInfo);
       setEfiBackupPolicy(prepared.backupPolicy);

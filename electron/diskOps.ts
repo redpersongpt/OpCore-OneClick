@@ -529,6 +529,7 @@ export function createDiskOps(log: LogFunction): DiskOps {
     register?: (child: any) => void,
   ): Promise<string> {
     const partNum = partitionNumber ?? 1;
+
     // Approach 1: diskpart assign.
     // NOTE: do NOT use `set id=c12a7328-…` (EFI GUID) here — setting that GUID
     // causes Windows to hide the partition from the drive-letter registry,
@@ -543,16 +544,42 @@ export function createDiskOps(log: LogFunction): DiskOps {
     } finally {
       try { fs.unlinkSync(scriptPath); } catch {}
     }
-    const letter = await waitForWindowsDriveLetterForLabel(diskNum, label, register, 5, 400);
-    if (letter) return letter;
-    // Approach 2: PowerShell Set-Partition as fallback (more reliable on some systems).
+    const letter1 = await waitForWindowsDriveLetterForLabel(diskNum, label, register, 8, 500);
+    if (letter1) return letter1;
+
+    // Approach 2: PowerShell Set-Partition (more reliable on some systems).
+    log('DEBUG', 'diskOps', 'diskpart assign produced no letter — trying Set-Partition', { diskNum, partNum });
     try {
       await runCmd(
         `powershell -NoProfile -Command "try { Set-Partition -DiskNumber ${diskNum} -PartitionNumber ${partNum} -AssignDriveLetter -ErrorAction Stop } catch {}"`,
         register,
       );
     } catch {}
-    return await waitForWindowsDriveLetterForLabel(diskNum, label, register, 10, 500);
+    const letter2 = await waitForWindowsDriveLetterForLabel(diskNum, label, register, 10, 500);
+    if (letter2) return letter2;
+
+    // Approach 3: Add-PartitionAccessPath — issue #30: on some systems Windows
+    // refuses auto-letter but accepts an explicit access-path assignment.
+    log('DEBUG', 'diskOps', 'Set-Partition produced no letter — trying Add-PartitionAccessPath', { diskNum, partNum });
+    try {
+      await runCmd(
+        `powershell -NoProfile -Command "try { Add-PartitionAccessPath -DiskNumber ${diskNum} -PartitionNumber ${partNum} -AssignDriveLetter -ErrorAction Stop } catch {}"`,
+        register,
+      );
+    } catch {}
+    const letter3 = await waitForWindowsDriveLetterForLabel(diskNum, label, register, 10, 600);
+    if (letter3) return letter3;
+
+    // Last resort: poll without label constraint — the volume may have received
+    // a letter but the label query timing can lag behind.
+    log('DEBUG', 'diskOps', 'All assign approaches produced no labelled letter — scanning partitions directly', { diskNum, partNum });
+    const partitions = await getWindowsPreparedPartitions(diskNum, register);
+    const withLetter = partitions.find(
+      (p) => p.partitionNumber === partNum && p.driveLetter.trim(),
+    );
+    if (withLetter?.driveLetter) return withLetter.driveLetter.trim();
+
+    return '';
   }
 
   async function getWindowsPrimaryPartitionNumber(diskNum: string): Promise<string> {
@@ -1518,12 +1545,28 @@ export function createDiskOps(log: LogFunction): DiskOps {
                   );
                 }
               } else if (lastAssessment.stage === 'assign') {
-                throw new Error(
-                  `Disk ${diskNum} has a FAT32 OPENCORE partition, but Windows did not assign a drive letter to it. ` +
-                  'This usually means another process is holding a lock on the new volume. ' +
-                  'Unplug the drive, wait 5 seconds, reconnect it, and try again. ' +
-                  'If it keeps failing, open Disk Management (diskmgmt.msc) and manually assign a drive letter to partition 1.'
+                // Issue #30: one final aggressive assign attempt with a longer
+                // settle window before giving up.  The partition exists and is
+                // healthy — the only missing piece is the drive letter.
+                log('WARN', 'usb-flash', 'All diskpart attempts left no drive letter — final aggressive assign', {
+                  diskNum,
+                  partitionNumber: lastAssessment.targetPartitionNumber,
+                });
+                const lastResortLetter = await assignWindowsDriveLetter(
+                  diskNum, lastAssessment.targetPartitionNumber, 'OPENCORE', registerProcess,
                 );
+                if (lastResortLetter) {
+                  driveLetter = lastResortLetter;
+                  log('INFO', 'usb-flash', 'Final aggressive assign succeeded', { diskNum, driveLetter });
+                }
+                if (!driveLetter) {
+                  throw new Error(
+                    `Disk ${diskNum} has a FAT32 OPENCORE partition, but Windows did not assign a drive letter after multiple attempts (diskpart, Set-Partition, Add-PartitionAccessPath). ` +
+                    'This usually means another process is holding a lock on the new volume, or a stale mount entry is blocking assignment. ' +
+                    'Unplug the drive, wait 10 seconds, reconnect it, and try again. ' +
+                    'If it keeps failing, open Disk Management (diskmgmt.msc) and manually assign a drive letter to partition 1.'
+                  );
+                }
               } else if (lastAssessment.stage === 'label-lookup') {
                 throw new Error(
                   `Disk ${diskNum} has a FAT32 partition with a drive letter, but the OPENCORE label could not be confirmed. ` +

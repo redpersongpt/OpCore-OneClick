@@ -606,6 +606,72 @@ const TEMPLATES: SuggestionTemplate[] = [
     },
   },
 
+  // ── Disk identity collision — must precede generic flash matcher ───
+  {
+    test: m => m.includes('disk identity collision') || m.includes('identity_collision'),
+    code: 'disk_identity_collision',
+    category: 'device_error',
+    build: (ctx) => {
+      return {
+        title: 'Disk identity collision — multiple drives look identical',
+        explanation: 'The app detected two or more connected drives with similar identity fields (serial number, model, size). To prevent writing to the wrong drive, flashing is blocked.',
+        severity: 'critical',
+        decisionSummary: 'Disconnect all USB drives except the one you want to flash, then retry.',
+        primaryAction: act(
+          'Disconnect duplicate USB drives and retry',
+          'high',
+          'Removing the ambiguity lets the app confirm which physical drive you selected',
+          'fix_now',
+          'Identical USB drives from the same batch often share serial numbers',
+          'With only one matching drive connected, the identity check passes cleanly',
+        ),
+        alternatives: [
+          act(
+            'Unplug all USB drives, reconnect only the target, and re-select it',
+            'high',
+            'A fresh device enumeration gives the app a clean identity baseline',
+            'fix_now',
+            'Windows may cache stale device entries if drives are swapped quickly',
+            'The target drive gets a unique identity context',
+          ),
+        ],
+      };
+    },
+  },
+
+  // ── Drive letter assignment failure — issue #30 ───────────────
+  {
+    test: m => m.includes('did not assign a drive letter') || m.includes('add-partitionaccesspath'),
+    code: 'drive_letter_assignment_failed',
+    category: 'device_error',
+    build: (ctx) => {
+      return {
+        title: 'Windows refused to assign a drive letter to the OPENCORE partition',
+        explanation: 'The FAT32 OPENCORE partition was created successfully, but Windows would not assign a drive letter despite multiple attempts (diskpart, Set-Partition, Add-PartitionAccessPath). Another process may be holding a lock on the volume.',
+        severity: 'critical',
+        decisionSummary: 'Unplug the drive, wait 10 seconds, reconnect it, and try again.',
+        primaryAction: act(
+          'Unplug, wait 10 seconds, reconnect, and retry',
+          'high',
+          'A fresh USB reconnect clears stale volume locks and mount entries',
+          'fix_now',
+          'Windows volume manager sometimes holds a lock on newly created partitions',
+          'The drive gets a clean enumeration and auto-letter assignment on reconnect',
+        ),
+        alternatives: [
+          act(
+            'Open Disk Management (diskmgmt.msc) and manually assign a drive letter',
+            'medium',
+            'Disk Management bypasses the programmatic letter-assignment path',
+            'try_alternative',
+            'Some antivirus or backup tools block programmatic letter assignment',
+            'Once a letter is assigned, the flash can proceed',
+          ),
+        ],
+      };
+    },
+  },
+
   // ── Flash / write error ───────────────────────────────────────
   {
     test: m => (m.includes('flash') || m.includes('write') || m.includes('dd:')) && (m.includes('fail') || m.includes('error')),

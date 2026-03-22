@@ -706,6 +706,30 @@ export function compareFlashAuthorizationSnapshots(
   };
 }
 
+/**
+ * Fields that strongly identify a specific physical device.
+ * These carry high entropy and are meaningful for collision detection.
+ */
+const HIGH_VALUE_IDENTITY_FIELDS: ReadonlySet<keyof DiskIdentityFingerprint> = new Set([
+  'serialNumber',
+  'model',
+  'sizeBytes',
+  'devicePath',
+]);
+
+/**
+ * Fields that are common across many USB drives of the same type/brand.
+ * Matching on these alone does NOT indicate a real collision — two different
+ * Kingston USB sticks will share vendor="Kingston", transport="USB",
+ * removable=true, partitionTable="gpt".
+ */
+const LOW_VALUE_IDENTITY_FIELDS: ReadonlySet<keyof DiskIdentityFingerprint> = new Set([
+  'vendor',
+  'transport',
+  'removable',
+  'partitionTable',
+]);
+
 export function findDiskIdentityCollisions(
   expectedIdentity: Partial<DiskInfo> | DiskIdentityFingerprint,
   currentDevice: string,
@@ -719,13 +743,43 @@ export function findDiskIdentityCollisions(
     if (!peer || peer.device === currentDevice) continue;
     const peerFingerprint = buildDiskIdentityFingerprint(peer);
     const peerSerial = normalizeIdentityValue(peerFingerprint.serialNumber);
+
+    // Serial number match is a definitive collision.
     if (expectedSerial !== undefined && peerSerial !== undefined && expectedSerial === peerSerial) {
       collisions.push(peer.device);
       continue;
     }
 
-    const sharedFields = Object.keys(expectedFingerprint).filter((key) => expectedFingerprint[key as keyof DiskIdentityFingerprint] === peerFingerprint[key as keyof DiskIdentityFingerprint]);
-    if (sharedFields.length >= 4) collisions.push(peer.device);
+    // Count matches by field value — require at least 2 high-value fields
+    // to match before declaring a collision.  Low-value fields alone (vendor,
+    // transport, removable, partitionTable) are shared across many USB drives
+    // and must not trigger a false positive.
+    let highMatches = 0;
+    let lowMatches = 0;
+    for (const key of Object.keys(expectedFingerprint) as Array<keyof DiskIdentityFingerprint>) {
+      const ev = expectedFingerprint[key];
+      const pv = peerFingerprint[key];
+      if (ev === undefined || pv === undefined) continue;
+      // sizeBytes: allow 1 MB tolerance
+      if (key === 'sizeBytes') {
+        if (Math.abs(Number(ev) - Number(pv)) <= 1024 * 1024) {
+          highMatches += 1;
+        }
+        continue;
+      }
+      if (ev !== pv) continue;
+      if (HIGH_VALUE_IDENTITY_FIELDS.has(key)) {
+        highMatches += 1;
+      } else if (LOW_VALUE_IDENTITY_FIELDS.has(key)) {
+        lowMatches += 1;
+      }
+    }
+
+    // Collision requires strong evidence: either 2+ high-value matches,
+    // or 1 high-value match plus all 4 low-value fields matching.
+    if (highMatches >= 2 || (highMatches >= 1 && lowMatches >= 4)) {
+      collisions.push(peer.device);
+    }
   }
 
   return collisions;

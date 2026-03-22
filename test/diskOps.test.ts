@@ -686,3 +686,66 @@ describe('selectWindowsOpencoreReuseCandidate', () => {
     expect(result!.partitionNumber).toBe(2);
   });
 });
+
+// ─── Issue #30: drive letter assignment ───────────────────────────────────────
+
+describe('assessWindowsFlashPreparationState — assign stage for #30', () => {
+  it('reports assign stage when FAT32 OPENCORE exists without drive letter', () => {
+    const result = assessWindowsFlashPreparationState({
+      partitions: [
+        { partitionNumber: 1, driveLetter: '', fileSystem: 'FAT32', fileSystemLabel: 'OPENCORE', sizeBytes: 30_000 * MB },
+      ],
+      expectedLabel: 'OPENCORE',
+    });
+    expect(result.status).toBe('failed');
+    expect(result.stage).toBe('assign');
+    expect(result.targetPartitionNumber).toBe(1);
+  });
+
+  it('becomes ready when drive letter is later assigned', () => {
+    // Simulates what happens after assignWindowsDriveLetter succeeds
+    const result = assessWindowsFlashPreparationState({
+      partitions: [
+        { partitionNumber: 1, driveLetter: 'G', fileSystem: 'FAT32', fileSystemLabel: 'OPENCORE', sizeBytes: 30_000 * MB },
+      ],
+      expectedLabel: 'OPENCORE',
+    });
+    expect(result.status).toBe('ready');
+    expect(result.driveLetter).toBe('G');
+    expect(result.stage).toBeNull();
+  });
+
+  it('reports correct stage for NTFS partition (format, not assign)', () => {
+    const result = assessWindowsFlashPreparationState({
+      partitions: [
+        { partitionNumber: 1, driveLetter: 'E', fileSystem: 'NTFS', fileSystemLabel: 'MyDrive', sizeBytes: 100_000 * MB },
+      ],
+      expectedLabel: 'OPENCORE',
+    });
+    expect(result.status).toBe('failed');
+    expect(result.stage).toBe('format');
+  });
+
+  it('falls back to partition 1 label-lookup when label does not match', () => {
+    // Partition has a letter and is FAT32 but label is not OPENCORE
+    const result = assessWindowsFlashPreparationState({
+      partitions: [
+        { partitionNumber: 1, driveLetter: 'E', fileSystem: 'FAT32', fileSystemLabel: 'MYUSB', sizeBytes: 16_000 * MB },
+      ],
+      expectedLabel: 'OPENCORE',
+    });
+    expect(result.status).toBe('ready');
+    expect(result.stage).toBe('label-lookup');
+    expect(result.usedPartitionFallback).toBe(true);
+  });
+
+  it('shouldRetryWindowsFlashPreparation returns true for assign stage', () => {
+    expect(shouldRetryWindowsFlashPreparation({
+      attempt: 0,
+      maxAttempts: 2,
+      diskpartFailed: true,
+      driveLetter: '',
+      stage: 'assign',
+    })).toBe(true);
+  });
+});

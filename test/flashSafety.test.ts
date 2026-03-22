@@ -3,6 +3,7 @@ import {
   canProceedWithFlash,
   compareDiskIdentity,
   buildDiskIdentityFingerprint,
+  findDiskIdentityCollisions,
   resolveFlashPreparationIdentity,
   FLASH_CONFIRMATION_TTL_MS,
 } from '../electron/flashSafety.js';
@@ -183,6 +184,130 @@ describe('compareDiskIdentity', () => {
     const result = compareDiskIdentity(fp, fakeDisk({ serialNumber: 'BBB' }));
     expect(result.ok).toBe(false);
     expect(result.mismatches).toContain('serialNumber mismatch');
+  });
+});
+
+// ─── Disk identity collision detection ────────────────────────────────────────
+
+describe('findDiskIdentityCollisions', () => {
+  it('detects collision when serial numbers match', () => {
+    const expected = buildDiskIdentityFingerprint(fakeDisk({ serialNumber: 'SAME_SERIAL' }));
+    const peer = fakeDisk({ device: '\\\\.\\PhysicalDrive3', serialNumber: 'SAME_SERIAL' });
+    const result = findDiskIdentityCollisions(expected, '\\\\.\\PhysicalDrive2', [peer]);
+    expect(result).toEqual(['\\\\.\\PhysicalDrive3']);
+  });
+
+  it('detects collision when serial + size match (high-value fields)', () => {
+    const expected = buildDiskIdentityFingerprint(fakeDisk({ serialNumber: 'SN_A', sizeBytes: 32_000_000_000 }));
+    const peer = fakeDisk({
+      device: '\\\\.\\PhysicalDrive3',
+      serialNumber: 'SN_A',
+      sizeBytes: 32_000_000_000,
+      vendor: 'DifferentVendor',
+    });
+    const result = findDiskIdentityCollisions(expected, '\\\\.\\PhysicalDrive2', [peer]);
+    expect(result).toEqual(['\\\\.\\PhysicalDrive3']);
+  });
+
+  it('does NOT false-positive on USB drives sharing only vendor/transport/removable/partitionTable', () => {
+    // Issue #31: two different USB drives from the same brand share vendor,
+    // transport, removable, and partitionTable — this must NOT be a collision.
+    const expected = buildDiskIdentityFingerprint(fakeDisk({
+      serialNumber: 'SERIAL_A',
+      sizeBytes: 16_000_000_000,
+      model: 'Kingston DataTraveler 3.0',
+      devicePath: '\\\\.\\PhysicalDrive2',
+      vendor: 'Kingston',
+      transport: 'USB',
+      removable: true,
+      partitionTable: 'gpt',
+    }));
+    const peer = fakeDisk({
+      device: '\\\\.\\PhysicalDrive3',
+      serialNumber: 'SERIAL_B',
+      sizeBytes: 32_000_000_000,
+      model: 'Kingston DataTraveler Exodia',
+      devicePath: '\\\\.\\PhysicalDrive3',
+      vendor: 'Kingston',
+      transport: 'USB',
+      removable: true,
+      partitionTable: 'gpt',
+    });
+    const result = findDiskIdentityCollisions(expected, '\\\\.\\PhysicalDrive2', [peer]);
+    expect(result).toEqual([]);
+  });
+
+  it('does NOT false-positive when only low-value fields match', () => {
+    const expected = buildDiskIdentityFingerprint({
+      vendor: 'generic',
+      transport: 'usb',
+      removable: true,
+      partitionTable: 'gpt',
+      serialNumber: 'ALPHA',
+      sizeBytes: 8_000_000_000,
+      model: 'Drive A',
+      devicePath: '\\\\.\\PhysicalDrive2',
+    });
+    const peer = fakeDisk({
+      device: '\\\\.\\PhysicalDrive5',
+      vendor: 'generic',
+      transport: 'usb',
+      removable: true,
+      partitionTable: 'gpt',
+      serialNumber: 'BETA',
+      sizeBytes: 64_000_000_000,
+      model: 'Drive B',
+      devicePath: '\\\\.\\PhysicalDrive5',
+    });
+    const result = findDiskIdentityCollisions(expected, '\\\\.\\PhysicalDrive2', [peer]);
+    expect(result).toEqual([]);
+  });
+
+  it('skips the current device in peers', () => {
+    const expected = buildDiskIdentityFingerprint(fakeDisk());
+    const self = fakeDisk({ device: '\\\\.\\PhysicalDrive2' });
+    const result = findDiskIdentityCollisions(expected, '\\\\.\\PhysicalDrive2', [self]);
+    expect(result).toEqual([]);
+  });
+
+  it('skips null peers', () => {
+    const expected = buildDiskIdentityFingerprint(fakeDisk());
+    const result = findDiskIdentityCollisions(expected, '\\\\.\\PhysicalDrive2', [null, undefined]);
+    expect(result).toEqual([]);
+  });
+
+  it('detects collision when model + sizeBytes match (2 high-value fields)', () => {
+    const expected = buildDiskIdentityFingerprint({
+      model: 'kingston datatraveler',
+      sizeBytes: 16_000_000_000,
+      devicePath: '\\\\.\\PhysicalDrive2',
+    });
+    const peer = fakeDisk({
+      device: '\\\\.\\PhysicalDrive4',
+      model: 'Kingston DataTraveler',
+      sizeBytes: 16_000_000_000,
+      devicePath: '\\\\.\\PhysicalDrive4',
+      serialNumber: undefined,
+    });
+    const result = findDiskIdentityCollisions(expected, '\\\\.\\PhysicalDrive2', [peer]);
+    expect(result).toEqual(['\\\\.\\PhysicalDrive4']);
+  });
+
+  it('real collisions still block', () => {
+    // Same serial, same model, same size — definitely the same physical device
+    const expected = buildDiskIdentityFingerprint(fakeDisk({
+      serialNumber: 'REAL_DUPE',
+      model: 'Same Model',
+      sizeBytes: 16_000_000_000,
+    }));
+    const peer = fakeDisk({
+      device: '\\\\.\\PhysicalDrive9',
+      serialNumber: 'REAL_DUPE',
+      model: 'Same Model',
+      sizeBytes: 16_000_000_000,
+    });
+    const result = findDiskIdentityCollisions(expected, '\\\\.\\PhysicalDrive2', [peer]);
+    expect(result).toEqual(['\\\\.\\PhysicalDrive9']);
   });
 });
 

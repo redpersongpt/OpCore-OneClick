@@ -1,6 +1,7 @@
 import { getRequiredResources, type HardwareProfile } from './configGenerator.js';
 import type { ValidationResult } from './configValidator.js';
 import type { KextRegistryEntry } from './kextSourcePolicy.js';
+import { getSsdtSourcePolicy } from './ssdtSourcePolicy.js';
 
 export type ResourcePlanKind = 'kext' | 'ssdt' | 'driver' | 'payload';
 export type ResourcePlanSourceClass = 'bundled' | 'generated' | 'downloaded' | 'manual';
@@ -75,13 +76,22 @@ export function buildResourcePlan(input: {
   }
 
   for (const ssdt of ssdts) {
+    const ssdtPolicy = getSsdtSourcePolicy(ssdt);
+    const hasSupplemental = !!ssdtPolicy?.supplementalDownload;
+    const candidateNames = ssdtPolicy?.packageCandidates?.join(', ') ?? ssdt;
     resources.push({
       name: ssdt,
       kind: 'ssdt',
-      source: 'Generated locally from the hardware profile',
-      expectedIdentityOrVersion: 'Generated ACPI artifact',
-      validationOutcome: findValidationOutcome(ssdt, input.validationResult),
-      sourceClass: 'generated',
+      source: hasSupplemental
+        ? `OpenCore package samples or Dortania supplemental download`
+        : 'OpenCore package pre-compiled ACPI samples',
+      expectedIdentityOrVersion: ssdtPolicy
+        ? `Package candidates: ${candidateNames}`
+        : 'No source policy defined',
+      validationOutcome: ssdtPolicy
+        ? findValidationOutcome(ssdt, input.validationResult)
+        : 'blocked',
+      sourceClass: hasSupplemental ? 'downloaded' : 'bundled',
     });
   }
 
