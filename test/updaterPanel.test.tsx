@@ -7,7 +7,7 @@ import UpdaterPanel from '../src/components/UpdaterPanel';
 
 function makeState(overrides: Partial<AppUpdateState> = {}): AppUpdateState {
   return {
-    currentVersion: '2.4.2',
+    currentVersion: '2.4.3',
     checking: false,
     downloading: false,
     installing: false,
