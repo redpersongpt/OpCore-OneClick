@@ -53,6 +53,20 @@ export interface RunEfiBuildFlowInput {
   allowAcceptedSession?: boolean;
 }
 
+export function cleanupOrphanedBuilds(userDataPath: string, keepPath?: string): number {
+  let removed = 0;
+  try {
+    const entries = fs.readdirSync(userDataPath, { withFileTypes: true });
+    for (const entry of entries) {
+      if (!entry.isDirectory() || !entry.name.startsWith('EFI_Build_')) continue;
+      const full = path.join(userDataPath, entry.name);
+      if (keepPath && full === keepPath) continue;
+      try { fs.rmSync(full, { recursive: true, force: true }); removed++; } catch (_) {}
+    }
+  } catch (_) {}
+  return removed;
+}
+
 export async function runEfiBuildFlow(
   input: RunEfiBuildFlowInput,
   deps: RunEfiBuildFlowDependencies,
@@ -100,6 +114,7 @@ export async function runEfiBuildFlow(
     throw deps.createClassifiedIpcError(classified, error);
   }
 
+  cleanupOrphanedBuilds(deps.getUserDataPath(), efiPath);
   if (!fs.existsSync(efiPath)) fs.mkdirSync(efiPath, { recursive: true });
 
   try {

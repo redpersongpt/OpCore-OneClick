@@ -3311,8 +3311,8 @@ app.whenReady().then(async () => {
             log('ERROR', 'kext', `${kextName} — embedded install failed: ${embErr.message}`);
             result = null;
           }
-        } else {
-          embeddedFailureReason = 'No embedded fallback is bundled for this kext';
+        } else if (!result) {
+          embeddedFailureReason = `No embedded fallback for ${kextName} — internet access required (${entry?.repo ?? 'unknown upstream'})`;
         }
 
         // Hard fail — neither source worked

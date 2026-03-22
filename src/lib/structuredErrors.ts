@@ -285,12 +285,31 @@ const ERROR_MAP: Array<{
     },
   },
   {
+    test: m => m.includes('rate limit') || (m.includes('github') && (m.includes('403') || m.includes('429'))),
+    structured: {
+      title: 'GitHub API rate limit',
+      what: 'The GitHub API rate limit was hit while fetching kext release metadata.',
+      nextStep: 'Wait for the rate limit to reset (the exact reset time is shown in the build log), then retry the EFI build.',
+      retryable: true,
+      retryNote: 'after the GitHub rate limit resets',
+    },
+  },
+  {
+    test: m => m.includes('.kext') && (m.includes('failed to fetch') || m.includes('no embedded fallback') || m.includes('no usable release asset') || m.includes('internet access required')),
+    structured: {
+      title: 'Kext unavailable',
+      what: 'A required kext could not be fetched from GitHub or any fallback source.',
+      nextStep: 'Ensure you have internet access and retry. The specific kext name and its upstream repository are shown in the build log.',
+      retryable: true,
+    },
+  },
+  {
     test: m => m.includes('download') && (m.includes('failed') || m.includes('error')),
     structured: {
       title: 'Download failed',
-      what: 'The macOS recovery download was interrupted or failed.',
+      what: 'A file download was interrupted or failed.',
       nextStep:
-        'Click Retry — the download will resume from where it left off. Check your network connection if the error repeats.',
+        'Check your internet connection and try again. If this is a macOS recovery download, it can be resumed by retrying.',
       retryable: true,
     },
   },

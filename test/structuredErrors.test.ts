@@ -128,3 +128,63 @@ describe('structureError — #24 primary data partition detection', () => {
     expect(e.retryable).toBe(false);
   });
 });
+
+describe('structureError — GitHub rate limit', () => {
+  it('classifies explicit rate limit message', () => {
+    const e = structureError('GitHub API rate limit exceeded — resets at 11:30:00 PM');
+    expect(e.title).toContain('rate limit');
+    expect(e.retryable).toBe(true);
+    expect(e.retryNote).toBeDefined();
+  });
+
+  it('classifies GitHub 403 as rate limit', () => {
+    const e = structureError('GitHub API HTTP 403 for acidanthera/Lilu');
+    expect(e.title).toContain('rate limit');
+    expect(e.retryable).toBe(true);
+  });
+
+  it('rate limit is distinct from generic download failure', () => {
+    const rl = structureError('GitHub API rate limit exceeded — resets at 12:00:00 AM');
+    const dl = structureError('Download failed at 45%');
+    expect(rl.title).not.toBe(dl.title);
+  });
+});
+
+describe('structureError — kext unavailability', () => {
+  it('classifies kext fetch failure with kext name in message', () => {
+    const e = structureError('Failed to fetch WhateverGreen.kext: connection refused | No embedded fallback for WhateverGreen.kext — internet access required (acidanthera/WhateverGreen)');
+    expect(e.title).toContain('Kext unavailable');
+    expect(e.retryable).toBe(true);
+  });
+
+  it('classifies "no embedded fallback" for a named kext', () => {
+    const e = structureError('No embedded fallback for CPUTopologyRebuild.kext — internet access required (b00t0x/CpuTopologyRebuild)');
+    expect(e.title).toContain('Kext unavailable');
+    expect(e.retryable).toBe(true);
+  });
+
+  it('classifies "no usable release asset" for a kext', () => {
+    const e = structureError('No usable release asset was found for NootedRed.kext.');
+    expect(e.title).toContain('Kext unavailable');
+    expect(e.retryable).toBe(true);
+  });
+
+  it('kext unavailable is distinct from generic download failure', () => {
+    const kext = structureError('Failed to fetch Lilu.kext: connection refused');
+    const dl = structureError('Download failed at 45%');
+    expect(kext.title).not.toBe(dl.title);
+  });
+});
+
+describe('structureError — download failed message update', () => {
+  it('classifies generic download failure with updated message', () => {
+    const e = structureError('Download failed at 45%');
+    expect(e.title).toBe('Download failed');
+    expect(e.retryable).toBe(true);
+  });
+
+  it('download failed message covers recovery context', () => {
+    const e = structureError('Download failed at 45%');
+    expect(e.nextStep).toContain('internet connection');
+  });
+});
