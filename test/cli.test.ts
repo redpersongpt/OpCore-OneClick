@@ -1,11 +1,16 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, beforeAll } from 'vitest';
 import { execSync } from 'child_process';
 import path from 'path';
-
-// CLI tests run the compiled CLI as a subprocess.
-// First ensure it's compiled.
+import fs from 'fs';
 
 const CLI_PATH = path.resolve('dist-electron/electron/cli.js');
+
+// Compile the CLI if not already built
+beforeAll(() => {
+  if (!fs.existsSync(CLI_PATH)) {
+    execSync('npx tsc -p electron/tsconfig.json', { timeout: 30_000 });
+  }
+}, 60_000);
 
 function runCLI(args: string): { stdout: string; stderr: string; exitCode: number } {
   try {

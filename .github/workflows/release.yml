@@ -98,22 +98,10 @@ jobs:
         with:
           tag_name: ${{ steps.tag.outputs.name }}
           name: "${{ steps.tag.outputs.name }}"
-          body: |
-            macOS OneClick ${{ steps.tag.outputs.name }}
-
-            This release hardens hardware scan state so a successful machine profile is not later downgraded by weaker follow-up scans, startup restore races, or step transitions. It also fixes the scan-flow step corruption bug that could leave the app blank or trigger circular serialization errors after a successful system scan.
-
-            The updater UI is also rebuilt for narrow windows and in-progress states. Refresh now becomes visibly active immediately, long status text wraps cleanly, and action buttons stay inside the panel during download, install, and restart-required states.
-
-            Included assets:
-            - Windows NSIS installer
-            - Linux AppImage
-            - Linux Debian package
-
-            Existing flash safety, BIOS gating, EFI validation, backup handling, system-disk blocking, and disk-identity verification remain in place.
           files: release-artifacts/**/*
           draft: false
           prerelease: false
           overwrite_files: true
+          make_latest: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
