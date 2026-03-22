@@ -2,6 +2,11 @@
 
 Project note: the app is now branded as `OpCore-OneClick`. Legacy repo/update coordinates and the persisted app-data path remain unchanged for continuity.
 
+## 2.5.4 - 2026-03-22
+
+### Release workflow cleanup
+- Replaced the Node 20-only release-publish action with a direct `gh release create` step so the release workflow no longer depends on a deprecated Node 20 action.
+
 ## 2.5.3 - 2026-03-22
 
 ### GitHub rename follow-up

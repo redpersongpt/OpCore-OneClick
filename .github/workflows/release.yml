@@ -94,14 +94,15 @@ jobs:
           fi
 
       - name: Create GitHub Release
-        uses: softprops/action-gh-release@v2
-        with:
-          tag_name: ${{ steps.tag.outputs.name }}
-          name: "${{ steps.tag.outputs.name }}"
-          files: release-artifacts/**/*
-          draft: false
-          prerelease: false
-          overwrite_files: true
-          make_latest: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          tag="${{ steps.tag.outputs.name }}"
+          mapfile -t files < <(find release-artifacts -type f | sort)
+          if [ "${#files[@]}" -eq 0 ]; then
+            echo "No release artifacts found."
+            exit 1
+          fi
+          gh release create "$tag" "${files[@]}" \
+            --title "$tag" \
+            --latest
