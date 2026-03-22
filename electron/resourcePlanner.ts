@@ -57,15 +57,23 @@ export function buildResourcePlan(input: {
       ? 'blocked'
       : findValidationOutcome(kext, input.validationResult);
 
+    // Network-exclusive: in the pre-build plan (no kextSources), flag kexts that have
+    // no embedded fallback — they will fail hard if network is unavailable.
+    const hasEmbedded = registryEntry?.embeddedFallback === true;
+    const networkExclusiveNote =
+      !fetchedSource && registryEntry && !hasEmbedded
+        ? ' — network required, no offline fallback'
+        : '';
+
     resources.push({
       name: kext,
       kind: 'kext',
       source: fetchedSource === 'embedded'
         ? `Embedded app fallback — ${registryEntry?.repo ?? 'bundled'}`
         : registryEntry?.directUrl
-        ? registryEntry.directUrl
+        ? `${registryEntry.directUrl}${networkExclusiveNote}`
         : registryEntry
-        ? `https://github.com/${registryEntry.repo}/releases/latest`
+        ? `https://github.com/${registryEntry.repo}/releases/latest${networkExclusiveNote}`
         : 'Bundled application asset',
       expectedIdentityOrVersion: registryEntry?.directUrl
         ? (registryEntry.staticVersion ? `Direct asset (${registryEntry.staticVersion})` : 'Direct asset download')

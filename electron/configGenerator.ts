@@ -121,7 +121,15 @@ export function getSMBIOSForProfile(profile: HardwareProfile): string {
     }
 
     // Tahoe (26+): only MacBookPro16,1+, iMac20,1+, MacPro7,1, iMacPro1,1
+    // Legacy Intel (pre-Skylake) is not supported on Tahoe — fail explicitly.
     if (osVer >= 26) {
+        if (TAHOE_UNSUPPORTED_GENERATIONS.has(profile.generation)) {
+            throw new Error(
+                `${profile.generation} is not supported on ${profile.targetOS}. ` +
+                `macOS Tahoe (26+) requires Skylake or newer Intel hardware. ` +
+                `The maximum supported macOS for ${profile.generation} is macOS Monterey (12).`,
+            );
+        }
         if (profile.isLaptop) return 'MacBookPro16,1';
         if (hasDiscreteDisplayPath) return 'MacPro7,1';
         return 'iMac20,1';
@@ -494,11 +502,26 @@ export function getRequiredResources(profile: HardwareProfile) {
 
 // --- Config.plist Generator ---
 
+// Generations dropped by macOS Tahoe (26+). These CPUs lack the CPU features
+// required by the macOS 26 kernel and are not supported by any valid SMBIOS on Tahoe.
+// Source: Dortania tahoe.html compatibility table.
+const TAHOE_UNSUPPORTED_GENERATIONS = new Set<HardwareProfile['generation']>([
+    'Penryn', 'Sandy Bridge', 'Ivy Bridge', 'Haswell', 'Broadwell',
+]);
+
 export function generateConfigPlist(profile: HardwareProfile): string {
     const quirks = getQuirksForGeneration(profile.generation, profile.motherboard, profile.isVM, profile.strategy);
     const { kexts, ssdts } = getRequiredResources(profile);
     const osVer = parseMacOSVersion(profile.targetOS);
     const gpuDevices = getProfileGpuDevices(profile);
+
+    if (osVer >= 26 && profile.architecture === 'Intel' && TAHOE_UNSUPPORTED_GENERATIONS.has(profile.generation)) {
+        throw new Error(
+            `${profile.generation} is not supported on ${profile.targetOS}. ` +
+            `macOS Tahoe (26+) requires Skylake or newer Intel hardware. ` +
+            `The maximum supported macOS for ${profile.generation} is macOS Monterey (12).`,
+        );
+    }
 
     const audioLayoutId = profile.audioLayoutId ?? 1;
     let bootArgs = profile.bootArgs;

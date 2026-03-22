@@ -92,7 +92,7 @@ declare global {
       simulateBuild: (kextNames: string[], ssdtNames: string[], smbios: string) => Promise<import('../electron/deterministicLayer').BuildPlan>;
       dryRunRecovery: (targetOS: string, smbios: string) => Promise<import('../electron/deterministicLayer').RecoveryDryRun>;
       verifyBuildState: (efiPath: string, requiredKexts: string[]) => Promise<import('../electron/deterministicLayer').StateVerification>;
-      verifyEfiBuildSuccess: (efiPath: string, requiredKexts: string[]) => Promise<import('../electron/deterministicLayer').SuccessContract>;
+      verifyEfiBuildSuccess: (efiPath: string, requiredKexts: string[], requiredSsdts?: string[]) => Promise<import('../electron/deterministicLayer').SuccessContract>;
       verifyRecoverySuccess: (recoveryDir: string) => Promise<import('../electron/deterministicLayer').SuccessContract>;
       runSafeSimulation: (profile: import('../electron/configGenerator').HardwareProfile) => Promise<import('../electron/safeSimulation').SafeSimulationResult>;
       getResourcePlan: (profile: import('../electron/configGenerator').HardwareProfile, efiPath?: string | null) => Promise<import('../electron/resourcePlanner').ResourcePlan>;

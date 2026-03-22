@@ -630,17 +630,28 @@ describe('config generator — full generation matrix produces valid output', ()
   const amdGens: HardwareProfile['generation'][] = ['Ryzen', 'Threadripper', 'Bulldozer'];
   const osTargets = ['macOS Ventura', 'macOS Sonoma', 'macOS Tahoe 26'];
 
+  const TAHOE_BLOCKED = new Set(['Penryn', 'Sandy Bridge', 'Ivy Bridge', 'Haswell', 'Broadwell']);
+
   for (const gen of intelGens) {
     for (const targetOS of osTargets) {
-      it(`Intel ${gen} desktop + ${targetOS} generates valid plist`, () => {
-        const profile = fakeProfile({ generation: gen, targetOS });
-        profile.smbios = getSMBIOSForProfile(profile);
-        const plist = generateConfigPlist(profile);
-        expect(plist).toContain('<?xml');
-        expect(plist).toContain('<plist');
-        expect(plist).toContain('</plist>');
-        expect(plist).toContain(profile.smbios);
-      });
+      if (targetOS === 'macOS Tahoe 26' && TAHOE_BLOCKED.has(gen)) {
+        it(`Intel ${gen} desktop + ${targetOS} throws (unsupported)`, () => {
+          expect(() => {
+            const profile = fakeProfile({ generation: gen, targetOS });
+            getSMBIOSForProfile(profile);
+          }).toThrow(/not supported on.*Tahoe|Tahoe.*requires Skylake/i);
+        });
+      } else {
+        it(`Intel ${gen} desktop + ${targetOS} generates valid plist`, () => {
+          const profile = fakeProfile({ generation: gen, targetOS });
+          profile.smbios = getSMBIOSForProfile(profile);
+          const plist = generateConfigPlist(profile);
+          expect(plist).toContain('<?xml');
+          expect(plist).toContain('<plist');
+          expect(plist).toContain('</plist>');
+          expect(plist).toContain(profile.smbios);
+        });
+      }
     }
   }
 

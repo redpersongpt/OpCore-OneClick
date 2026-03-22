@@ -245,3 +245,45 @@ describe('buildResourcePlan — kext identity display', () => {
     expect(lilu!.expectedIdentityOrVersion).toContain('RELEASE');
   });
 });
+
+// ─── Network-exclusive kext annotation ──────────────────────────────────────
+
+describe('buildResourcePlan — network-exclusive kext annotation', () => {
+  // A registry entry without embeddedFallback is network-exclusive.
+  const REGISTRY_WITH_FALLBACK: Record<string, KextRegistryEntry> = {
+    ...KEXT_REGISTRY,
+    'Lilu.kext':             { ...KEXT_REGISTRY['Lilu.kext'], embeddedFallback: true },
+    'CPUTopologyRebuild.kext': { ...KEXT_REGISTRY['CPUTopologyRebuild.kext'], embeddedFallback: false },
+  };
+
+  it('pre-build plan annotates network-exclusive kexts in source description', () => {
+    const plan = buildResourcePlan({
+      profile: fakeProfile({ generation: 'Alder Lake' }),
+      kextRegistry: REGISTRY_WITH_FALLBACK,
+    });
+    const cpuTopo = plan.resources.find(r => r.name === 'CPUTopologyRebuild.kext');
+    expect(cpuTopo).toBeTruthy();
+    expect(cpuTopo!.source).toContain('network required');
+  });
+
+  it('pre-build plan does NOT annotate kexts that have embedded fallback', () => {
+    const plan = buildResourcePlan({
+      profile: fakeProfile(),
+      kextRegistry: REGISTRY_WITH_FALLBACK,
+    });
+    const lilu = plan.resources.find(r => r.name === 'Lilu.kext');
+    expect(lilu).toBeTruthy();
+    expect(lilu!.source).not.toContain('network required');
+  });
+
+  it('post-build plan does NOT annotate even network-exclusive kexts once source is known', () => {
+    // Once kextSources is set (post-fetch), the annotation is suppressed — source is already resolved.
+    const plan = buildResourcePlan({
+      profile: fakeProfile({ generation: 'Alder Lake' }),
+      kextRegistry: REGISTRY_WITH_FALLBACK,
+      kextSources: { 'CPUTopologyRebuild.kext': 'github' },
+    });
+    const cpuTopo = plan.resources.find(r => r.name === 'CPUTopologyRebuild.kext');
+    expect(cpuTopo!.source).not.toContain('network required');
+  });
+});

@@ -2004,7 +2004,7 @@ export default function App() {
       _setStepRaw('kext-fetch');
       setProgress(0);
       setKextResults([]);
-      const { kexts } = getRequiredResources(profile);
+      const { kexts, ssdts: requiredSsdts } = getRequiredResources(profile);
       let fetchedKextResults: KextFetchResult[] = [];
       try {
         fetchedKextResults = await window.electron.fetchLatestKexts(built, kexts);
@@ -2063,7 +2063,7 @@ export default function App() {
 
       // Phase 4: Hard success contract — verify from disk, not flags
       try {
-        const contract = await (window.electron as any).verifyEfiBuildSuccess(built, kexts);
+        const contract = await (window.electron as any).verifyEfiBuildSuccess(built, kexts, requiredSsdts);
         if (!isCurrentRun()) return;
         if (!contract.passed) {
           const failed = contract.checks.filter((c: any) => !c.passed);

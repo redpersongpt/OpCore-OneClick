@@ -36,14 +36,27 @@ describe('getSMBIOSForProfile — generation coverage', () => {
     'Rocket Lake', 'Alder Lake', 'Raptor Lake',
   ];
 
+  // Legacy gens are tested against Ventura (13) — they are valid on Ventura.
+  // Against Tahoe (26) they throw; that is tested in the Tahoe fail-fast section below.
+  const legacyGens = new Set(['Penryn', 'Sandy Bridge', 'Ivy Bridge', 'Haswell', 'Broadwell']);
   for (const gen of generations) {
-    it(`returns a valid SMBIOS for Intel desktop ${gen}`, () => {
-      const smbios = getSMBIOSForProfile(fakeProfile({ generation: gen as HardwareProfile['generation'] }));
-      expect(smbios).toBeTruthy();
-      expect(smbios.length).toBeGreaterThan(0);
-      // Must be a real Apple model identifier pattern
-      expect(smbios).toMatch(/^(iMac|MacPro|MacBookPro|iMacPro)\d+,\d+$/);
-    });
+    if (legacyGens.has(gen)) {
+      it(`returns a valid SMBIOS for Intel desktop ${gen} on Ventura`, () => {
+        const smbios = getSMBIOSForProfile(fakeProfile({
+          generation: gen as HardwareProfile['generation'],
+          targetOS: 'macOS Ventura',
+        }));
+        expect(smbios).toBeTruthy();
+        expect(smbios).toMatch(/^(iMac|MacPro|MacBookPro|iMacPro)\d+,\d+$/);
+      });
+    } else {
+      it(`returns a valid SMBIOS for Intel desktop ${gen}`, () => {
+        const smbios = getSMBIOSForProfile(fakeProfile({ generation: gen as HardwareProfile['generation'] }));
+        expect(smbios).toBeTruthy();
+        expect(smbios.length).toBeGreaterThan(0);
+        expect(smbios).toMatch(/^(iMac|MacPro|MacBookPro|iMacPro)\d+,\d+$/);
+      });
+    }
   }
 
   it('returns MacPro7,1 for AMD Threadripper', () => {
@@ -378,5 +391,57 @@ describe('getRequiredResources', () => {
       expect(resources.ssdts, scenario.name).toEqual(scenario.expectedSsdts);
       expect(getUnsupportedSsdtRequests(resources.ssdts), scenario.name).toEqual([]);
     }
+  });
+});
+
+// ─── Tahoe (macOS 26+) fail-fast for legacy Intel ────────────────────────────
+
+describe('Tahoe fail-fast — legacy Intel generations', () => {
+  const TAHOE_OS = 'macOS Tahoe';
+  const blockedGens: HardwareProfile['generation'][] = [
+    'Penryn', 'Sandy Bridge', 'Ivy Bridge', 'Haswell', 'Broadwell',
+  ];
+
+  for (const gen of blockedGens) {
+    it(`getSMBIOSForProfile throws for ${gen} + Tahoe`, () => {
+      expect(() =>
+        getSMBIOSForProfile(fakeProfile({ generation: gen, targetOS: TAHOE_OS })),
+      ).toThrow(/not supported on.*Tahoe|Tahoe.*not supported|Tahoe.*requires Skylake/i);
+    });
+
+    it(`generateConfigPlist throws for ${gen} + Tahoe`, () => {
+      expect(() =>
+        generateConfigPlist(fakeProfile({ generation: gen, targetOS: TAHOE_OS })),
+      ).toThrow(/not supported on.*Tahoe|Tahoe.*not supported|Tahoe.*requires Skylake/i);
+    });
+
+    it(`generateConfigPlist succeeds for ${gen} + Monterey (last supported OS)`, () => {
+      expect(() =>
+        generateConfigPlist(fakeProfile({ generation: gen, targetOS: 'macOS Monterey' })),
+      ).not.toThrow();
+    });
+  }
+
+  it('does not throw for Skylake + Tahoe (Skylake is supported)', () => {
+    expect(() =>
+      getSMBIOSForProfile(fakeProfile({ generation: 'Skylake', targetOS: TAHOE_OS })),
+    ).not.toThrow();
+    expect(() =>
+      generateConfigPlist(fakeProfile({ generation: 'Skylake', targetOS: TAHOE_OS })),
+    ).not.toThrow();
+  });
+
+  it('does not throw for Coffee Lake + Tahoe', () => {
+    expect(() =>
+      getSMBIOSForProfile(fakeProfile({ generation: 'Coffee Lake', targetOS: TAHOE_OS })),
+    ).not.toThrow();
+  });
+
+  it('does not throw for AMD Ryzen + Tahoe (AMD takes separate path)', () => {
+    expect(() =>
+      getSMBIOSForProfile(fakeProfile({
+        architecture: 'AMD', generation: 'Ryzen', targetOS: TAHOE_OS,
+      })),
+    ).not.toThrow();
   });
 });

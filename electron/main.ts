@@ -4056,8 +4056,8 @@ app.whenReady().then(async () => {
     return verifyBuildState(efiPath, requiredKexts);
   });
 
-  ipcHandle('deterministic:verify-efi-success', async (_event: Electron.IpcMainInvokeEvent, efiPath: string, requiredKexts: string[]) => {
-    return verifyEfiBuildSuccess(efiPath, requiredKexts);
+  ipcHandle('deterministic:verify-efi-success', async (_event: Electron.IpcMainInvokeEvent, efiPath: string, requiredKexts: string[], requiredSsdts?: string[]) => {
+    return verifyEfiBuildSuccess(efiPath, requiredKexts, requiredSsdts);
   });
 
   ipcHandle('deterministic:verify-recovery-success', async (_event: Electron.IpcMainInvokeEvent, recoveryDir: string) => {
