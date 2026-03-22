@@ -115,8 +115,8 @@ const __dirname = path.dirname(__filename);
 const PRODUCT_DISPLAY_NAME = 'OpCore-OneClick';
 const PRODUCT_HTTP_NAME = 'OpCore-OneClick';
 const LEGACY_USER_DATA_DIR_NAME = 'macOS-OneClick';
-const LEGACY_REPO_SLUG = 'redpersongpt/macOS-One-Click';
-const LEGACY_REPO_WEB_BASE_URL = `https://github.com/${LEGACY_REPO_SLUG}`;
+const REPO_SLUG = 'redpersongpt/OpCore-OneClick';
+const REPO_WEB_BASE_URL = `https://github.com/${REPO_SLUG}`;
 
 app.setName(PRODUCT_DISPLAY_NAME);
 app.setPath('userData', path.resolve(app.getPath('appData'), LEGACY_USER_DATA_DIR_NAME));
@@ -481,7 +481,7 @@ function getCurrentCompatibilityReport(): ReturnType<typeof checkCompatibility> 
   return profile ? checkCompatibility(profile) : null;
 }
 
-const REPO_RELEASE_API_PATH = `/repos/${LEGACY_REPO_SLUG}/releases/latest`;
+const REPO_RELEASE_API_PATH = `/repos/${REPO_SLUG}/releases/latest`;
 const APP_UPDATE_RESULT_FILE = path.resolve(app.getPath('userData'), 'app-update-result.json');
 
 interface AppUpdateResultMarker {
@@ -636,7 +636,7 @@ async function checkForAppUpdates(): Promise<AppUpdateState> {
       lastCheckedAt: checkedAt,
       available,
       latestVersion: release.tag_name ?? null,
-      releaseUrl: release.html_url ?? `${LEGACY_REPO_WEB_BASE_URL}/releases/latest`,
+      releaseUrl: release.html_url ?? `${REPO_WEB_BASE_URL}/releases/latest`,
       releaseNotes: release.body ?? null,
       assetName: asset?.name ?? null,
       assetSize: typeof asset?.size === 'number' ? asset.size : null,
@@ -654,7 +654,7 @@ async function checkForAppUpdates(): Promise<AppUpdateState> {
       lastCheckedAt: checkedAt,
       available: false,
       latestVersion: null,
-      releaseUrl: `${LEGACY_REPO_WEB_BASE_URL}/releases/latest`,
+      releaseUrl: `${REPO_WEB_BASE_URL}/releases/latest`,
       releaseNotes: null,
       assetName: null,
       assetSize: null,
@@ -4186,7 +4186,7 @@ app.whenReady().then(async () => {
   ipcHandle('report-issue', async (_event: Electron.IpcMainInvokeEvent, extraContext?: string | null) => {
     const snapshot = buildCurrentDiagnosticsSnapshot();
     const draft = buildIssueReportDraft(snapshot, extraContext ?? null);
-    const baseUrl = `${LEGACY_REPO_WEB_BASE_URL}/issues/new`;
+    const baseUrl = `${REPO_WEB_BASE_URL}/issues/new`;
     // Only put the short title in the URL — body goes to clipboard to avoid
     // URL-length truncation issues across platforms/browsers.
     const url = `${baseUrl}?title=${encodeURIComponent(draft.title)}&labels=bug`;
@@ -4198,7 +4198,7 @@ app.whenReady().then(async () => {
   });
 
   ipcHandle('app:open-latest-release', async () => {
-    const url = `${LEGACY_REPO_WEB_BASE_URL}/releases/latest`;
+    const url = `${REPO_WEB_BASE_URL}/releases/latest`;
     if (!isSafeExternalTarget(url)) {
       throw new Error('Latest release URL is not a safe external target.');
     }

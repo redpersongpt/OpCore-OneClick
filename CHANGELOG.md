@@ -2,6 +2,12 @@
 
 Project note: the app is now branded as `OpCore-OneClick`. Legacy repo/update coordinates and the persisted app-data path remain unchanged for continuity.
 
+## 2.5.3 - 2026-03-22
+
+### GitHub rename follow-up
+- Updated release, issue, homepage, and updater lookup URLs to the live `redpersongpt/OpCore-OneClick` repo after the GitHub repo rename landed.
+- Kept the existing `appId` and persisted `userData` path unchanged, but stopped relying on GitHub's redirect for updater checks.
+
 ## 2.5.2 - 2026-03-22
 
 ### SSDT sourcing follow-up

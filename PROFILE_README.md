@@ -18,7 +18,7 @@ Automated utility for deploying macOS on PC hardware. Formerly macOS One-Click.
 - Integrated BIOS restart functionality.
 - Resumable download system.
 
-<img src="https://raw.githubusercontent.com/redpersongpt/macOS-One-Click/main/imagecopy.png" width="600">
+<img src="https://raw.githubusercontent.com/redpersongpt/OpCore-OneClick/main/imagecopy.png" width="600">
 
 ---
 
@@ -27,7 +27,7 @@ Automated utility for deploying macOS on PC hardware. Formerly macOS One-Click.
 
 Privacy-focused OCR tool. Processes PDFs and images locally in the browser. No data leaves the machine.
 
-<img src="https://raw.githubusercontent.com/redpersongpt/macOS-One-Click/main/image.png" width="600">
+<img src="https://raw.githubusercontent.com/redpersongpt/OpCore-OneClick/main/image.png" width="600">
 
 ---
 
@@ -40,4 +40,4 @@ Privacy-focused OCR tool. Processes PDFs and images locally in the browser. No d
 
 ---
 
-[Star History](https://star-history.com/#redpersongpt/macOS-One-Click)
+[Star History](https://star-history.com/#redpersongpt/OpCore-OneClick)

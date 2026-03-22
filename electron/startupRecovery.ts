@@ -184,7 +184,7 @@ export function describeStartupFailure(input: StartupFailurePageInput): StartupF
 export function buildStartupFailurePageUrl(input: StartupFailurePageInput): string {
   const descriptor = describeStartupFailure(input);
   const snapshotSummary = formatSnapshotSummary(input.diagnostics);
-  const issueUrl = `https://github.com/redpersongpt/macOS-One-Click/issues/new?title=${encodeURIComponent(input.issueDraft.title)}&labels=bug`;
+  const issueUrl = `https://github.com/redpersongpt/OpCore-OneClick/issues/new?title=${encodeURIComponent(input.issueDraft.title)}&labels=bug`;
   const reportBody = input.issueDraft.body;
   const retryTarget = input.retryTargetUrl ?? '';
   const safeTarget = input.safeTargetUrl ?? retryTarget;

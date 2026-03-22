@@ -9,8 +9,8 @@
 <br/>
 
 [![Website](https://img.shields.io/badge/Website-macos--install.one-000000?style=for-the-badge&logo=apple&logoColor=white)](https://macos-install.one/)
-[![GitHub Stars](https://img.shields.io/github/stars/redpersongpt/macOS-One-Click?style=for-the-badge&logo=github&color=gold)](https://github.com/redpersongpt/macOS-One-Click/stargazers)
-[![License](https://img.shields.io/github/license/redpersongpt/macOS-One-Click?style=for-the-badge&logo=apache&color=brightgreen)](LICENSE)
+[![GitHub Stars](https://img.shields.io/github/stars/redpersongpt/OpCore-OneClick?style=for-the-badge&logo=github&color=gold)](https://github.com/redpersongpt/OpCore-OneClick/stargazers)
+[![License](https://img.shields.io/github/license/redpersongpt/OpCore-OneClick?style=for-the-badge&logo=apache&color=brightgreen)](LICENSE)
 [![Follow on X](https://img.shields.io/badge/Follow-%40redpersongpt-000000?style=for-the-badge&logo=x&logoColor=white)](https://x.com/redpersongpt)
 
 ![Windows](https://img.shields.io/badge/Windows-0078D6?style=for-the-badge&logo=windows&logoColor=white)
@@ -50,7 +50,7 @@ OpCore-OneClick, formerly macOS One-Click, scans the target machine, validates t
 
 ## Download
 
-**[Download the latest release](https://github.com/redpersongpt/macOS-One-Click/releases/latest)**
+**[Download the latest release](https://github.com/redpersongpt/OpCore-OneClick/releases/latest)**
 
 ## Acknowledgements
 
@@ -62,6 +62,6 @@ Built on the work of [Acidanthera](https://github.com/acidanthera) and [Dortania
 
 **[macos-install.one](https://macos-install.one/)** &nbsp;·&nbsp; **[redpersongpt](https://github.com/redpersongpt)** &nbsp;·&nbsp; [![Follow on X](https://img.shields.io/badge/-%40redpersongpt-000?logo=x&logoColor=white)](https://x.com/redpersongpt)
 
-[![Star History Chart](https://api.star-history.com/svg?repos=redpersongpt/macOS-One-Click&type=Date)](https://star-history.com/#redpersongpt/macOS-One-Click&Date)
+[![Star History Chart](https://api.star-history.com/svg?repos=redpersongpt/OpCore-OneClick&type=Date)](https://star-history.com/#redpersongpt/OpCore-OneClick&Date)
 
 </div>

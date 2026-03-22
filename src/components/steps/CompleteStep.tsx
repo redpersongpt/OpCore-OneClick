@@ -173,7 +173,7 @@ export default function CompleteStep({ profile, efiPath, productionLocked, onOpe
       <div className="flex items-center gap-3 pt-2 border-t border-white/5">
         <CopyDiagnosticsButton />
         <a
-          href="https://github.com/redpersongpt/macOS-One-Click/issues/new"
+          href="https://github.com/redpersongpt/OpCore-OneClick/issues/new"
           target="_blank"
           rel="noopener noreferrer"
           className="flex items-center gap-1.5 text-xs text-white/25 hover:text-white/50 transition-colors cursor-pointer"
