@@ -1,5 +1,16 @@
 # Changelog
 
+## 2.4.5 - 2026-03-22
+
+### UI layout and polish (#10)
+- Rewrote the updater panel to a compact single-row layout so download/install/restart actions stay visible without scrolling.
+- Removed dead blank space from compatibility matrix cards (hard min-height floor).
+- Tightened spacing and shortened copy across version selection, hardware report, and resource plan screens.
+- Made the landing page scrollable so the updater is never clipped below the viewport.
+
+### Test coverage (#9, #10, #11)
+- Added 83 regression tests covering updater action visibility, sidebar single-active state, resource plan persistence across Build EFI re-entry, and compatibility matrix layout invariants.
+
 ## 2.4.4 - 2026-03-22
 
 ### Windows disk and flash fixes (#9, #11)
