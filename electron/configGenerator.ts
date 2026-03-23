@@ -131,7 +131,17 @@ export function getSMBIOSForProfile(profile: HardwareProfile): string {
             );
         }
         if (profile.isLaptop) return 'MacBookPro16,1';
-        if (hasDiscreteDisplayPath) return 'MacPro7,1';
+        // HEDT / server
+        if (profile.generation.includes('-E') || profile.generation.includes('-X')) {
+            return 'MacPro7,1';
+        }
+        // Generations with no macOS iGPU driver — must use MacPro7,1
+        if (['Rocket Lake', 'Alder Lake', 'Raptor Lake'].includes(profile.generation)) {
+            return 'MacPro7,1';
+        }
+        // Consumer Intel desktop (Skylake–Comet Lake): iGPU works in macOS,
+        // use iMac20,1 regardless of dGPU presence (dGPU runs display,
+        // iGPU runs headless compute — both work under iMac20,1 SMBIOS).
         return 'iMac20,1';
     }
 
@@ -233,14 +243,22 @@ export function getQuirksForGeneration(gen: HardwareProfile['generation'], mothe
             quirks.DevirtualiseMmio = true;
             // Z390 needs SetupVirtualMap true (older), Z370 too
             quirks.SetupVirtualMap = true;
+            // Z390 boards need ProtectUefiServices — Source: config.plist/coffee-lake.html
+            if (mb.includes('z390')) {
+                quirks.ProtectUefiServices = true;
+            }
             break;
         case 'Comet Lake':
             quirks.EnableWriteUnprotector = false;
             quirks.RebuildAppleMemoryMap = true;
             quirks.SyncRuntimePermissions = true;
             quirks.DevirtualiseMmio = true;
-            // B550, Z490 → SetupVirtualMap false
+            // Comet Lake memory protections break SetupVirtualMap — Source: Dortania comet-lake.html
             quirks.SetupVirtualMap = false;
+            // Z490 needs ProtectUefiServices — Source: Dortania comet-lake.html
+            if (mb.includes('z490')) {
+                quirks.ProtectUefiServices = true;
+            }
             break;
         case 'Rocket Lake':
         case 'Alder Lake':
@@ -265,11 +283,11 @@ export function getQuirksForGeneration(gen: HardwareProfile['generation'], mothe
             quirks.AppleXcpmCfgLock = false;
             quirks.ProvideCurrentCpuInfo = true;
 
-            // B550/A520 → SetupVirtualMap false
-            if (mb.includes('b550') || mb.includes('a520')) {
+            // X570, B550, A520, TRx40 → SetupVirtualMap false — Source: Dortania AMD/zen.html
+            if (mb.includes('x570') || mb.includes('b550') || mb.includes('a520') || mb.includes('trx40')) {
                 quirks.SetupVirtualMap = false;
             }
-            // TRx40 → DevirtualiseMmio true
+            // TRx40 → DevirtualiseMmio true — Source: Dortania AMD/zen.html
             if (mb.includes('trx40')) {
                 quirks.DevirtualiseMmio = true;
             }
@@ -410,6 +428,11 @@ export function getRequiredResources(profile: HardwareProfile) {
     if (profile.architecture === 'Intel') {
         pushUnique('WhateverGreen.kext');
         pushUnique('AppleALC.kext');
+        // VirtualSMC sensor plugins — CPU temp + fan monitoring
+        pushUnique('SMCProcessor.kext');
+        pushUnique('SMCSuperIO.kext');
+        // Intel I225/I219/I218 Ethernet — covers most Intel desktop boards
+        pushUnique('IntelMausi.kext');
     } else if (profile.architecture === 'AMD') {
         if (gpuAssessments.some(gpu => gpu.requiresNootRX)) {
             pushUnique('NootRX.kext');
@@ -474,7 +497,9 @@ export function getRequiredResources(profile: HardwareProfile) {
             pushSsdt('SSDT-PLUG.aml');
             pushSsdt('SSDT-AWAC.aml');
             pushSsdt('SSDT-EC-USBX.aml');
-            if (mb.includes('z390')) {
+            // SSDT-PMC required for 300-series boards (Z370/Z390/H370/B360/H310) for native NVRAM
+            // Source: config.plist/coffee-lake.html — "Required for all 300-series motherboards"
+            if (mb.includes('z390') || mb.includes('z370') || mb.includes('h370') || mb.includes('b360') || mb.includes('h310')) {
                 pushSsdt('SSDT-PMC.aml');
             }
         } else if (['Haswell', 'Broadwell'].includes(profile.generation)) {
@@ -532,13 +557,11 @@ export function generateConfigPlist(profile: HardwareProfile): string {
         if (!bootArgs.includes('keepsyms=1')) bootArgs += ' keepsyms=1';
     }
 
-    // Ensure alcid uses the detected layout (only if AppleALC is used, not on Tahoe+)
-    if (osVer < 26) {
-        if (!bootArgs.includes('alcid=')) {
-            bootArgs += ` alcid=${audioLayoutId}`;
-        } else {
-            bootArgs = bootArgs.replace(/alcid=\d+/, `alcid=${audioLayoutId}`);
-        }
+    // Ensure alcid uses the detected layout — AppleALC needs this on all macOS versions
+    if (!bootArgs.includes('alcid=')) {
+        bootArgs += ` alcid=${audioLayoutId}`;
+    } else {
+        bootArgs = bootArgs.replace(/alcid=\d+/, `alcid=${audioLayoutId}`);
     }
 
     // Navi GPU — agdpmod=pikera — Source: kernel-issues.html
@@ -577,25 +600,51 @@ export function generateConfigPlist(profile: HardwareProfile): string {
     // Intel iGPU Device Properties
     // Alder Lake / Raptor Lake / Rocket Lake use MacPro7,1 (discrete GPU) — no iGPU driver
     // in macOS, so we skip iGPU properties entirely for these generations.
+    // If any supported discrete GPU exists, the iGPU runs headless (compute only)
+    // and the dGPU handles all display output.
+    const gpuAssessments = gpuDevices.map(classifyGpu);
+    const headlessIgpu = gpuAssessments.some(a => a.isLikelyDiscrete && a.tier !== 'unsupported');
+
     let gpuProperties = '';
     if (profile.architecture === 'Intel' &&
         !['Alder Lake', 'Raptor Lake', 'Rocket Lake'].includes(profile.generation)) {
-        let platformId = 'BwCbPg=='; // Coffee Lake default
-        if (profile.generation === 'Haswell') platformId = 'AwAiDQ==';
-        else if (profile.generation === 'Broadwell') platformId = 'BgAiDQ==';
-        else if (profile.generation === 'Skylake') platformId = 'ASbPaA==';
-        else if (profile.generation === 'Kaby Lake') platformId = 'AAASWQ==';
-        else if (profile.generation === 'Comet Lake') platformId = 'AwCbPg==';
+        // Display ig-platform-ids — Source: Dortania per-gen config.plist guides
+        const DISPLAY_IDS: Record<string, string> = {
+            'Haswell':    'AwAiDQ==', // 0x0D220003
+            'Broadwell':  'BwAiFg==', // 0x16220007
+            'Skylake':    'AAASGQ==', // 0x19120000
+            'Kaby Lake':  'AAASWQ==', // 0x59120000
+            'Coffee Lake':'BwCbPg==', // 0x3E9B0007
+            'Comet Lake': 'BwCbPg==', // 0x3E9B0007
+        };
+        // Headless ig-platform-ids — Source: Dortania per-gen config.plist guides
+        const HEADLESS_IDS: Record<string, string> = {
+            'Haswell':    'BAASBA==', // 0x04120004
+            'Broadwell':  'BgAmFg==', // 0x16260006 (closest Broadwell headless)
+            'Skylake':    'AQASGQ==', // 0x19120001
+            'Kaby Lake':  'AwASWQ==', // 0x59120003
+            'Coffee Lake':'AwCRPg==', // 0x3E910003
+            'Comet Lake': 'AwDImw==', // 0x9BC80003
+        };
+
+        const gen = profile.generation;
+        const platformId = headlessIgpu
+            ? (HEADLESS_IDS[gen] ?? HEADLESS_IDS['Coffee Lake'])
+            : (DISPLAY_IDS[gen] ?? DISPLAY_IDS['Coffee Lake']);
+
+        // Framebuffer patches (stolenmem / patch-enable) are only needed when
+        // the iGPU drives a display. Headless mode needs no patches.
+        const fbPatches = headlessIgpu ? '' : `
+                <key>framebuffer-patch-enable</key>
+                <data>AQAAAA==</data>
+                <key>framebuffer-stolenmem</key>
+                <data>AAAwAQ==</data>`;
 
         gpuProperties = `
             <key>PciRoot(0x0)/Pci(0x2,0x0)</key>
             <dict>
                 <key>AAPL,ig-platform-id</key>
-                <data>${platformId}</data>
-                <key>framebuffer-patch-enable</key>
-                <data>AQAAAA==</data>
-                <key>framebuffer-stolenmem</key>
-                <data>AAAwAQ==</data>
+                <data>${platformId}</data>${fbPatches}
             </dict>`;
     }
 
@@ -613,6 +662,16 @@ export function generateConfigPlist(profile: HardwareProfile): string {
     const needsLegacyNvram = mb.includes('z390') || mb.includes('z370') || mb.includes('h310');
     const legacyEnable = needsLegacyNvram ? 'true' : 'false';
     const legacyOverwrite = needsLegacyNvram ? 'true' : 'false';
+
+    // Audio device path — 300-series PCH (Coffee Lake+) moved HDA to PCI 0x1F,0x3;
+    // 100/200-series (Skylake, Kaby Lake) and earlier use legacy 0x1B,0x0
+    const MODERN_AUDIO_GENS = new Set([
+        'Coffee Lake', 'Comet Lake',
+        'Rocket Lake', 'Alder Lake', 'Raptor Lake',
+    ]);
+    const audioDevicePath = (profile.architecture === 'Intel' && MODERN_AUDIO_GENS.has(profile.generation))
+        ? 'PciRoot(0x0)/Pci(0x1f,0x3)'
+        : 'PciRoot(0x0)/Pci(0x1b,0x0)';
 
     // Audio layout-id as base64
     const layoutIdBase64 = btoa(String.fromCharCode(audioLayoutId, 0, 0, 0));
@@ -679,7 +738,7 @@ export function generateConfigPlist(profile: HardwareProfile): string {
     <dict>
         <key>Add</key>
         <dict>
-            <key>PciRoot(0x0)/Pci(0x1b,0x0)</key>
+            <key>${audioDevicePath}</key>
             <dict><key>layout-id</key><data>${layoutIdBase64}</data></dict>
             ${gpuProperties}
         </dict>
@@ -912,7 +971,7 @@ export function generateConfigPlist(profile: HardwareProfile): string {
         <key>Audio</key>
         <dict>
             <key>AudioCodec</key><integer>0</integer>
-            <key>AudioDevice</key><string>PciRoot(0x0)/Pci(0x1b,0x0)</string>
+            <key>AudioDevice</key><string>${audioDevicePath}</string>
             <key>AudioOutMask</key><integer>1</integer>
             <key>AudioSupport</key><false/>
             <key>DisconnectHda</key><false/>

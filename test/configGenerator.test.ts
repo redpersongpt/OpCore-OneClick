@@ -444,4 +444,185 @@ describe('Tahoe fail-fast — legacy Intel generations', () => {
       })),
     ).not.toThrow();
   });
+
+  it('Coffee Lake desktop + dGPU + Tahoe returns iMac20,1 (NOT MacPro7,1)', () => {
+    const smbios = getSMBIOSForProfile(fakeProfile({
+      generation: 'Coffee Lake',
+      targetOS: TAHOE_OS,
+      gpuDevices: [
+        { name: 'Intel UHD 630', vendorId: '8086', deviceId: '3e92' },
+        { name: 'AMD Radeon RX 580', vendorId: '1002', deviceId: '67df' },
+      ],
+    }));
+    expect(smbios).toBe('iMac20,1');
+  });
+
+  it('Rocket Lake + Tahoe returns MacPro7,1 (no iGPU driver)', () => {
+    const smbios = getSMBIOSForProfile(fakeProfile({
+      generation: 'Rocket Lake',
+      targetOS: TAHOE_OS,
+    }));
+    expect(smbios).toBe('MacPro7,1');
+  });
+
+  it('Alder Lake + Tahoe returns MacPro7,1 (no iGPU driver)', () => {
+    const smbios = getSMBIOSForProfile(fakeProfile({
+      generation: 'Alder Lake',
+      targetOS: TAHOE_OS,
+    }));
+    expect(smbios).toBe('MacPro7,1');
+  });
+
+  it('Skylake desktop + Tahoe returns iMac20,1 (not iMac17,1)', () => {
+    const smbios = getSMBIOSForProfile(fakeProfile({
+      generation: 'Skylake',
+      targetOS: TAHOE_OS,
+    }));
+    expect(smbios).toBe('iMac20,1');
+  });
+});
+
+// ─── Coffee Lake + Tahoe + dGPU — full EFI correctness ──────────────────────
+
+describe('generateConfigPlist — Coffee Lake + RX 580 + Tahoe', () => {
+  const coffeeRx580Profile = fakeProfile({
+    cpu: 'Intel Core i7-9700K',
+    architecture: 'Intel',
+    generation: 'Coffee Lake',
+    motherboard: 'ASUS Prime Z390-A',
+    gpu: 'AMD Radeon RX 580',
+    ram: '32 GB',
+    coreCount: 8,
+    targetOS: 'macOS Tahoe 26',
+    smbios: 'iMac20,1',
+    kexts: [],
+    ssdts: [],
+    bootArgs: '',
+    isLaptop: false,
+    gpuDevices: [
+      { name: 'Intel UHD 630', vendorId: '8086', deviceId: '3e92' },
+      { name: 'AMD Radeon RX 580', vendorId: '1002', deviceId: '67df' },
+    ],
+  });
+
+  it('uses headless ig-platform-id 0x3E910003 (AwCRPg==) when dGPU present', () => {
+    const plist = generateConfigPlist(coffeeRx580Profile);
+    // AwCRPg== = 0x3E910003 (Coffee Lake headless per Dortania)
+    expect(plist).toContain('AwCRPg==');
+    // Should NOT contain the display id BwCbPg== (0x3E9B0007)
+    expect(plist).not.toContain('BwCbPg==');
+  });
+
+  it('does NOT include framebuffer patches for headless iGPU', () => {
+    const plist = generateConfigPlist(coffeeRx580Profile);
+    expect(plist).not.toContain('framebuffer-patch-enable');
+    expect(plist).not.toContain('framebuffer-stolenmem');
+  });
+
+  it('uses correct audio device path PciRoot(0x0)/Pci(0x1f,0x3) for Coffee Lake', () => {
+    const plist = generateConfigPlist(coffeeRx580Profile);
+    expect(plist).toContain('PciRoot(0x0)/Pci(0x1f,0x3)');
+    // Should NOT use legacy path
+    expect(plist).not.toContain('Pci(0x1b,0x0)');
+  });
+
+  it('includes alcid boot arg on Tahoe', () => {
+    const plist = generateConfigPlist(coffeeRx580Profile);
+    expect(plist).toMatch(/alcid=\d/);
+  });
+
+  it('includes SMCProcessor and SMCSuperIO kexts', () => {
+    const plist = generateConfigPlist(coffeeRx580Profile);
+    expect(plist).toContain('SMCProcessor.kext');
+    expect(plist).toContain('SMCSuperIO.kext');
+  });
+
+  it('includes IntelMausi kext', () => {
+    const plist = generateConfigPlist(coffeeRx580Profile);
+    expect(plist).toContain('IntelMausi.kext');
+  });
+
+  it('includes AdviseFeatures false in PlatformInfo', () => {
+    const plist = generateConfigPlist(coffeeRx580Profile);
+    expect(plist).toContain('<key>AdviseFeatures</key><false/>');
+  });
+
+  it('includes Z390-specific ProtectUefiServices quirk', () => {
+    const quirks = getQuirksForGeneration('Coffee Lake', 'ASUS Prime Z390-A');
+    expect(quirks.ProtectUefiServices).toBe(true);
+  });
+
+  it('includes SSDT-PMC for Z390', () => {
+    const resources = getRequiredResources(coffeeRx580Profile);
+    expect(resources.ssdts).toContain('SSDT-PMC.aml');
+  });
+});
+
+// ─── iGPU display vs headless ───────────────────────────────────────────────
+
+describe('generateConfigPlist — iGPU headless vs display', () => {
+  it('uses display ig-platform-id when no dGPU', () => {
+    const plist = generateConfigPlist(fakeProfile({
+      generation: 'Coffee Lake',
+      gpu: 'Intel UHD 630',
+      gpuDevices: [
+        { name: 'Intel UHD 630', vendorId: '8086', deviceId: '3e92' },
+      ],
+    }));
+    // BwCbPg== = 0x3E9B0007 (Coffee Lake display)
+    expect(plist).toContain('BwCbPg==');
+    expect(plist).toContain('framebuffer-patch-enable');
+  });
+
+  it('uses headless ig-platform-id for Comet Lake with dGPU', () => {
+    const plist = generateConfigPlist(fakeProfile({
+      generation: 'Comet Lake',
+      gpuDevices: [
+        { name: 'Intel UHD 630', vendorId: '8086', deviceId: '3e92' },
+        { name: 'AMD Radeon RX 5700 XT', vendorId: '1002', deviceId: '731f' },
+      ],
+    }));
+    // AwDImw== = 0x9BC80003 (Comet Lake headless per Dortania)
+    expect(plist).toContain('AwDImw==');
+    expect(plist).not.toContain('framebuffer-patch-enable');
+  });
+
+  it('skips iGPU properties entirely for Alder Lake', () => {
+    const plist = generateConfigPlist(fakeProfile({
+      generation: 'Alder Lake',
+      smbios: 'MacPro7,1',
+    }));
+    expect(plist).not.toContain('ig-platform-id');
+  });
+});
+
+// ─── Audio device path by generation ────────────────────────────────────────
+
+describe('generateConfigPlist — audio device path', () => {
+  it('uses Pci(0x1f,0x3) for Coffee Lake+ (300-series PCH)', () => {
+    for (const gen of ['Coffee Lake', 'Comet Lake'] as HardwareProfile['generation'][]) {
+      const plist = generateConfigPlist(fakeProfile({ generation: gen }));
+      expect(plist, gen).toContain('Pci(0x1f,0x3)');
+    }
+  });
+
+  it('uses Pci(0x1b,0x0) for Skylake/Kaby Lake and earlier', () => {
+    for (const gen of ['Haswell', 'Broadwell', 'Skylake', 'Kaby Lake'] as HardwareProfile['generation'][]) {
+      const plist = generateConfigPlist(fakeProfile({
+        generation: gen,
+        targetOS: gen === 'Haswell' || gen === 'Broadwell' ? 'macOS Ventura' : 'macOS Sequoia',
+      }));
+      expect(plist, gen).toContain('Pci(0x1b,0x0)');
+    }
+  });
+
+  it('uses Pci(0x1b,0x0) for AMD', () => {
+    const plist = generateConfigPlist(fakeProfile({
+      architecture: 'AMD',
+      generation: 'Ryzen',
+      coreCount: 8,
+      smbios: 'iMacPro1,1',
+    }));
+    expect(plist).toContain('Pci(0x1b,0x0)');
+  });
 });
