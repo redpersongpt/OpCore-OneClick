@@ -2,6 +2,12 @@
 
 Project note: the app is now branded as `OpCore-OneClick`. Legacy repo/update coordinates and the persisted app-data path remain unchanged for continuity.
 
+## 2.7.18 - 2026-03-23
+
+### Fix #42 Recovery download HTTP 416 (Requested Range Not Satisfiable)
+- Implemented self-healing resume logic in the download utility: if a server returns HTTP 416 during a resume attempt (indicating the local partial file is larger than the server file or otherwise invalid), the app now automatically deletes the local cache and restarts the download from scratch.
+- Added specific error classification for HTTP 416 errors to provide clearer guidance if a download mismatch occurs.
+
 ## 2.7.17 - 2026-03-23
 
 ### Fix #38/#41 USB flash format failures and error misclassification

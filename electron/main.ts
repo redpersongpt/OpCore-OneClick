@@ -300,6 +300,13 @@ async function downloadFileWithProgress(
         const isFull   = res.statusCode === 200;
         if (!isResume && !isFull) {
           clearTimeout(connectTimer);
+          if (res.statusCode === 416 && startOffset > 0) {
+            log('WARN', 'download', 'HTTP 416 Requested Range Not Satisfiable during resume. Restarting from scratch.', { url: urlStr, offset: startOffset });
+            try { if (fs.existsSync(dest)) fs.unlinkSync(dest); } catch {}
+            startOffset = 0;
+            fetchUrl(urlStr, redirects);
+            return;
+          }
           reject(new Error(`HTTP ${res.statusCode} downloading ${urlStr}`));
           return;
         }
@@ -1097,6 +1104,16 @@ function classifyError(e: unknown): ClassifiedError {
       message: 'Operation was cancelled before completion',
       explanation: 'The flash task ended before the app could confirm the final state on disk. This is not a proven permission or hardware failure.',
       suggestion: 'Retry the interrupted step once. If the same cancellation repeats, copy the diagnostics and report it.'
+    };
+  }
+
+  // Recovery download resume failure (#42)
+  if (message.includes('HTTP 416')) {
+    return {
+      category: 'environment_error',
+      message: 'Download cache mismatch',
+      explanation: 'The local recovery download cache does not match the file on Apple\'s server. This often happens if the download was interrupted and the file version changed.',
+      suggestion: 'Retry the download. The app will automatically clear the mismatch and start fresh.'
     };
   }
 
