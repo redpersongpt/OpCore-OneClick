@@ -2,6 +2,13 @@
 
 Project note: the app is now branded as `OpCore-OneClick`. Legacy repo/update coordinates and the persisted app-data path remain unchanged for continuity.
 
+## 2.7.14 - 2026-03-23
+
+### Fix Windows in-app updater install loop
+- Replaced the PowerShell update worker with a `.cmd` batch script. PowerShell silently failed on systems with restrictive execution policies, leaving the app in an infinite "install again" loop on every relaunch.
+- The batch approach has no execution policy dependency and uses `cmd.exe` with `windowsHide: true` so no visible console window flashes during the install handoff.
+- Added startup cleanup of stale update-worker scripts from previous versions.
+
 ## 2.7.13 - 2026-03-23
 
 ### Fix #38 diskpart error misclassified as recovery download failure

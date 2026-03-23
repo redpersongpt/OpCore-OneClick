@@ -556,6 +556,17 @@ function buildAppUpdateCleanupTargets(downloadedPath: string): string[] {
   return Array.from(targets);
 }
 
+function cleanupStaleUpdateWorkerScripts(): void {
+  try {
+    const workerDir = path.resolve(app.getPath('userData'), 'update-worker');
+    if (!fs.existsSync(workerDir)) return;
+    for (const entry of fs.readdirSync(workerDir)) {
+      try { fs.rmSync(path.resolve(workerDir, entry), { force: true }); } catch {}
+    }
+    try { fs.rmdirSync(workerDir); } catch {}
+  } catch {}
+}
+
 function createInitialAppUpdateState(): AppUpdateState {
   const supported = process.platform === 'win32' || process.platform === 'linux';
   const session = readPersistedAppUpdateSession();
@@ -570,6 +581,7 @@ function createInitialAppUpdateState(): AppUpdateState {
 
   if (resolution.clearSession) clearPersistedAppUpdateSession();
   if (resolution.clearResultMarker) clearAppUpdateResultMarker();
+  cleanupStaleUpdateWorkerScripts();
 
   return resolution.state;
 }
@@ -864,76 +876,59 @@ async function installDownloadedUpdate(): Promise<AppUpdateState> {
   if (process.platform === 'win32') {
     const installerPath = path.resolve(appUpdateState.downloadedPath);
     const workerDir = path.resolve(app.getPath('userData'), 'update-worker');
-    const workerScriptPath = path.resolve(workerDir, `apply-update-${crypto.randomUUID()}.ps1`);
     fs.mkdirSync(workerDir, { recursive: true });
 
-    const cleanupTargets = buildAppUpdateCleanupTargets(installerPath);
-    const scriptContents = `
-$ErrorActionPreference = 'Stop'
-$pidToWait = ${process.pid}
-$installerPath = ${JSON.stringify(installerPath)}
-$resultPath = ${JSON.stringify(APP_UPDATE_RESULT_FILE)}
-$targetVersion = ${JSON.stringify(normalizeReleaseVersion(appUpdateState.latestVersion ?? app.getVersion()))}
-$userDataPath = ${JSON.stringify(app.getPath('userData'))}
-$relaunchPath = ${JSON.stringify(process.execPath)}
-$cleanupTargets = @(
-${cleanupTargets.map((entry) => `  ${JSON.stringify(entry)}`).join(",\n")}
-)
+    const targetVersion = normalizeReleaseVersion(appUpdateState.latestVersion ?? app.getVersion());
+    const resultPath = APP_UPDATE_RESULT_FILE;
+    const relaunchPath = process.execPath;
 
-try {
-  $deadline = (Get-Date).AddMinutes(10)
-  while ((Get-Process -Id $pidToWait -ErrorAction SilentlyContinue) -and (Get-Date) -lt $deadline) {
-    Start-Sleep -Milliseconds 500
-  }
-  if (Get-Process -Id $pidToWait -ErrorAction SilentlyContinue) {
-    throw 'Timed out waiting for the app to close before applying the update.'
-  }
-
-  $installProcess = Start-Process -FilePath $installerPath -ArgumentList '/S' -PassThru -Wait
-  if ($installProcess.ExitCode -ne 0) {
-    throw ("Installer exited with code {0}." -f $installProcess.ExitCode)
-  }
-
-  foreach ($target in $cleanupTargets) {
-    if ([string]::IsNullOrWhiteSpace($target)) { continue }
-    if (Test-Path -LiteralPath $target) {
-      Remove-Item -LiteralPath $target -Recurse -Force -ErrorAction SilentlyContinue
-    }
-  }
-
-  if (Test-Path -LiteralPath $userDataPath) {
-    Get-ChildItem -LiteralPath $userDataPath -Force -ErrorAction SilentlyContinue |
-      Where-Object { $_.Name -match '(?i)macos[-_. ]?installer|macossinstaller|^installer$|^installer-cache$' } |
-      ForEach-Object { Remove-Item -LiteralPath $_.FullName -Recurse -Force -ErrorAction SilentlyContinue }
-  }
-
-  @{ status = 'success'; version = $targetVersion; completedAt = (Get-Date).ToString('o'); message = 'Update installed successfully.' } |
-    ConvertTo-Json -Compress |
-    Set-Content -LiteralPath $resultPath -Encoding UTF8
-
-  Start-Sleep -Seconds 1
-  if (Test-Path -LiteralPath $relaunchPath) {
-    Start-Process -FilePath $relaunchPath | Out-Null
-  }
-} catch {
-  @{ status = 'failed'; version = $targetVersion; completedAt = (Get-Date).ToString('o'); message = $_.Exception.Message } |
-    ConvertTo-Json -Compress |
-    Set-Content -LiteralPath $resultPath -Encoding UTF8
-}
-`;
+    // Use a .cmd batch script instead of PowerShell — no execution policy issues,
+    // universally reliable on Windows. The previous PowerShell approach silently failed
+    // on systems with restrictive policies, leaving the app in a broken install loop.
+    const workerScriptPath = path.resolve(workerDir, `apply-update-${crypto.randomUUID()}.cmd`);
+    const scriptContents = [
+      '@echo off',
+      'setlocal enabledelayedexpansion',
+      `set "PID_TO_WAIT=${process.pid}"`,
+      `set "INSTALLER_PATH=${installerPath}"`,
+      `set "RESULT_PATH=${resultPath}"`,
+      `set "TARGET_VERSION=${targetVersion}"`,
+      `set "RELAUNCH_PATH=${relaunchPath}"`,
+      '',
+      'rem Wait for the app to close (up to 120 seconds)',
+      'set /a TRIES=0',
+      ':waitloop',
+      'tasklist /FI "PID eq %PID_TO_WAIT%" 2>NUL | find /I "%PID_TO_WAIT%" >NUL 2>&1',
+      'if errorlevel 1 goto :runinstaller',
+      'set /a TRIES+=1',
+      'if %TRIES% GEQ 240 (',
+      '  echo {"status":"failed","version":"%TARGET_VERSION%","completedAt":"","message":"Timed out waiting for app to close."} > "%RESULT_PATH%"',
+      '  exit /b 1',
+      ')',
+      'timeout /t 1 /nobreak >NUL 2>&1',
+      'goto :waitloop',
+      '',
+      ':runinstaller',
+      'rem Small delay to ensure file handles are released',
+      'timeout /t 2 /nobreak >NUL 2>&1',
+      'start "" /wait "%INSTALLER_PATH%" /S',
+      'if errorlevel 1 (',
+      '  echo {"status":"failed","version":"%TARGET_VERSION%","completedAt":"","message":"Installer exited with a non-zero code."} > "%RESULT_PATH%"',
+      '  exit /b 1',
+      ')',
+      '',
+      'echo {"status":"success","version":"%TARGET_VERSION%","completedAt":"","message":"Update installed successfully."} > "%RESULT_PATH%"',
+      '',
+      'rem Relaunch the updated app',
+      'timeout /t 1 /nobreak >NUL 2>&1',
+      'if exist "%RELAUNCH_PATH%" start "" "%RELAUNCH_PATH%"',
+    ].join('\r\n');
 
     fs.writeFileSync(workerScriptPath, scriptContents, 'utf8');
-    const worker = spawn('powershell.exe', [
-      '-NoProfile',
-      '-ExecutionPolicy',
-      'Bypass',
-      '-WindowStyle',
-      'Hidden',
-      '-File',
-      workerScriptPath,
-    ], {
+    const worker = spawn('cmd.exe', ['/c', workerScriptPath], {
       detached: true,
       stdio: 'ignore',
+      windowsHide: true,
     });
     worker.unref();
     writePersistedAppUpdateSession(buildPersistedAppUpdateSession('install-requested'));
