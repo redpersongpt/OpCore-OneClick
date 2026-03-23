@@ -9,6 +9,7 @@ import {
   canReusePreparedOpenCoreVolume,
   buildWindowsConvertToGptDiskpartScript,
   buildWindowsFlashDiskpartScript,
+  buildWindowsFormatDiskpartScript,
   buildWindowsBootPartitionDiskpartScript,
   windowsGetDiskStyleOutput,
   windowsWmiDiskStyleOutput,
@@ -169,14 +170,43 @@ describe('buildWindowsFlashDiskpartScript', () => {
     expect(script).toContain('convert gpt noerr');
   });
 
-  it('formats as FAT32 with OPENCORE label', () => {
+  it('does NOT contain format or assign (moved to phase 2)', () => {
     const script = buildWindowsFlashDiskpartScript('0');
-    expect(script).toContain('format fs=fat32 quick label=OPENCORE noerr');
+    expect(script).not.toContain('format fs=fat32');
+    expect(script).not.toContain('assign noerr');
+  });
+});
+
+describe('buildWindowsFormatDiskpartScript', () => {
+  it('formats FAT32 without noerr so errors surface (#38, #41)', () => {
+    const script = buildWindowsFormatDiskpartScript('3', 1);
+    expect(script).toContain('format fs=fat32 quick label=OPENCORE');
+    expect(script).not.toContain('format fs=fat32 quick label=OPENCORE noerr');
   });
 
-  it('explicitly re-selects partition 1 before format', () => {
-    const script = buildWindowsFlashDiskpartScript('0');
-    expect(script).toContain('select partition 1 noerr');
+  it('selects the correct disk and partition', () => {
+    const script = buildWindowsFormatDiskpartScript('5', 2);
+    expect(script).toContain('select disk 5');
+    expect(script).toContain('select partition 2');
+  });
+
+  it('assigns after format', () => {
+    const script = buildWindowsFormatDiskpartScript('0');
+    const lines = script.split('\n');
+    const formatIdx = lines.findIndex(l => l.includes('format fs=fat32'));
+    const assignIdx = lines.findIndex(l => l === 'assign noerr');
+    expect(assignIdx).toBeGreaterThan(formatIdx);
+  });
+
+  it('ends with rescan', () => {
+    const script = buildWindowsFormatDiskpartScript('0');
+    const lines = script.split('\n').filter(l => l.length > 0);
+    expect(lines[lines.length - 1]).toBe('rescan');
+  });
+
+  it('defaults to partition 1', () => {
+    const script = buildWindowsFormatDiskpartScript('2');
+    expect(script).toContain('select partition 1');
   });
 });
 
@@ -187,10 +217,12 @@ describe('buildWindowsConvertToGptDiskpartScript', () => {
     expect(script).toContain('clean noerr');
     expect(script).toContain('convert gpt noerr');
     expect(script).toContain('create partition primary noerr');
-    expect(script).toContain('select partition 1 noerr');
-    expect(script).toContain('format fs=fat32 quick label=OPENCORE noerr');
-    expect(script).toContain('assign noerr');
     expect(script).toContain('rescan');
+  });
+
+  it('does NOT contain format (moved to phase 2 script)', () => {
+    const script = buildWindowsConvertToGptDiskpartScript('2');
+    expect(script).not.toContain('format fs=fat32');
   });
 
   it('uses the Windows FAT32 size cap when provided', () => {
@@ -274,24 +306,6 @@ describe('buildWindowsFlashDiskpartScript — safety commands', () => {
     const cleanIdx = lines.findIndex(l => l === 'clean noerr');
     const convertIdx = lines.findIndex(l => l.includes('convert gpt'));
     expect(cleanIdx).toBeLessThan(convertIdx);
-  });
-
-  it('always assigns after format', () => {
-    const script = buildWindowsFlashDiskpartScript('0');
-    const lines = script.split('\n');
-    const formatIdx = lines.findIndex(l => l.includes('format fs=fat32'));
-    const assignIdx = lines.findIndex(l => l === 'assign noerr');
-    expect(assignIdx).toBeGreaterThan(formatIdx);
-  });
-
-  it('selects partition 1 between create and format', () => {
-    const script = buildWindowsFlashDiskpartScript('0');
-    const lines = script.split('\n');
-    const createIdx = lines.findIndex(l => l.startsWith('create partition primary'));
-    const selectPartitionIdx = lines.findIndex(l => l === 'select partition 1 noerr');
-    const formatIdx = lines.findIndex(l => l.includes('format fs=fat32'));
-    expect(selectPartitionIdx).toBeGreaterThan(createIdx);
-    expect(formatIdx).toBeGreaterThan(selectPartitionIdx);
   });
 
   it('ends with rescan', () => {

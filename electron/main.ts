@@ -875,62 +875,22 @@ async function installDownloadedUpdate(): Promise<AppUpdateState> {
   }
   if (process.platform === 'win32') {
     const installerPath = path.resolve(appUpdateState.downloadedPath);
-    const workerDir = path.resolve(app.getPath('userData'), 'update-worker');
-    fs.mkdirSync(workerDir, { recursive: true });
-
-    const targetVersion = normalizeReleaseVersion(appUpdateState.latestVersion ?? app.getVersion());
-    const resultPath = APP_UPDATE_RESULT_FILE;
-    const relaunchPath = process.execPath;
-
-    // Use a .cmd batch script instead of PowerShell — no execution policy issues,
-    // universally reliable on Windows. The previous PowerShell approach silently failed
-    // on systems with restrictive policies, leaving the app in a broken install loop.
-    const workerScriptPath = path.resolve(workerDir, `apply-update-${crypto.randomUUID()}.cmd`);
-    const scriptContents = [
-      '@echo off',
-      'setlocal enabledelayedexpansion',
-      `set "PID_TO_WAIT=${process.pid}"`,
-      `set "INSTALLER_PATH=${installerPath}"`,
-      `set "RESULT_PATH=${resultPath}"`,
-      `set "TARGET_VERSION=${targetVersion}"`,
-      `set "RELAUNCH_PATH=${relaunchPath}"`,
-      '',
-      'rem Wait for the app to close (up to 120 seconds)',
-      'set /a TRIES=0',
-      ':waitloop',
-      'tasklist /FI "PID eq %PID_TO_WAIT%" 2>NUL | find /I "%PID_TO_WAIT%" >NUL 2>&1',
-      'if errorlevel 1 goto :runinstaller',
-      'set /a TRIES+=1',
-      'if %TRIES% GEQ 240 (',
-      '  echo {"status":"failed","version":"%TARGET_VERSION%","completedAt":"","message":"Timed out waiting for app to close."} > "%RESULT_PATH%"',
-      '  exit /b 1',
-      ')',
-      'timeout /t 1 /nobreak >NUL 2>&1',
-      'goto :waitloop',
-      '',
-      ':runinstaller',
-      'rem Small delay to ensure file handles are released',
-      'timeout /t 2 /nobreak >NUL 2>&1',
-      'start "" /wait "%INSTALLER_PATH%" /S',
-      'if errorlevel 1 (',
-      '  echo {"status":"failed","version":"%TARGET_VERSION%","completedAt":"","message":"Installer exited with a non-zero code."} > "%RESULT_PATH%"',
-      '  exit /b 1',
-      ')',
-      '',
-      'echo {"status":"success","version":"%TARGET_VERSION%","completedAt":"","message":"Update installed successfully."} > "%RESULT_PATH%"',
-      '',
-      'rem Relaunch the updated app',
-      'timeout /t 1 /nobreak >NUL 2>&1',
-      'if exist "%RELAUNCH_PATH%" start "" "%RELAUNCH_PATH%"',
-    ].join('\r\n');
-
-    fs.writeFileSync(workerScriptPath, scriptContents, 'utf8');
-    const worker = spawn('cmd.exe', ['/c', workerScriptPath], {
+    
+    // We use cmd.exe's 'start' to invoke ShellExecute, which automatically
+    // handles UAC elevation prompts. Node's native 'spawn' directly on the .exe
+    // would fail with ERROR_ELEVATION_REQUIRED (code 740) without elevation.
+    //
+    // Passing --force-run leverages the NSIS installer's native electron-builder logic:
+    // 1. It waits for the parent app process to exit.
+    // 2. It performs a silent installation (/S).
+    // 3. It automatically relaunches the application after success.
+    const worker = spawn('cmd.exe', ['/c', 'start', '""', installerPath, '/S', '--force-run', '--updated'], {
       detached: true,
       stdio: 'ignore',
       windowsHide: true,
     });
     worker.unref();
+
     writePersistedAppUpdateSession(buildPersistedAppUpdateSession('install-requested'));
     const nextState = setAppUpdateState({
       checking: false,
@@ -1137,6 +1097,16 @@ function classifyError(e: unknown): ClassifiedError {
       message: 'Operation was cancelled before completion',
       explanation: 'The flash task ended before the app could confirm the final state on disk. This is not a proven permission or hardware failure.',
       suggestion: 'Retry the interrupted step once. If the same cancellation repeats, copy the diagnostics and report it.'
+    };
+  }
+
+  // Disk format failures (#38, #41) — must be classified before generic hardware errors
+  if (message.includes('failed to format it as FAT32') || message.includes('Format-Volume fallback') || message.includes('diskpart format')) {
+    return {
+      category: 'hardware_error',
+      message: 'Disk format failed',
+      explanation: 'Windows could not format the partition as FAT32. Another process may be locking the drive, or the drive controller is rejecting the format command.',
+      suggestion: 'Close Explorer and any programs accessing the drive, then retry. If repeated failures occur, try a different USB port (rear motherboard port preferred).'
     };
   }
 

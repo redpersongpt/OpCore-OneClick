@@ -241,8 +241,21 @@ export function buildWindowsFlashDiskpartScript(diskNum: string, partitionSizeMB
     partitionSizeMB && partitionSizeMB > 0
       ? `create partition primary size=${partitionSizeMB} noerr`
       : 'create partition primary noerr',
-    'select partition 1 noerr',
-    'format fs=fat32 quick label=OPENCORE noerr',
+    'rescan',
+    '',
+  ].join('\n');
+}
+
+/**
+ * Phase-2 diskpart script: format and assign the newly created partition.
+ * Deliberately does NOT use `noerr` on the format command so that failures
+ * surface immediately instead of being silently swallowed (root cause of #38/#41).
+ */
+export function buildWindowsFormatDiskpartScript(diskNum: string, partitionNumber = 1): string {
+  return [
+    `select disk ${diskNum}`,
+    `select partition ${partitionNumber}`,
+    'format fs=fat32 quick label=OPENCORE',
     'assign noerr',
     'rescan',
     '',
@@ -1267,9 +1280,10 @@ export function createDiskOps(log: LogFunction): DiskOps {
       await new Promise((resolve) => setTimeout(resolve, 500));
     }
 
-    const script = buildWindowsConvertToGptDiskpartScript(diskNum, partitionSizeMB);
-    const scriptPath = path.join(os.tmpdir(), `oc-diskpart-${crypto.randomUUID()}.txt`);
-    fs.writeFileSync(scriptPath, script);
+    // Phase 1: partition creation script (uses noerr for safety on clean/convert)
+    const phase1Script = buildWindowsConvertToGptDiskpartScript(diskNum, partitionSizeMB);
+    const phase1Path = path.join(os.tmpdir(), `oc-diskpart-p1-${crypto.randomUUID()}.txt`);
+    fs.writeFileSync(phase1Path, phase1Script);
 
     let lastDiskpartError: Error | null = null;
     let lastAssessment: WindowsFlashPreparationAssessment = {
@@ -1280,7 +1294,8 @@ export function createDiskOps(log: LogFunction): DiskOps {
       usedPartitionFallback: false,
     };
     let lastObservedPartitions: WindowsFlashPreparedPartition[] = [];
-    const maxDiskpartAttempts = 2;
+    const maxDiskpartAttempts = 3;
+    const retryDelays = [500, 1500, 3000];
 
     try {
       for (let attempt = 0; attempt < maxDiskpartAttempts; attempt += 1) {
@@ -1288,13 +1303,13 @@ export function createDiskOps(log: LogFunction): DiskOps {
           ? `Running diskpart on disk ${diskNum}`
           : `Retrying disk ${diskNum} after clearing stale Windows mounts`);
         checkAborted?.();
-        log('DEBUG', 'diskOps', 'Running diskpart for GPT conversion / flash prep', {
+        log('DEBUG', 'diskOps', 'Running diskpart phase 1 (partition creation) for GPT conversion / flash prep', {
           diskNum,
           attempt: attempt + 1,
         });
         let diskpartFailed = false;
         try {
-          await runCmd(`diskpart /s "${scriptPath}"`, registerProcess);
+          await runCmd(`diskpart /s "${phase1Path}"`, registerProcess);
           lastDiskpartError = null;
         } catch (error) {
           diskpartFailed = true;
@@ -1306,16 +1321,56 @@ export function createDiskOps(log: LogFunction): DiskOps {
           });
         }
 
+        // Wait for Windows to register the new partition before attempting format
+        await new Promise((resolve) => setTimeout(resolve, 1000));
+
         lastObservedPartitions = await waitForWindowsPreparedPartitions(
           diskNum,
           registerProcess,
-          10,
+          12,
           500,
         );
         lastAssessment = assessWindowsFlashPreparationState({
           partitions: lastObservedPartitions,
           expectedLabel: 'OPENCORE',
         });
+
+        // Phase 2: If partition exists but is not formatted, run format as a separate
+        // diskpart invocation WITHOUT noerr so format errors surface (#38, #41).
+        if (lastAssessment.status === 'failed' && lastAssessment.stage === 'format') {
+          const partNum = lastAssessment.targetPartitionNumber ?? 1;
+          log('INFO', 'diskOps', 'Partition created but not formatted — running phase 2 format', {
+            diskNum, partNum, attempt: attempt + 1,
+          });
+
+          // Clear handle locks: Explorer/Shell auto-mounts new partitions immediately
+          await detachWindowsDriveLetters(diskNum, registerProcess).catch(() => {});
+          await new Promise((resolve) => setTimeout(resolve, 500));
+
+          // Phase 2 diskpart: format WITHOUT noerr
+          const phase2Script = buildWindowsFormatDiskpartScript(diskNum, partNum);
+          const phase2Path = path.join(os.tmpdir(), `oc-diskpart-p2-${crypto.randomUUID()}.txt`);
+          fs.writeFileSync(phase2Path, phase2Script);
+          try {
+            onPhase('format', `Formatting partition ${partNum} on disk ${diskNum}`);
+            await runCmd(`diskpart /s "${phase2Path}"`, registerProcess);
+            log('INFO', 'diskOps', 'Phase 2 format succeeded', { diskNum, partNum });
+          } catch (fmtErr) {
+            log('WARN', 'diskOps', 'Phase 2 diskpart format failed', {
+              diskNum, partNum, error: (fmtErr as Error).message,
+            });
+          } finally {
+            try { fs.unlinkSync(phase2Path); } catch {}
+          }
+
+          // Re-assess after phase 2
+          await new Promise((resolve) => setTimeout(resolve, 500));
+          lastObservedPartitions = await waitForWindowsPreparedPartitions(diskNum, registerProcess, 10, 500);
+          lastAssessment = assessWindowsFlashPreparationState({
+            partitions: lastObservedPartitions,
+            expectedLabel: 'OPENCORE',
+          });
+        }
 
         if (lastAssessment.status === 'failed' && lastAssessment.stage === 'assign') {
           const assignedLetter = await assignWindowsDriveLetter(
@@ -1363,10 +1418,10 @@ export function createDiskOps(log: LogFunction): DiskOps {
           partitions: lastObservedPartitions,
         });
         await detachWindowsDriveLetters(diskNum, registerProcess).catch(() => {});
-        await new Promise((resolve) => setTimeout(resolve, 700));
+        await new Promise((resolve) => setTimeout(resolve, retryDelays[attempt] ?? 1500));
       }
     } finally {
-      try { fs.unlinkSync(scriptPath); } catch {}
+      try { fs.unlinkSync(phase1Path); } catch {}
     }
 
     if (driveLetter) return { diskNum, driveLetter };
@@ -1382,8 +1437,13 @@ export function createDiskOps(log: LogFunction): DiskOps {
 
     if (lastAssessment.stage === 'format') {
       const partNum = lastAssessment.targetPartitionNumber ?? 1;
-      log('WARN', 'diskOps', 'diskpart format failed — attempting Format-Volume fallback', { diskNum, partNum });
+      log('WARN', 'diskOps', 'All diskpart attempts left partition unformatted — attempting Format-Volume fallback', { diskNum, partNum });
       onPhase('format', `Recovering: formatting partition ${partNum} on disk ${diskNum}`);
+
+      // Clear handles before Format-Volume — Explorer/Shell grabs new partitions immediately
+      await detachWindowsDriveLetters(diskNum, registerProcess).catch(() => {});
+      await new Promise((resolve) => setTimeout(resolve, 800));
+
       let formatRecovered = false;
       try {
         await runCmd(
@@ -1420,7 +1480,7 @@ export function createDiskOps(log: LogFunction): DiskOps {
       if (formatRecovered && driveLetter) return { diskNum, driveLetter };
       throw new Error(
         `diskpart created a partition on disk ${diskNum}, but failed to format it as FAT32 OPENCORE. ` +
-        'Both diskpart inline format and PowerShell Format-Volume fallback failed. ' +
+        'Both diskpart format and PowerShell Format-Volume fallback failed. ' +
         'Stage: partition exists → format failed → Format-Volume fallback also failed. ' +
         'Close Explorer windows, antivirus scans, or backup tools touching this drive, then retry. ' +
         'If it keeps failing, format partition 1 manually as FAT32 and label it OPENCORE before retrying.'

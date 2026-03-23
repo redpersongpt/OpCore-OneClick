@@ -2,6 +2,14 @@
 
 Project note: the app is now branded as `OpCore-OneClick`. Legacy repo/update coordinates and the persisted app-data path remain unchanged for continuity.
 
+## 2.7.17 - 2026-03-23
+
+### Fix #38/#41 USB flash format failures and error misclassification
+- Split Windows diskpart prep into two phases: partition creation (noerr) and format (NO noerr), ensuring format failures surface instead of being silently swallowed.
+- Added handle-lock clearing (`detachWindowsDriveLetters`) between phases to break Explorer/Shell locks that frequently block FAT32 formatting on new volumes.
+- Increased Windows flash-prep retries from 2 to 3 with progressive delays (500ms → 1500ms → 3000ms) to handle slow USB controllers and mount-timing races.
+- Added dedicated error classification for disk format failures in `main.ts`, preventing them from being misclassified as recovery download or generic hardware errors.
+
 ## 2.7.16 - 2026-03-23
 
 ### Fix #40 kext unavailability for IntelMausi, ECEnabler, USBInjectAll
