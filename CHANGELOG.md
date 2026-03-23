@@ -2,6 +2,41 @@
 
 Project note: the app is now branded as `OpCore-OneClick`. Legacy repo/update coordinates and the persisted app-data path remain unchanged for continuity.
 
+## 2.7.10 - 2026-03-23
+
+### EFI Generation fixes for Coffee Lake, Z390, and Tahoe
+- SIP disabled (csr-active-config /w8AAA==) per Dortania spec for Coffee Lake and newer.
+- Dual-boot safety: Set UpdateSMBIOSMode to 'Custom' to prevent SMBIOS leaking into Windows.
+- Intel NIC stability: Added dk.e1000=0 boot-arg for I219/I225 controllers.
+- RTC stability: DisableRtcChecksum=true for Z390/Z370 boards (Fixes BIOS resets).
+- Added USBInjectAll.kext for Intel desktop systems to ensure USB port enumeration.
+- Added FixupAppleEfiImages quirk for Tahoe (26+) on Coffee Lake and newer.
+
+## 2.7.9 - 2026-03-23
+
+### Simulation and Kext Probing
+- Fix simulation hard-blocking on directUrl probe failures (NootRX/NootedRed).
+- directUrl unreachable now results in 'may_fail' certainty instead of 'will_fail', allowing build to proceed with warnings.
+
+## 2.7.8 - 2026-03-23
+
+### Kext Fetcher fixes
+- Fix NootedRed hard-fail by adding nightly.link direct URL fallback.
+- Fix [object Object] error string in kext fetcher logs.
+
+## 2.7.7 - 2026-03-23
+
+### Reference Audit & SSDT Updates
+- Added SSDT-RHUB for Alder/Raptor Lake and Comet Lake Z490 boards.
+- Added ECEnabler.kext to laptop profiles.
+- Added ECEnabler, SMCProcessor, SMCSuperIO, IntelMausi to kext registry.
+
+## 2.7.6 - 2026-03-23
+
+### EFI generator hardening
+- Corrected ig-platform-ids, quirks, audio path, and SSDT coverage.
+- Fix flash error routing and updater state polling bugs.
+
 ## 2.7.4 - 2026-03-23
 
 ### In-app MBR to GPT conversion
