@@ -62,6 +62,7 @@ interface Quirks {
     AppleXcpmCfgLock: boolean;
     DisableIoMapper: boolean;
     DisableRtcChecksum: boolean;
+    FixupAppleEfiImages: boolean;
     PanicNoKextDump: boolean;
     PowerTimeoutKernelPanic: boolean;
     ProvideCurrentCpuInfo: boolean;
@@ -88,6 +89,7 @@ const BASE_QUIRKS: Quirks = {
     AppleXcpmCfgLock: true,
     DisableIoMapper: true,
     DisableRtcChecksum: false,
+    FixupAppleEfiImages: false,
     PanicNoKextDump: true,
     PowerTimeoutKernelPanic: true,
     ProvideCurrentCpuInfo: false,
@@ -200,7 +202,7 @@ export function getSMBIOSForProfile(profile: HardwareProfile): string {
 
 // --- Quirks by Generation ---
 
-export function getQuirksForGeneration(gen: HardwareProfile['generation'], motherboard: string = '', isVM: boolean = false, strategy: HardwareProfile['strategy'] = 'canonical'): Quirks {
+export function getQuirksForGeneration(gen: HardwareProfile['generation'], motherboard: string = '', isVM: boolean = false, strategy: HardwareProfile['strategy'] = 'canonical', targetOS: string = ''): Quirks {
     const quirks = { ...BASE_QUIRKS };
     const mb = motherboard.toLowerCase();
 
@@ -319,6 +321,12 @@ export function getQuirksForGeneration(gen: HardwareProfile['generation'], mothe
         quirks.UnblockFsConnect = true;
     }
 
+    // Tahoe (26+) on Coffee Lake and newer requires FixupAppleEfiImages — Source: Dortania tahoe.html
+    const osVer = parseMacOSVersion(targetOS);
+    if (osVer >= 26 && ['Coffee Lake', 'Comet Lake', 'Rocket Lake', 'Alder Lake', 'Raptor Lake'].includes(gen)) {
+        quirks.FixupAppleEfiImages = true;
+    }
+
     return quirks;
 }
 
@@ -435,6 +443,10 @@ export function getRequiredResources(profile: HardwareProfile) {
         pushUnique('SMCSuperIO.kext');
         // Intel I225/I219/I218 Ethernet — covers most Intel desktop boards
         pushUnique('IntelMausi.kext');
+        // USB port enumeration for Intel platforms — Source: ktext.html
+        if (!profile.isLaptop) {
+            pushUnique('USBInjectAll.kext');
+        }
     } else if (profile.architecture === 'AMD') {
         if (gpuAssessments.some(gpu => gpu.requiresNootRX)) {
             pushUnique('NootRX.kext');
@@ -545,7 +557,7 @@ const TAHOE_UNSUPPORTED_GENERATIONS = new Set<HardwareProfile['generation']>([
 ]);
 
 export function generateConfigPlist(profile: HardwareProfile): string {
-    const quirks = getQuirksForGeneration(profile.generation, profile.motherboard, profile.isVM, profile.strategy);
+    const quirks = getQuirksForGeneration(profile.generation, profile.motherboard, profile.isVM, profile.strategy, profile.targetOS);
     const { kexts, ssdts } = getRequiredResources(profile);
     const osVer = parseMacOSVersion(profile.targetOS);
     const gpuDevices = getProfileGpuDevices(profile);
@@ -818,6 +830,7 @@ export function generateConfigPlist(profile: HardwareProfile): string {
             <key>DisableIoMapper</key><${quirks.DisableIoMapper}/>
             <key>DisableLinkeditJettison</key><true/>
             <key>DisableRtcChecksum</key><${quirks.DisableRtcChecksum}/>
+            <key>FixupAppleEfiImages</key><${quirks.FixupAppleEfiImages}/>
             <key>ExtendBTFeatureFlags</key><false/>
             <key>ExternalDiskIcons</key><false/>
             <key>ForceSecureBootScheme</key><false/>
