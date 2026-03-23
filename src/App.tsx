@@ -345,6 +345,7 @@ export default function App() {
   }, [efiPath]);
 
   useEffect(() => {
+    if (!('electron' in window)) return;
     let cancelled = false;
     const initUpdates = async () => {
       await refreshAppUpdateState();
@@ -359,6 +360,7 @@ export default function App() {
   }, []);
 
   useEffect(() => {
+    if (!('electron' in window)) return;
     if (!shouldRefreshAppUpdateState(appUpdateState)) return;
     const interval = setInterval(() => {
       void refreshAppUpdateState();

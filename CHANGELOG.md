@@ -2,6 +2,12 @@
 
 Project note: the app is now branded as `OpCore-OneClick`. Legacy repo/update coordinates and the persisted app-data path remain unchanged for continuity.
 
+## 2.7.12 - 2026-03-23
+
+### Fix electron:dev startup and browser black screen
+- `electron:dev` now pre-compiles electron code before starting concurrently. Electron opens ~300ms after Vite is ready instead of waiting for a full tsc run (~10s) after Vite is up. No more duplicate parallel compilation.
+- Guard startup updater effects with `'electron' in window` check. In browser context (plain localhost:5173), the app no longer throws on mount from trying to call `window.electron.checkForUpdates()` when the preload isn't wired.
+
 ## 2.7.11 - 2026-03-23
 
 ### Fix #36 kext fail-fast, #37A updater dead-click, #37B/#37C flash error classification
