@@ -1382,7 +1382,7 @@ export function createDiskOps(log: LogFunction): DiskOps {
 
     if (lastAssessment.stage === 'format') {
       const partNum = lastAssessment.targetPartitionNumber ?? 1;
-      log('WARN', 'diskOps', 'diskpart format failed — attempting Format-Volume recovery', { diskNum, partNum });
+      log('WARN', 'diskOps', 'diskpart format failed — attempting Format-Volume fallback', { diskNum, partNum });
       onPhase('format', `Recovering: formatting partition ${partNum} on disk ${diskNum}`);
       let formatRecovered = false;
       try {
@@ -1411,7 +1411,7 @@ export function createDiskOps(log: LogFunction): DiskOps {
           }
         }
       } catch (error) {
-        log('WARN', 'diskOps', 'Format-Volume recovery also failed', {
+        log('WARN', 'diskOps', 'Format-Volume fallback also failed', {
           diskNum,
           partNum,
           error: (error as Error).message,
@@ -1420,7 +1420,7 @@ export function createDiskOps(log: LogFunction): DiskOps {
       if (formatRecovered && driveLetter) return { diskNum, driveLetter };
       throw new Error(
         `diskpart created a partition on disk ${diskNum}, but failed to format it as FAT32 OPENCORE. ` +
-        'Both diskpart inline format and PowerShell Format-Volume recovery failed. ' +
+        'Both diskpart inline format and PowerShell Format-Volume fallback failed. ' +
         'Stage: partition exists → format failed → Format-Volume fallback also failed. ' +
         'Close Explorer windows, antivirus scans, or backup tools touching this drive, then retry. ' +
         'If it keeps failing, format partition 1 manually as FAT32 and label it OPENCORE before retrying.'

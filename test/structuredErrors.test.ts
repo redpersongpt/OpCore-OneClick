@@ -264,7 +264,7 @@ describe('structureError — #37C compound format failure', () => {
   it('classifies compound diskpart + Format-Volume failure', () => {
     const e = structureError(
       'diskpart created a partition on disk 2, but failed to format it as FAT32 OPENCORE. ' +
-      'Both diskpart inline format and PowerShell Format-Volume recovery failed.',
+      'Both diskpart inline format and PowerShell Format-Volume fallback failed.',
     );
     expect(e.title).toContain('format');
     expect(e.retryable).toBe(true);

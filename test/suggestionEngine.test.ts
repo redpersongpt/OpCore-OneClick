@@ -74,3 +74,29 @@ describe('getSuggestionPayload — flash safety and write classification', () =>
     expect(payload.suggestion).not.toContain('Administrator');
   });
 });
+
+describe('getSuggestionPayload — #38 diskpart format must not match recovery_download_failed', () => {
+  it('compound diskpart + Format-Volume failure is NOT classified as recovery download', () => {
+    const payload = getSuggestionPayload({
+      errorMessage:
+        "Error invoking remote method 'flash-usb': Error: diskpart created a partition on disk 2, " +
+        "but failed to format it as FAT32 OPENCORE. Both diskpart inline format and PowerShell " +
+        "Format-Volume fallback failed. Stage: partition exists → format failed → Format-Volume fallback also failed.",
+      platform: 'win32',
+      step: 'usb-select',
+    });
+
+    expect(payload.code).not.toBe('recovery_download_failed');
+    expect(payload.message).not.toContain('Recovery download');
+  });
+
+  it('actual recovery download failure still classifies correctly', () => {
+    const payload = getSuggestionPayload({
+      errorMessage: 'Apple recovery download failed: connection reset by peer',
+      platform: 'win32',
+      step: 'recovery-download',
+    });
+
+    expect(payload.code).toBe('recovery_download_failed');
+  });
+});

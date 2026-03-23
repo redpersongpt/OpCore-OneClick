@@ -2,6 +2,14 @@
 
 Project note: the app is now branded as `OpCore-OneClick`. Legacy repo/update coordinates and the persisted app-data path remain unchanged for continuity.
 
+## 2.7.13 - 2026-03-23
+
+### Fix #38 diskpart error misclassified as recovery download failure
+- Suggestion engine's "recovery download" pattern was matching diskpart errors because v2.7.11's compound format message contained "Format-Volume recovery failed" — the word "recovery" + "failed" triggered the wrong pattern.
+- Narrowed recovery download pattern to exclude diskpart/flash-usb/partition/format-volume context.
+- Renamed "Format-Volume recovery" to "Format-Volume fallback" everywhere to prevent future classifier poisoning.
+- Removed duplicate `void checkForAppUpdates()` call in `handlePrimaryUpdateAction` (introduced in v2.7.11).
+
 ## 2.7.12 - 2026-03-23
 
 ### Fix electron:dev startup and browser black screen

@@ -280,7 +280,8 @@ const TEMPLATES: SuggestionTemplate[] = [
 
   // ── Recovery download interrupted ─────────────────────────────
   {
-    test: m => m.includes('recovery') && (m.includes('failed') || m.includes('error') || m.includes('interrupted')),
+    test: m => m.includes('recovery') && (m.includes('failed') || m.includes('error') || m.includes('interrupted'))
+      && !m.includes('diskpart') && !m.includes('format-volume') && !m.includes('flash-usb') && !m.includes('partition'),
     code: 'recovery_download_failed',
     category: 'network_error',
     build: (ctx) => {
