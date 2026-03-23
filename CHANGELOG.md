@@ -2,6 +2,12 @@
 
 Project note: the app is now branded as `OpCore-OneClick`. Legacy repo/update coordinates and the persisted app-data path remain unchanged for continuity.
 
+## 2.7.19 - 2026-03-23
+
+### Fix #43 Recovery download ECONNRESET crash
+- The app's download utility now automatically catches network drops (`ECONNRESET`, `ETIMEDOUT`, stall timeouts) and seamlessly retries from the exact byte where it left off, up to 5 times. This prevents the entire fallback process from crashing and forcing manual retries on unstable connections.
+- Fixed a cache policy bug where valid partial downloads under 350MB were being discarded instead of marked resumable.
+
 ## 2.7.18 - 2026-03-23
 
 ### Fix #42 Recovery download HTTP 416 (Requested Range Not Satisfiable)

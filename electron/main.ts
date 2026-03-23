@@ -204,9 +204,9 @@ class RecoveryCacheManager {
         const actualSize = stat.size;
         
         // 2. Strict size range validation (macOS recovery images are 350MB - 1GB)
-        if (actualSize < 350 * 1024 * 1024 || actualSize > 1024 * 1024 * 1024) {
-          log('WARN', 'cache', 'Cached asset failed size validation', { actualSize, version });
-          continue; 
+        if (!meta.isPartial && (actualSize < 350 * 1024 * 1024 || actualSize > 1024 * 1024 * 1024)) {
+          log('WARN', 'cache', 'Cached asset failed size validation, downgrading to partial', { actualSize, version });
+          meta.isPartial = true; 
         }
 
         // 3. Metadata consistency check
@@ -273,24 +273,41 @@ async function downloadFileWithProgress(
   return new Promise((resolve, reject) => {
     const CONNECT_TIMEOUT_MS = 30_000;
     const INACTIVITY_TIMEOUT_MS = 20_000;
+    
+    let currentOffset = startOffset;
+    let retries = 0;
+    const MAX_RETRIES = 5;
 
     function fetchUrl(urlStr: string, redirects = 0): void {
       if (redirects > 10) { reject(new Error('Too many redirects')); return; }
+      
+      const handleError = (e: Error) => {
+        const msg = e.message.toLowerCase();
+        const isNetworkError = msg.includes('econnreset') || msg.includes('socket hang up') || msg.includes('etimedout') || msg.includes('stalled') || msg.includes('timed out');
+        if (isNetworkError && retries < MAX_RETRIES) {
+          retries++;
+          log('WARN', 'download', `Network drop (${e.message}), auto-retrying (${retries}/${MAX_RETRIES})...`, { url: urlStr, currentOffset });
+          setTimeout(() => fetchUrl(urlStr, redirects), 2000);
+          return;
+        }
+        reject(e);
+      };
+
       const parsedUrl = new URL(urlStr);
       const lib = parsedUrl.protocol === 'https:' ? https : http;
       const headers: Record<string, string | number> = {
         'User-Agent': 'InternetRecovery/1.0',
         ...(extraHeaders ?? {}),
       };
-      if (startOffset > 0) {
-        headers['Range'] = `bytes=${startOffset}-`;
+      if (currentOffset > 0) {
+        headers['Range'] = `bytes=${currentOffset}-`;
       }
       const options = {
         hostname: parsedUrl.hostname,
         path: parsedUrl.pathname + parsedUrl.search,
         headers
       };
-      const req = lib.get(options as any, (res) => {
+      const req = lib.get(options as any, (res: any) => {
         if (res.statusCode === 301 || res.statusCode === 302 || res.statusCode === 307 || res.statusCode === 308) {
           clearTimeout(connectTimer);
           fetchUrl(res.headers.location!, redirects + 1);
@@ -300,22 +317,24 @@ async function downloadFileWithProgress(
         const isFull   = res.statusCode === 200;
         if (!isResume && !isFull) {
           clearTimeout(connectTimer);
-          if (res.statusCode === 416 && startOffset > 0) {
-            log('WARN', 'download', 'HTTP 416 Requested Range Not Satisfiable during resume. Restarting from scratch.', { url: urlStr, offset: startOffset });
+          if (res.statusCode === 416 && currentOffset > 0) {
+            log('WARN', 'download', 'HTTP 416 Requested Range Not Satisfiable during resume. Restarting from scratch.', { url: urlStr, offset: currentOffset });
             try { if (fs.existsSync(dest)) fs.unlinkSync(dest); } catch {}
-            startOffset = 0;
+            currentOffset = 0;
             fetchUrl(urlStr, redirects);
             return;
           }
           reject(new Error(`HTTP ${res.statusCode} downloading ${urlStr}`));
           return;
         }
-        const effectiveOffset = isResume ? startOffset : 0;
+        const effectiveOffset = isResume ? currentOffset : 0;
         const contentLength = parseInt(res.headers['content-length'] || '0', 10);
         const total = contentLength + effectiveOffset;
         let downloaded = effectiveOffset;
         let rejected = false;
-        const file = fs.createWriteStream(dest, isResume ? { flags: 'a' } : { flags: 'w' });
+        
+        const writeFlags = (currentOffset > 0 && isResume) ? { flags: 'a' } : { flags: 'w' };
+        const file = fs.createWriteStream(dest, writeFlags);
         let inactivityTimer: NodeJS.Timeout | null = null;
 
         const clearInactivityTimer = () => {
@@ -332,7 +351,7 @@ async function downloadFileWithProgress(
             rejected = true;
             res.destroy(new Error(`Download stalled after ${INACTIVITY_TIMEOUT_MS / 1000}s with no progress: ${urlStr}`));
             file.destroy(new Error(`Download stalled after ${INACTIVITY_TIMEOUT_MS / 1000}s with no progress: ${urlStr}`));
-            reject(new Error(`Download stalled after ${INACTIVITY_TIMEOUT_MS / 1000}s with no progress: ${urlStr}`));
+            handleError(new Error(`Download stalled after ${INACTIVITY_TIMEOUT_MS / 1000}s with no progress: ${urlStr}`));
           }, INACTIVITY_TIMEOUT_MS);
         };
 
@@ -350,6 +369,7 @@ async function downloadFileWithProgress(
             return;
           }
           downloaded += chunk.length;
+          currentOffset = downloaded;
           armInactivityTimer();
           onProgress(downloaded, total);
         });
@@ -359,21 +379,27 @@ async function downloadFileWithProgress(
           clearInactivityTimer();
           file.close(() => resolve());
         });
-        res.on('error', (e) => {
+        res.on('error', (e: Error) => {
           clearInactivityTimer();
-          if (!rejected) { rejected = true; reject(e); }
+          if (!rejected) { 
+            rejected = true; 
+            handleError(e); 
+          }
         });
-        file.on('error', (e) => {
+        file.on('error', (e: Error) => {
           clearInactivityTimer();
-          if (!rejected) { rejected = true; reject(e); }
+          if (!rejected) { 
+            rejected = true; 
+            handleError(e); 
+          }
         });
       });
       const connectTimer = setTimeout(() => {
         req.destroy(new Error(`Timed out after ${CONNECT_TIMEOUT_MS / 1000}s connecting to ${urlStr}`));
       }, CONNECT_TIMEOUT_MS);
-      req.on('error', (error) => {
+      req.on('error', (error: Error) => {
         clearTimeout(connectTimer);
-        reject(error);
+        handleError(error);
       });
     }
     fetchUrl(url);
