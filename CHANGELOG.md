@@ -2,6 +2,12 @@
 
 Project note: the app is now branded as `OpCore-OneClick`. Legacy repo/update coordinates and the persisted app-data path remain unchanged for continuity.
 
+## 2.7.20 - 2026-03-23
+
+### Global Network Auto-Retry and Auto-Resume
+- **App Updates:** The in-app updater now supports auto-resuming partial downloads and automatically retries requests if the connection drops, eliminating the need to restart large update downloads from scratch on unstable internet.
+- **API Resilience:** GitHub API queries for the latest release versions are now wrapped in an exponential backoff retry mechanism (up to 3 attempts), protecting the app against transient API network drops.
+
 ## 2.7.19 - 2026-03-23
 
 ### Fix #43 Recovery download ECONNRESET crash

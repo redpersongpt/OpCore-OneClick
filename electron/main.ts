@@ -670,7 +670,7 @@ function setAppUpdateState(patch: Partial<AppUpdateState>): AppUpdateState {
 }
 
 async function fetchLatestAppRelease(): Promise<LatestReleaseInfo> {
-  return await new Promise((resolve, reject) => {
+  return await retryWithBackoff(() => new Promise((resolve, reject) => {
     const req = https.request({
       hostname: 'api.github.com',
       path: REPO_RELEASE_API_PATH,
@@ -699,7 +699,7 @@ async function fetchLatestAppRelease(): Promise<LatestReleaseInfo> {
     req.on('timeout', () => req.destroy(new Error('Latest release query timed out.')));
     req.on('error', reject);
     req.end();
-  });
+  }), 3, 'fetchLatestAppRelease');
 }
 
 function selectLatestReleaseAsset(release: LatestReleaseInfo): ReleaseAssetInfo | null {
@@ -821,56 +821,24 @@ async function downloadLatestAppUpdate(): Promise<AppUpdateState> {
   });
 
   try {
-    await new Promise<void>((resolve, reject) => {
-      const fetchAsset = (urlString: string, redirects = 0) => {
-        if (redirects > 10) {
-          reject(new Error('Too many redirects while downloading the update.'));
-          return;
-        }
-        const targetUrl = new URL(urlString);
-        const lib = targetUrl.protocol === 'https:' ? https : http;
-        const request = lib.get({
-          hostname: targetUrl.hostname,
-          port: targetUrl.port || (targetUrl.protocol === 'https:' ? 443 : 80),
-          path: `${targetUrl.pathname}${targetUrl.search}`,
-          headers: { 'User-Agent': `${PRODUCT_HTTP_NAME}-Updater/1.0` },
-          timeout: 30_000,
-        }, (response) => {
-          if (response.statusCode && [301, 302, 307, 308].includes(response.statusCode)) {
-            const redirectUrl = response.headers.location;
-            response.resume();
-            if (!redirectUrl) {
-              reject(new Error('Update download redirected without a target URL.'));
-              return;
-            }
-            fetchAsset(new URL(redirectUrl, urlString).toString(), redirects + 1);
-            return;
-          }
-          if (!response.statusCode || response.statusCode < 200 || response.statusCode >= 300) {
-            response.resume();
-            reject(new Error(`Update download failed (HTTP ${response.statusCode ?? 'unknown'})`));
-            return;
-          }
-          const totalBytesHeader = response.headers['content-length'];
-          const totalBytes = totalBytesHeader ? parseInt(totalBytesHeader, 10) : asset.size ?? null;
-          setAppUpdateState({ totalBytes: Number.isFinite(totalBytes as number) ? totalBytes : asset.size ?? null });
+    let startOffset = 0;
+    if (fs.existsSync(tempPath)) {
+      startOffset = fs.statSync(tempPath).size;
+    }
 
-          const file = fs.createWriteStream(tempPath);
-          let downloadedBytes = 0;
-          response.on('data', (chunk: Buffer) => {
-            downloadedBytes += chunk.length;
-            setAppUpdateState({ downloadedBytes, totalBytes: totalBytes ?? asset.size ?? null });
-          });
-          response.on('error', reject);
-          file.on('error', reject);
-          file.on('finish', () => file.close(() => resolve()));
-          response.pipe(file);
+    await downloadFileWithProgress(
+      asset.browser_download_url,
+      tempPath,
+      (downloaded, total) => {
+        setAppUpdateState({ 
+          downloadedBytes: downloaded, 
+          totalBytes: Number.isFinite(total) && total > 0 ? total : asset.size ?? null 
         });
-        request.on('timeout', () => request.destroy(new Error('Update download timed out.')));
-        request.on('error', reject);
-      };
-      fetchAsset(asset.browser_download_url);
-    });
+      },
+      startOffset,
+      undefined,
+      { 'User-Agent': `${PRODUCT_HTTP_NAME}-Updater/1.0` }
+    );
 
     fs.rmSync(finalPath, { force: true });
     fs.renameSync(tempPath, finalPath);
