@@ -240,14 +240,17 @@ export async function simulateBuild(
           directUrlError: directCheck.error || (directCheck.httpCode ? `HTTP ${directCheck.httpCode}` : null),
         });
 
+        // If the direct URL probe failed, treat as may_fail — the actual download
+        // at build time uses different networking and may still succeed.
+        // Only will_fail is used for hard blockers (no source at all).
         return {
           name: kextName,
           type: 'kext' as const,
           verified: resolution.available,
-          certainty: resolution.available ? 'will_succeed' as Certainty : 'will_fail' as Certainty,
+          certainty: resolution.available ? 'will_succeed' as Certainty : 'may_fail' as Certainty,
           detail: resolution.available
             ? `${resolution.version ?? 'direct'} direct download verified`
-            : resolution.message,
+            : `Direct URL unreachable in pre-check — will attempt at build time. ${resolution.message}`,
           url: entry.directUrl,
           actualSize: directCheck.contentLength,
         };
@@ -341,8 +344,9 @@ export async function simulateBuild(
   });
   if (!diskOk) blockers.push('Build directory is not writable');
 
-  // Generate failed kext blockers
-  const failedKexts = components.filter(c => c.type === 'kext' && !c.verified);
+  // Generate failed kext blockers — only hard-block on will_fail certainty.
+  // may_fail means the pre-check URL probe failed but actual download may still work.
+  const failedKexts = components.filter(c => c.type === 'kext' && !c.verified && c.certainty === 'will_fail');
   if (failedKexts.length > 0) {
     blockers.push(`${failedKexts.length} kext(s) unavailable: ${failedKexts.map(k => k.name).join(', ')}`);
   }
