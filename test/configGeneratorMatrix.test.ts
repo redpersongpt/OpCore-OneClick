@@ -1001,7 +1001,7 @@ describe('getQuirksForGeneration — cross-generation policy', () => {
     }));
     expect(r.ssdts).toContain('SSDT-AWAC.aml');
     expect(r.ssdts).toContain('SSDT-PLUG.aml');
-    expect(r.ssdts).toContain('SSDT-EC-USBX.aml');
+    expect(r.ssdts).toContain('SSDT-EC-USBX-LAPTOP.aml');
   });
 
   it('Skylake on Tahoe enables FixupAppleEfiImages', () => {

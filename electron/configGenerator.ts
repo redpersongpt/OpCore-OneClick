@@ -550,15 +550,15 @@ export function getRequiredResources(profile: HardwareProfile) {
     if (profile.architecture === 'Intel') {
         pushUnique('WhateverGreen.kext');
         pushUnique('AppleALC.kext');
-        // VirtualSMC sensor plugins — CPU temp + fan monitoring
-        pushUnique('SMCProcessor.kext');
-        pushUnique('SMCSuperIO.kext');
-        // Intel I225/I219/I218 Ethernet — covers most Intel desktop boards
-        pushUnique('IntelMausi.kext');
-        // USB port enumeration for Intel platforms — Source: ktext.html
         if (!profile.isLaptop) {
+            // Desktop-only kexts: CPU temp, fan monitoring, onboard Ethernet, USB enumeration
+            pushUnique('SMCProcessor.kext');
+            pushUnique('SMCSuperIO.kext');
+            pushUnique('IntelMausi.kext');
             pushUnique('USBInjectAll.kext');
         }
+        // Laptops get SMCBatteryManager instead (added in laptop section below)
+        // Laptops use Intel Wi-Fi (AirportItlwm/itlwm), not IntelMausi for Ethernet
     } else if (profile.architecture === 'AMD') {
         if (gpuAssessments.some(gpu => gpu.requiresNootRX)) {
             pushUnique('NootRX.kext');
@@ -581,14 +581,34 @@ export function getRequiredResources(profile: HardwareProfile) {
         }
     }
 
-    // Laptop kexts — Source: ktext.html
+    // ── Laptop kext / SSDT policy ──────────────────────────────────────────
+    // Source: Dortania laptop config.plist guides, ktext.html, ACPI guide
     if (profile.isLaptop) {
+        // Battery — universal laptop requirement
         pushUnique('SMCBatteryManager.kext');
-        pushUnique('VoodooPS2Controller.kext');
-        // ECEnabler: allows reading/writing EC fields > 8-bit on modern laptops — Source: ktext.html
+        // EC register access for modern laptops
         pushUnique('ECEnabler.kext');
+
+        // Input stack: PS2 is the safe conservative choice for most business laptops.
+        // I2C trackpads exist on some Skylake+ laptops but require specific ACPI patches
+        // that are board-specific. PS2 covers ThinkPads, Latitudes, EliteBooks reliably.
+        // VoodooPS2Controller handles both PS/2 keyboard and Synaptics/ALPS trackpads.
+        pushUnique('VoodooPS2Controller.kext');
+
+        // Backlight — SSDT-PNLF is required for all Intel laptop displays
         pushSsdt('SSDT-PNLF.aml');
+        // Windows ACPI compatibility — fixes _OSI checks for trackpad/hotkey/sensor ACPI methods
         pushSsdt('SSDT-XOSI.aml');
+
+        // SSDT-IMEI: required on Sandy Bridge and Ivy Bridge laptops for IMEI device,
+        // and on Haswell laptops with 7-series chipsets (mixed-generation boards).
+        // Source: Dortania ACPI guide — "Sandy/Ivy Bridge laptops need SSDT-IMEI"
+        if (['Sandy Bridge', 'Ivy Bridge'].includes(profile.generation)) {
+            pushSsdt('SSDT-IMEI.aml');
+        }
+
+        // SMCProcessor/SMCSuperIO: desktop only — laptops don't need fan/IO monitoring kexts
+        // (SMCBatteryManager is the laptop-specific VirtualSMC plugin)
     }
 
     // NVMe fix for known-bad SSDs — Source: troubleshooting pages
@@ -615,35 +635,42 @@ export function getRequiredResources(profile: HardwareProfile) {
     const needsAmdCpuSsdt = /\b(a520|b550|a620|b650|x670|x670e|b850|x870|x870e)\b/.test(mb);
 
     // SSDTs by platform — Source: per-gen config.plist pages
+    // Laptops use SSDT-EC-USBX-LAPTOP.aml instead of the desktop variant.
+    const ecUsbxSsdt = profile.isLaptop ? 'SSDT-EC-USBX-LAPTOP.aml' : 'SSDT-EC-USBX.aml';
+
     if (profile.architecture === 'Intel') {
         if (['Alder Lake', 'Raptor Lake'].includes(profile.generation)) {
             pushSsdt('SSDT-PLUG-ALT.aml');
             pushSsdt('SSDT-AWAC.aml');
-            pushSsdt('SSDT-EC-USBX.aml');
+            pushSsdt(ecUsbxSsdt);
             // SSDT-RHUB: USB root hub reset required on Alder/Raptor Lake — Source: Dortania alder-lake.html
-            pushSsdt('SSDT-RHUB.aml');
+            if (!profile.isLaptop) pushSsdt('SSDT-RHUB.aml');
             pushUnique('CPUTopologyRebuild.kext');
         } else if (['Coffee Lake', 'Comet Lake', 'Rocket Lake'].includes(profile.generation)) {
             pushSsdt('SSDT-PLUG.aml');
             pushSsdt('SSDT-AWAC.aml');
-            pushSsdt('SSDT-EC-USBX.aml');
+            pushSsdt(ecUsbxSsdt);
             // SSDT-PMC required for 300-series boards (Z370/Z390/H370/B360/H310) for native NVRAM
             // Source: config.plist/coffee-lake.html — "Required for all 300-series motherboards"
-            if (mb.includes('z390') || mb.includes('z370') || mb.includes('h370') || mb.includes('b360') || mb.includes('b365') || mb.includes('h310') || mb.includes('q370')) {
+            if (!profile.isLaptop && (mb.includes('z390') || mb.includes('z370') || mb.includes('h370') || mb.includes('b360') || mb.includes('b365') || mb.includes('h310') || mb.includes('q370'))) {
+                pushSsdt('SSDT-PMC.aml');
+            }
+            // Laptop Coffee Lake+ also needs SSDT-PMC for 300-series mobile chipsets
+            if (profile.isLaptop && ['Coffee Lake'].includes(profile.generation)) {
                 pushSsdt('SSDT-PMC.aml');
             }
             // SSDT-RHUB: USB root hub reset required on Z490 Comet Lake boards — Source: Dortania comet-lake.html
-            if (profile.generation === 'Comet Lake' && mb.includes('z490')) {
+            if (!profile.isLaptop && profile.generation === 'Comet Lake' && mb.includes('z490')) {
                 pushSsdt('SSDT-RHUB.aml');
             }
         } else if (['Haswell', 'Broadwell'].includes(profile.generation)) {
             // Source: config.plist/haswell.html — USBX not needed on pre-Skylake
             pushSsdt('SSDT-PLUG.aml');
-            pushSsdt('SSDT-EC.aml');
+            pushSsdt(profile.isLaptop ? 'SSDT-EC-LAPTOP.aml' : 'SSDT-EC.aml');
         } else if (['Skylake', 'Kaby Lake', 'Ice Lake'].includes(profile.generation)) {
             // Source: config.plist/kaby.html — USBX required for USB power management on 6th+ gen
             pushSsdt('SSDT-PLUG.aml');
-            pushSsdt('SSDT-EC-USBX.aml');
+            pushSsdt(ecUsbxSsdt);
             // Ice Lake needs SSDT-AWAC — Source: Dortania ice-lake.html
             if (profile.generation === 'Ice Lake') {
                 pushSsdt('SSDT-AWAC.aml');
@@ -770,7 +797,21 @@ export function generateConfigPlist(profile: HardwareProfile): string {
     let gpuProperties = '';
     if (profile.architecture === 'Intel' &&
         !['Alder Lake', 'Raptor Lake', 'Rocket Lake'].includes(profile.generation)) {
-        // Display ig-platform-ids — Source: Dortania per-gen config.plist guides
+
+        // ── Laptop ig-platform-ids — Source: Dortania per-gen laptop config.plist guides
+        // Laptops ALWAYS use display ig-platform-ids (iGPU drives the panel).
+        // These are completely different from desktop values.
+        const LAPTOP_IDS: Record<string, string> = {
+            'Haswell':    'BgAmCg==', // 0x0A260006 — Haswell mobile (HD 4400/4600)
+            'Broadwell':  'BgAmFg==', // 0x16260006 — Broadwell mobile (HD 5500/6000)
+            'Skylake':    'AAAZYQ==', // 0x19160000 — Skylake mobile (HD 520/530)
+            'Kaby Lake':  'AABZYQ==', // 0x59160000 — Kaby Lake mobile (HD 620/630)
+            'Coffee Lake':'CQClPg==', // 0x3EA50009 — Coffee Lake mobile (UHD 620)
+            'Comet Lake': 'CQClPg==', // 0x3EA50009 — Comet Lake mobile (UHD 620/630)
+            'Ice Lake':   'AAD/AQ==', // 0x01FF0000 — Ice Lake mobile (Iris Plus)
+        };
+
+        // ── Desktop display ig-platform-ids — Source: Dortania per-gen config.plist guides
         const DISPLAY_IDS: Record<string, string> = {
             'Haswell':    'AwAiDQ==', // 0x0D220003
             'Broadwell':  'BwAiFg==', // 0x16220007
@@ -779,10 +820,10 @@ export function generateConfigPlist(profile: HardwareProfile): string {
             'Coffee Lake':'BwCbPg==', // 0x3E9B0007
             'Comet Lake': 'BwCbPg==', // 0x3E9B0007
         };
-        // Headless ig-platform-ids — Source: Dortania per-gen config.plist guides
+        // ── Desktop headless ig-platform-ids — Source: Dortania per-gen config.plist guides
         const HEADLESS_IDS: Record<string, string> = {
             'Haswell':    'BAASBA==', // 0x04120004
-            'Broadwell':  'BgAmFg==', // 0x16260006 (closest Broadwell headless)
+            'Broadwell':  'BgAmFg==', // 0x16260006
             'Skylake':    'AQASGQ==', // 0x19120001
             'Kaby Lake':  'AwASWQ==', // 0x59120003
             'Coffee Lake':'AwCRPg==', // 0x3E910003
@@ -790,13 +831,21 @@ export function generateConfigPlist(profile: HardwareProfile): string {
         };
 
         const gen = profile.generation;
-        const platformId = headlessIgpu
-            ? (HEADLESS_IDS[gen] ?? HEADLESS_IDS['Coffee Lake'])
-            : (DISPLAY_IDS[gen] ?? DISPLAY_IDS['Coffee Lake']);
+        let platformId: string;
+        if (profile.isLaptop) {
+            // Laptops always use iGPU for display — use laptop-specific platform IDs
+            platformId = LAPTOP_IDS[gen] ?? LAPTOP_IDS['Coffee Lake'];
+        } else if (headlessIgpu) {
+            platformId = HEADLESS_IDS[gen] ?? HEADLESS_IDS['Coffee Lake'];
+        } else {
+            platformId = DISPLAY_IDS[gen] ?? DISPLAY_IDS['Coffee Lake'];
+        }
 
-        // Framebuffer patches (stolenmem / patch-enable) are only needed when
-        // the iGPU drives a display. Headless mode needs no patches.
-        const fbPatches = headlessIgpu ? '' : `
+        // Framebuffer patches (stolenmem / patch-enable) are needed when the iGPU
+        // drives a display: always for laptops, and for desktops without a discrete GPU.
+        // Headless desktop mode (dGPU present) needs no patches.
+        const needsFbPatches = profile.isLaptop || !headlessIgpu;
+        const fbPatches = !needsFbPatches ? '' : `
                 <key>framebuffer-patch-enable</key>
                 <data>AQAAAA==</data>
                 <key>framebuffer-stolenmem</key>
