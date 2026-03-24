@@ -603,9 +603,11 @@ export function getRequiredResources(profile: HardwareProfile) {
         pushUnique('AppleALC.kext');
         if (!profile.isLaptop) {
             // Desktop-only kexts: CPU temp, fan monitoring, onboard Ethernet, USB enumeration
+            // Source: Dortania ktext.html — include NIC kexts for common vendors
             pushUnique('SMCProcessor.kext');
             pushUnique('SMCSuperIO.kext');
             pushUnique('IntelMausi.kext');
+            pushUnique('RealtekRTL8111.kext');
             pushUnique('USBInjectAll.kext');
         }
         // Laptops get SMCBatteryManager instead (added in laptop section below)

@@ -773,3 +773,102 @@ describe('Dortania: Misc/Security defaults', () => {
     expect(plist).toContain('<key>prev-lang:kbd</key><string>en-US:0</string>');
   });
 });
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// 11. REAL-WORLD HARDWARE VALIDATION
+// ═══════════════════════════════════════════════════════════════════════════════
+
+describe('Dortania: Skylake desktop + RX 580 (i7-6700K, MSI H110M, RTL8111H)', () => {
+  // Exact hardware: i7-6700K (Skylake), RX 580 8GB, MSI H110M PRO-VD, ALC887, RTL8111H
+  const skylakeRx580 = (): HardwareProfile => withSmbios(profile({
+    cpu: 'Intel Core i7-6700K',
+    generation: 'Skylake',
+    gpu: 'AMD Radeon RX 580 8GB / Intel HD Graphics 530',
+    gpuDevices: [
+      { name: 'AMD Radeon RX 580 8GB' },
+      { name: 'Intel HD Graphics 530' },
+    ],
+    motherboard: 'MSI H110M PRO-VD',
+    targetOS: 'macOS Monterey 12',
+    audioLayoutId: 1,
+  }));
+
+  it('SMBIOS: iMac17,1 (Skylake desktop, Monterey)', () => {
+    expect(skylakeRx580().smbios).toBe('iMac17,1');
+  });
+
+  it('ig-platform-id: headless 0x19120001 (dGPU drives display)', () => {
+    const plist = generateConfigPlist(skylakeRx580());
+    expect(plist).toContain('AQASGQ=='); // 0x19120001 headless
+    expect(plist).not.toContain('framebuffer-stolenmem'); // no FB patches in headless
+  });
+
+  it('SSDTs: SSDT-PLUG + SSDT-EC-USBX', () => {
+    const res = getRequiredResources(skylakeRx580());
+    expect(res.ssdts).toContain('SSDT-PLUG.aml');
+    expect(res.ssdts).toContain('SSDT-EC-USBX.aml');
+    expect(res.ssdts).not.toContain('SSDT-AWAC.aml'); // no AWAC on 100-series
+  });
+
+  it('kexts: Lilu, VirtualSMC, WhateverGreen, AppleALC, SMC plugins, ethernet kexts', () => {
+    const res = getRequiredResources(skylakeRx580());
+    expect(res.kexts).toContain('Lilu.kext');
+    expect(res.kexts).toContain('VirtualSMC.kext');
+    expect(res.kexts).toContain('WhateverGreen.kext');
+    expect(res.kexts).toContain('AppleALC.kext');
+    expect(res.kexts).toContain('SMCProcessor.kext');
+    expect(res.kexts).toContain('SMCSuperIO.kext');
+    expect(res.kexts).toContain('IntelMausi.kext');
+    expect(res.kexts).toContain('RealtekRTL8111.kext');
+  });
+
+  it('boot-args: alcid=1 + agdpmod=pikera (iMac + AMD dGPU)', () => {
+    const plist = generateConfigPlist(skylakeRx580());
+    expect(plist).toMatch(/alcid=1/);
+    expect(plist).toContain('agdpmod=pikera');
+  });
+
+  it('SIP: enabled (0x00000000)', () => {
+    const plist = generateConfigPlist(skylakeRx580());
+    expect(plist).toContain('<key>csr-active-config</key><data>AAAAAA==</data>');
+  });
+
+  it('quirks: Skylake legacy booter profile', () => {
+    const q = getQuirksForGeneration('Skylake', 'MSI H110M PRO-VD');
+    expect(q.EnableWriteUnprotector).toBe(true);
+    expect(q.RebuildAppleMemoryMap).toBe(false);
+    expect(q.SetupVirtualMap).toBe(true);
+    expect(q.AppleXcpmCfgLock).toBe(true);
+    expect(q.AppleCpuPmCfgLock).toBe(false);
+    expect(q.DisableIoMapper).toBe(true);
+    expect(q.ProtectUefiServices).toBe(false); // not Z390
+  });
+
+  it('no dk.e1000=0 (pre-Comet Lake)', () => {
+    const plist = generateConfigPlist(skylakeRx580());
+    expect(plist).not.toContain('dk.e1000=0');
+  });
+
+  it('UpdateSMBIOSMode: Create (not MacPro7,1)', () => {
+    const plist = generateConfigPlist(skylakeRx580());
+    expect(plist).toContain('<key>UpdateSMBIOSMode</key><string>Create</string>');
+  });
+
+  it('DummyPowerManagement: false (Intel)', () => {
+    const plist = generateConfigPlist(skylakeRx580());
+    expect(plist).toContain('<key>DummyPowerManagement</key><false/>');
+  });
+
+  it('no CPUID spoofing (Skylake is natively supported)', () => {
+    const plist = generateConfigPlist(skylakeRx580());
+    expect(plist).not.toContain('VQYKAAAAAAAAAAAAAAAAAA==');
+    expect(plist).not.toContain('wwYDAAAAAAAAAAAAAAAAAA==');
+  });
+
+  it('drivers: OpenHfsPlus + OpenRuntime + OpenCanopy', () => {
+    const plist = generateConfigPlist(skylakeRx580());
+    expect(plist).toContain('OpenHfsPlus.efi');
+    expect(plist).toContain('OpenRuntime.efi');
+    expect(plist).toContain('OpenCanopy.efi');
+  });
+});
