@@ -105,7 +105,7 @@ async function getFreeSpaceMB(targetPath: string): Promise<number> {
       const parts = stdout.trim().split(/\s+/);
       return Math.floor(parseInt(parts[3]) / 1024) || 0;
     }
-  } catch { return Infinity; }
+  } catch { return 0; }
 }
 
 // ─── Factory ──────────────────────────────────────────────────────────────────

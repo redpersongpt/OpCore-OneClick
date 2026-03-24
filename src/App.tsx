@@ -2698,14 +2698,23 @@ export default function App() {
   const flashUsb = initiateFlash;
 
   const cancelCurrentOp = async (taskId: string) => {
+    let cancelFailed = false;
     try {
       await cancelTask(taskId);
     } catch (e: any) {
+      cancelFailed = true;
       setErrorWithSuggestion(e.message || 'Cancel failed');
     }
-    // Clear any error — cancellation is intentional, not an error
-    setGlobalError(null);
-    setStep('report');
+    // Only clear the error if cancellation succeeded — don't swallow failures.
+    if (!cancelFailed) {
+      setGlobalError(null);
+    }
+    // Redirect based on current step, not blindly to 'report'.
+    // Build-phase steps go to report; deployment-phase steps stay where they are.
+    const DEPLOY_STEPS = new Set(['usb-select', 'part-prep', 'flashing']);
+    if (!cancelFailed && !DEPLOY_STEPS.has(step)) {
+      setStep('report');
+    }
   };
 
   const recoveryPayload = useMemo(() => parseFailureRecoveryPayload(globalError), [globalError]);

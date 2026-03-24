@@ -38,6 +38,7 @@ import {
   createClassifiedIpcError,
   type ClassifiedError,
 } from './errorMessaging.js';
+import { getRecoveryBoardId } from './recoveryBoardId.js';
 import {
   buildIssueReportDraft,
   buildSavedSupportLog,
@@ -3947,25 +3948,7 @@ app.whenReady().then(async () => {
 
       // 2. Resolve download URLs from Apple
       // Prepare output directory (com.apple.recovery.boot is what OpenCore expects)
-      const BOARD_IDS: Record<string, { boardId: string; mlb: string }> = {
-        '16':    { boardId: 'Mac-827FAC58A8FDFA22', mlb: '00000000000000000' },
-        '15':    { boardId: 'Mac-827FAC58A8FDFA22', mlb: '00000000000000000' },
-        '14':    { boardId: 'Mac-827FAC58A8FDFA22', mlb: '00000000000000000' },
-        '13':    { boardId: 'Mac-4B682C642B45593E', mlb: '00000000000000000' },
-        '12':    { boardId: 'Mac-FFE5EF870D7BA81A', mlb: '00000000000000000' },
-        '11':    { boardId: 'Mac-42FD25EABCABB274', mlb: '00000000000000000' },
-        '10.15': { boardId: 'Mac-00BE6ED71E35EB86', mlb: '00000000000000000' },
-        '10.14': { boardId: 'Mac-7BA5B2D9BE2258A1', mlb: 'F4K10270Q2J3WLVAD' },
-        '10.13': { boardId: 'Mac-BE088AF8C5EB4FA2', mlb: 'F17M0XA0H7G3F91AD' },
-      };
-
-      let versionKey = '15';
-      for (const key of Object.keys(BOARD_IDS)) {
-        if (macOSVersion.includes(key)) { versionKey = key; break; }
-        const major = key.split('.')[0];
-        if (macOSVersion.includes(` ${major}`)) { versionKey = key; break; }
-      }
-      const { boardId } = BOARD_IDS[versionKey];
+      const { boardId } = getRecoveryBoardId(macOSVersion);
 
       registry.updateProgress(token.taskId, {
         kind: 'recovery-download',
