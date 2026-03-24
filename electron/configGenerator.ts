@@ -60,6 +60,7 @@ interface Quirks {
     // Kernel
     AppleCpuPmCfgLock: boolean;
     AppleXcpmCfgLock: boolean;
+    AppleXcpmExtraMsrs: boolean;
     DisableIoMapper: boolean;
     DisableRtcChecksum: boolean;
     FixupAppleEfiImages: boolean;
@@ -87,6 +88,7 @@ const BASE_QUIRKS: Quirks = {
 
     AppleCpuPmCfgLock: true,
     AppleXcpmCfgLock: true,
+    AppleXcpmExtraMsrs: false,
     DisableIoMapper: true,
     DisableRtcChecksum: false,
     FixupAppleEfiImages: false,
@@ -152,6 +154,9 @@ export function getSMBIOSForProfile(profile: HardwareProfile): string {
 
     if (profile.isLaptop) {
         switch (profile.generation) {
+            case 'Arrandale':
+            case 'Clarkdale':
+                return osVer >= 12 ? 'MacBookPro11,4' : 'MacBookPro6,2';
             case 'Sandy Bridge':
             case 'Ivy Bridge':
                 // Unsupported on Ventura+, use Monterey-safe MacBookPro11,4 fallback
@@ -163,6 +168,7 @@ export function getSMBIOSForProfile(profile: HardwareProfile): string {
             case 'Skylake': return osVer >= 13 ? 'MacBookPro14,1' : 'MacBookPro13,1';
             case 'Kaby Lake': return 'MacBookPro14,1';
             case 'Coffee Lake': return 'MacBookPro15,2';
+            case 'Ice Lake': return 'MacBookPro16,2';
             case 'Comet Lake':
             case 'Rocket Lake':
             case 'Alder Lake':
@@ -180,6 +186,12 @@ export function getSMBIOSForProfile(profile: HardwareProfile): string {
 
     // Desktop
     switch (profile.generation) {
+        case 'Wolfdale':
+        case 'Yorkfield':
+        case 'Nehalem':
+        case 'Westmere':
+        case 'Clarkdale':
+            return osVer >= 12 ? 'iMac14,4' : 'iMac10,1';
         case 'Penryn': return osVer >= 12 ? 'iMac14,4' : 'iMac10,1'; // Legacy fallback
         case 'Sandy Bridge':
             return osVer >= 13 ? (hasDiscreteDisplayPath ? 'iMac18,2' : 'iMac18,1') : (osVer >= 12 ? 'iMac16,2' : 'iMac12,2');
@@ -221,21 +233,62 @@ export function getQuirksForGeneration(gen: HardwareProfile['generation'], mothe
 
     switch (gen) {
         case 'Penryn':
+        case 'Wolfdale':
+        case 'Yorkfield':
+        case 'Nehalem':
+        case 'Westmere':
+        case 'Arrandale':
+        case 'Clarkdale':
         case 'Sandy Bridge':
         case 'Ivy Bridge':
             // Legacy firmware — use EnableWriteUnprotector instead of RebuildAppleMemoryMap
             quirks.EnableWriteUnprotector = true;
             quirks.RebuildAppleMemoryMap = false;
             quirks.SyncRuntimePermissions = false;
+            // Pre-Sandy Bridge uses AppleIntelCPUPowerManagement, not XCPM
+            if (['Penryn', 'Wolfdale', 'Yorkfield', 'Nehalem', 'Westmere', 'Arrandale', 'Clarkdale'].includes(gen)) {
+                quirks.AppleXcpmCfgLock = false;
+            }
             break;
         case 'Haswell':
         case 'Broadwell':
-        case 'Skylake':
-        case 'Kaby Lake':
             // Moderate era — EnableWriteUnprotector still preferred for most boards
             quirks.EnableWriteUnprotector = true;
             quirks.RebuildAppleMemoryMap = false;
             quirks.SyncRuntimePermissions = false;
+            // Haswell/Broadwell desktop: AppleCpuPmCfgLock not needed (XCPM only)
+            quirks.AppleCpuPmCfgLock = false;
+            break;
+        case 'Skylake':
+        case 'Kaby Lake':
+        case 'Ice Lake':
+            // Moderate era — EnableWriteUnprotector still preferred for most boards
+            quirks.EnableWriteUnprotector = true;
+            quirks.RebuildAppleMemoryMap = false;
+            quirks.SyncRuntimePermissions = false;
+            // Skylake+ only needs XCPM lock, not legacy AppleCpuPm
+            quirks.AppleCpuPmCfgLock = false;
+            break;
+        case 'Ivy Bridge-E':
+        case 'Haswell-E':
+        case 'Broadwell-E':
+            // HEDT (X99) — legacy firmware + AppleXcpmExtraMsrs for extra MSRs
+            quirks.EnableWriteUnprotector = true;
+            quirks.RebuildAppleMemoryMap = false;
+            quirks.SyncRuntimePermissions = false;
+            quirks.AppleXcpmExtraMsrs = true;
+            quirks.AppleCpuPmCfgLock = false;
+            break;
+        case 'Cascade Lake-X':
+            // HEDT (X299) — modern firmware
+            quirks.EnableWriteUnprotector = false;
+            quirks.DevirtualiseMmio = true;
+            quirks.ProtectUefiServices = true;
+            quirks.RebuildAppleMemoryMap = true;
+            quirks.SyncRuntimePermissions = true;
+            quirks.SetupVirtualMap = false;
+            quirks.AppleXcpmExtraMsrs = true;
+            quirks.AppleCpuPmCfgLock = false;
             break;
         case 'Coffee Lake':
             // 2018+ firmware — use RebuildAppleMemoryMap approach
@@ -243,13 +296,12 @@ export function getQuirksForGeneration(gen: HardwareProfile['generation'], mothe
             quirks.RebuildAppleMemoryMap = true;
             quirks.SyncRuntimePermissions = true;
             quirks.DevirtualiseMmio = true;
+            quirks.AppleCpuPmCfgLock = false;
             // Z390 needs SetupVirtualMap true (older), Z370 too
             quirks.SetupVirtualMap = true;
             // Z390/Z370 boards need ProtectUefiServices — Source: config.plist/coffee-lake.html
             if (mb.includes('z390') || mb.includes('z370')) {
                 quirks.ProtectUefiServices = true;
-                // Z390/Z370 also need DisableRtcChecksum to prevent BIOS resets — Source: Dortania coffee-lake.html
-                quirks.DisableRtcChecksum = true;
             }
             break;
         case 'Comet Lake':
@@ -257,6 +309,7 @@ export function getQuirksForGeneration(gen: HardwareProfile['generation'], mothe
             quirks.RebuildAppleMemoryMap = true;
             quirks.SyncRuntimePermissions = true;
             quirks.DevirtualiseMmio = true;
+            quirks.AppleCpuPmCfgLock = false;
             // Comet Lake memory protections break SetupVirtualMap — Source: Dortania comet-lake.html
             quirks.SetupVirtualMap = false;
             // Z490 needs ProtectUefiServices — Source: Dortania comet-lake.html
@@ -274,6 +327,7 @@ export function getQuirksForGeneration(gen: HardwareProfile['generation'], mothe
             quirks.RebuildAppleMemoryMap = true;
             quirks.SyncRuntimePermissions = true;
             quirks.ProvideCurrentCpuInfo = true;
+            quirks.AppleCpuPmCfgLock = false;
             break;
         case 'Bulldozer':
         case 'Ryzen':
@@ -316,15 +370,28 @@ export function getQuirksForGeneration(gen: HardwareProfile['generation'], mothe
         quirks.SetupVirtualMap = false; // Important for X299
     }
 
+    // ASUS boards commonly need DisableRtcChecksum to prevent BIOS resets on reboot
+    if (mb.includes('asus') || mb.includes('rog') || mb.includes('strix') || mb.includes('tuf')) {
+        quirks.DisableRtcChecksum = true;
+    }
+
     // HP systems need UnblockFsConnect
     if (mb.includes('hp') || mb.includes('hewlett')) {
         quirks.UnblockFsConnect = true;
     }
 
-    // Tahoe (26+) on Coffee Lake and newer requires FixupAppleEfiImages — Source: Dortania tahoe.html
+    // Tahoe (26+) requires FixupAppleEfiImages for all Skylake+ Intel and AMD — Source: Dortania tahoe.html
     const osVer = parseMacOSVersion(targetOS);
-    if (osVer >= 26 && ['Coffee Lake', 'Comet Lake', 'Rocket Lake', 'Alder Lake', 'Raptor Lake'].includes(gen)) {
-        quirks.FixupAppleEfiImages = true;
+    if (osVer >= 26) {
+        const needsFixup = [
+            'Skylake', 'Kaby Lake', 'Ice Lake',
+            'Coffee Lake', 'Comet Lake', 'Rocket Lake', 'Alder Lake', 'Raptor Lake',
+            'Cascade Lake-X',
+            'Ryzen', 'Threadripper', 'Bulldozer',
+        ];
+        if (needsFixup.includes(gen)) {
+            quirks.FixupAppleEfiImages = true;
+        }
     }
 
     return quirks;
@@ -517,7 +584,7 @@ export function getRequiredResources(profile: HardwareProfile) {
             pushSsdt('SSDT-EC-USBX.aml');
             // SSDT-PMC required for 300-series boards (Z370/Z390/H370/B360/H310) for native NVRAM
             // Source: config.plist/coffee-lake.html — "Required for all 300-series motherboards"
-            if (mb.includes('z390') || mb.includes('z370') || mb.includes('h370') || mb.includes('b360') || mb.includes('h310')) {
+            if (mb.includes('z390') || mb.includes('z370') || mb.includes('h370') || mb.includes('b360') || mb.includes('b365') || mb.includes('h310') || mb.includes('q370')) {
                 pushSsdt('SSDT-PMC.aml');
             }
             // SSDT-RHUB: USB root hub reset required on Z490 Comet Lake boards — Source: Dortania comet-lake.html
@@ -528,13 +595,29 @@ export function getRequiredResources(profile: HardwareProfile) {
             // Source: config.plist/haswell.html — USBX not needed on pre-Skylake
             pushSsdt('SSDT-PLUG.aml');
             pushSsdt('SSDT-EC.aml');
-        } else if (['Skylake', 'Kaby Lake'].includes(profile.generation)) {
-            // Source: config.plist/kaby.html — USBX required for USB power management on 6th/7th gen
+        } else if (['Skylake', 'Kaby Lake', 'Ice Lake'].includes(profile.generation)) {
+            // Source: config.plist/kaby.html — USBX required for USB power management on 6th+ gen
             pushSsdt('SSDT-PLUG.aml');
             pushSsdt('SSDT-EC-USBX.aml');
-        } else {
-            // Sandy Bridge, Ivy Bridge, Penryn — legacy EC path, no USBX
+            // Ice Lake needs SSDT-AWAC — Source: Dortania ice-lake.html
+            if (profile.generation === 'Ice Lake') {
+                pushSsdt('SSDT-AWAC.aml');
+            }
+        } else if (['Ivy Bridge-E', 'Haswell-E', 'Broadwell-E', 'Cascade Lake-X'].includes(profile.generation)) {
+            // HEDT — SSDT-PLUG + SSDT-EC-USBX (X99/X299 have modern USB)
+            // Source: config.plist/config-HEDT
             pushSsdt('SSDT-PLUG.aml');
+            pushSsdt('SSDT-EC-USBX.aml');
+            // Cascade Lake-X also needs SSDT-UNC — Source: Dortania HEDT guide
+            if (profile.generation === 'Cascade Lake-X') {
+                pushSsdt('SSDT-UNC.aml');
+            }
+        } else if (['Sandy Bridge', 'Ivy Bridge'].includes(profile.generation)) {
+            // Sandy Bridge / Ivy Bridge — SSDT-PLUG (XCPM) + legacy EC, no USBX
+            pushSsdt('SSDT-PLUG.aml');
+            pushSsdt('SSDT-EC.aml');
+        } else {
+            // Pre-Sandy Bridge (Penryn/Nehalem/Westmere/etc) — no XCPM, EC only
             pushSsdt('SSDT-EC.aml');
         }
     } else if (profile.architecture === 'AMD') {
@@ -586,8 +669,11 @@ export function generateConfigPlist(profile: HardwareProfile): string {
         bootArgs = bootArgs.replace(/alcid=\d+/, `alcid=${audioLayoutId}`);
     }
 
-    // Navi GPU — agdpmod=pikera — Source: kernel-issues.html
-    if (needsNaviPikera(gpuDevices)) {
+    // agdpmod=pikera — needed for Navi GPUs (always) and any AMD dGPU on iMac SMBIOS
+    // (AppleGraphicsDevicePolicy blocks non-Apple board-ids) — Source: kernel-issues.html
+    const smbiosNeedsPikera = profile.smbios.startsWith('iMac') &&
+        gpuDevices.map(classifyGpu).some(a => a.vendor === 'AMD' && a.isLikelyDiscrete);
+    if (needsNaviPikera(gpuDevices) || smbiosNeedsPikera) {
         if (!bootArgs.includes('agdpmod=pikera')) bootArgs += ' agdpmod=pikera';
     }
 
@@ -596,8 +682,9 @@ export function generateConfigPlist(profile: HardwareProfile): string {
         if (!bootArgs.includes('-wegnoegpu')) bootArgs += ' -wegnoegpu';
     }
 
-    // Intel NIC stability — fix kernel panics on I219/I225
-    if (profile.architecture === 'Intel') {
+    // Intel I225-V NIC DriverKit panic fix — only needed on Comet Lake+ boards (Z490/Z590/Z690/Z790)
+    // where the Intel I225-V is common. Older boards use I219 which works fine with DriverKit.
+    if (profile.architecture === 'Intel' && ['Comet Lake', 'Rocket Lake', 'Alder Lake', 'Raptor Lake'].includes(profile.generation)) {
         if (!bootArgs.includes('dk.e1000=0')) bootArgs += ' dk.e1000=0';
     }
 
@@ -619,7 +706,9 @@ export function generateConfigPlist(profile: HardwareProfile): string {
     // CPUID spoofing for unsupported Intel gens
     let cpuid1Data = "AAAAAAAAAAAAAA==";
     let cpuid1Mask = "AAAAAAAAAAAAAA==";
-    if (['Alder Lake', 'Raptor Lake'].includes(profile.generation)) {
+    // Rocket Lake (11th gen) needs Comet Lake CPUID spoof — unsupported CPUID in macOS
+    // Alder/Raptor Lake also need spoofing — Source: Dortania per-gen guides
+    if (['Rocket Lake', 'Alder Lake', 'Raptor Lake'].includes(profile.generation)) {
         cpuid1Data = "VQYKAAAAAAAAAAAAAAAAAA==";
         cpuid1Mask = "/////wAAAAAAAAAAAAAAAA==";
     }
@@ -686,7 +775,7 @@ export function generateConfigPlist(profile: HardwareProfile): string {
 
     // Z390 NVRAM fix flags
     const mb = profile.motherboard.toLowerCase();
-    const needsLegacyNvram = mb.includes('z390') || mb.includes('z370') || mb.includes('h310');
+    const needsLegacyNvram = mb.includes('z390') || mb.includes('z370') || mb.includes('h370') || mb.includes('b360') || mb.includes('b365') || mb.includes('h310') || mb.includes('q370');
     const legacyEnable = needsLegacyNvram ? 'true' : 'false';
     const legacyOverwrite = needsLegacyNvram ? 'true' : 'false';
 
@@ -824,7 +913,7 @@ export function generateConfigPlist(profile: HardwareProfile): string {
         <dict>
             <key>AppleCpuPmCfgLock</key><${quirks.AppleCpuPmCfgLock}/>
             <key>AppleXcpmCfgLock</key><${quirks.AppleXcpmCfgLock}/>
-            <key>AppleXcpmExtraMsrs</key><false/>
+            <key>AppleXcpmExtraMsrs</key><${quirks.AppleXcpmExtraMsrs}/>
             <key>AppleXcpmForceBoost</key><false/>
             <key>CustomSMBIOSGuid</key><false/>
             <key>DisableIoMapper</key><${quirks.DisableIoMapper}/>
@@ -969,7 +1058,7 @@ export function generateConfigPlist(profile: HardwareProfile): string {
         <key>UpdateDataHub</key><true/>
         <key>UpdateNVRAM</key><true/>
         <key>UpdateSMBIOS</key><true/>
-        <key>UpdateSMBIOSMode</key><string>Custom</string>
+        <key>UpdateSMBIOSMode</key><string>${profile.smbios === 'MacPro7,1' ? 'Custom' : 'Create'}</string>
         <key>UseRawUuidEncoding</key><false/>
     </dict>
     <key>UEFI</key>
@@ -980,8 +1069,8 @@ export function generateConfigPlist(profile: HardwareProfile): string {
             <key>GlobalConnect</key><false/>
             <key>HideVerbose</key><true/>
             <key>JumpstartHotPlug</key><false/>
-            <key>MinDate</key><integer>0</integer>
-            <key>MinVersion</key><integer>0</integer>
+            <key>MinDate</key><integer>${osVer < 10.15 ? -1 : 0}</integer>
+            <key>MinVersion</key><integer>${osVer < 10.15 ? -1 : 0}</integer>
         </dict>
         <key>AppleInput</key>
         <dict>

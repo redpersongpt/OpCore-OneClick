@@ -79,7 +79,7 @@ function capFromCpu(profile: HardwareProfile): number | null {
   if (profile.architecture === 'Intel') {
     if (['Penryn', 'Wolfdale', 'Yorkfield'].includes(profile.generation)) return 10.13;
     if (['Nehalem', 'Arrandale', 'Clarkdale', 'Westmere'].includes(profile.generation)) return 11;
-    if (['Sandy Bridge', 'Ivy Bridge', 'Unknown'].includes(profile.generation)) return 12;
+    if (['Sandy Bridge', 'Ivy Bridge', 'Ivy Bridge-E', 'Unknown'].includes(profile.generation)) return 12;
     if (['Haswell', 'Broadwell', 'Haswell-E', 'Broadwell-E'].includes(profile.generation)) return 12;
     if (cpu.includes('pentium') || cpu.includes('celeron') || cpu.includes('atom')) return 12;
   }

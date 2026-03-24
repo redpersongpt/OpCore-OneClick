@@ -961,4 +961,173 @@ describe('getQuirksForGeneration — cross-generation policy', () => {
     expect(q.ProtectUefiServices).toBe(true);
     expect(q.SetupVirtualMap).toBe(false);
   });
+
+  // --- v2.7.10 deep audit fixes ---
+
+  it('HEDT (Haswell-E) enables AppleXcpmExtraMsrs', () => {
+    const q = getQuirksForGeneration('Haswell-E', 'ASUS X99');
+    expect(q.AppleXcpmExtraMsrs).toBe(true);
+    expect(q.AppleCpuPmCfgLock).toBe(false);
+  });
+
+  it('HEDT (Broadwell-E) enables AppleXcpmExtraMsrs', () => {
+    const q = getQuirksForGeneration('Broadwell-E', 'MSI X99A');
+    expect(q.AppleXcpmExtraMsrs).toBe(true);
+  });
+
+  it('HEDT (Ivy Bridge-E) enables AppleXcpmExtraMsrs', () => {
+    const q = getQuirksForGeneration('Ivy Bridge-E', 'ASUS Rampage');
+    expect(q.AppleXcpmExtraMsrs).toBe(true);
+  });
+
+  it('Cascade Lake-X enables AppleXcpmExtraMsrs', () => {
+    const q = getQuirksForGeneration('Cascade Lake-X', 'ASUS X299');
+    expect(q.AppleXcpmExtraMsrs).toBe(true);
+  });
+
+  it('Ice Lake laptop gets MacBookPro16,2 SMBIOS', () => {
+    const smbios = getSMBIOSForProfile(fakeProfile({
+      generation: 'Ice Lake',
+      isLaptop: true,
+      targetOS: 'macOS Ventura 13',
+    }));
+    expect(smbios).toBe('MacBookPro16,2');
+  });
+
+  it('Ice Lake laptop gets SSDT-AWAC', () => {
+    const r = getRequiredResources(fakeProfile({
+      generation: 'Ice Lake',
+      isLaptop: true,
+    }));
+    expect(r.ssdts).toContain('SSDT-AWAC.aml');
+    expect(r.ssdts).toContain('SSDT-PLUG.aml');
+    expect(r.ssdts).toContain('SSDT-EC-USBX.aml');
+  });
+
+  it('Skylake on Tahoe enables FixupAppleEfiImages', () => {
+    const q = getQuirksForGeneration('Skylake', '', false, 'canonical', 'macOS Tahoe 26');
+    expect(q.FixupAppleEfiImages).toBe(true);
+  });
+
+  it('Kaby Lake on Tahoe enables FixupAppleEfiImages', () => {
+    const q = getQuirksForGeneration('Kaby Lake', '', false, 'canonical', 'macOS Tahoe 26');
+    expect(q.FixupAppleEfiImages).toBe(true);
+  });
+
+  it('AMD Ryzen on Tahoe enables FixupAppleEfiImages', () => {
+    const q = getQuirksForGeneration('Ryzen', 'MSI B550', false, 'canonical', 'macOS Tahoe 26');
+    expect(q.FixupAppleEfiImages).toBe(true);
+  });
+
+  it('Skylake+ disables AppleCpuPmCfgLock (XCPM only)', () => {
+    for (const gen of ['Skylake', 'Kaby Lake', 'Coffee Lake', 'Comet Lake', 'Rocket Lake', 'Alder Lake', 'Raptor Lake'] as const) {
+      const q = getQuirksForGeneration(gen);
+      expect(q.AppleCpuPmCfgLock, gen).toBe(false);
+    }
+  });
+
+  it('ASUS boards enable DisableRtcChecksum', () => {
+    const q = getQuirksForGeneration('Coffee Lake', 'ASUS ROG Z390');
+    expect(q.DisableRtcChecksum).toBe(true);
+  });
+
+  it('Rocket Lake gets CPUID spoof in plist', () => {
+    const plist = generateConfigPlist(fakeProfile({
+      generation: 'Rocket Lake',
+      targetOS: 'macOS Ventura 13',
+    }));
+    expect(plist).toContain('VQYKAAAAAAAAAAAAAAAAAA==');
+  });
+
+  it('UpdateSMBIOSMode is Custom for MacPro7,1, Create for others', () => {
+    const macProPlist = generateConfigPlist(fakeProfile({
+      generation: 'Alder Lake',
+      smbios: 'MacPro7,1',
+      targetOS: 'macOS Ventura 13',
+    }));
+    expect(macProPlist).toContain('<key>UpdateSMBIOSMode</key><string>Custom</string>');
+
+    const imacPlist = generateConfigPlist(fakeProfile({
+      generation: 'Coffee Lake',
+      smbios: 'iMac19,1',
+      targetOS: 'macOS Ventura 13',
+    }));
+    expect(imacPlist).toContain('<key>UpdateSMBIOSMode</key><string>Create</string>');
+  });
+
+  it('agdpmod=pikera added for Polaris on iMac SMBIOS', () => {
+    const plist = generateConfigPlist(fakeProfile({
+      generation: 'Coffee Lake',
+      targetOS: 'macOS Ventura 13',
+      gpuDevices: [
+        { name: 'Intel UHD 630' },
+        { name: 'AMD Radeon RX 580' },
+      ],
+    }));
+    expect(plist).toContain('agdpmod=pikera');
+  });
+
+  it('dk.e1000=0 only for Comet Lake+, not Skylake', () => {
+    const clPlist = generateConfigPlist(fakeProfile({
+      generation: 'Comet Lake',
+      targetOS: 'macOS Ventura 13',
+    }));
+    expect(clPlist).toContain('dk.e1000=0');
+
+    const skPlist = generateConfigPlist(fakeProfile({
+      generation: 'Skylake',
+      targetOS: 'macOS Ventura 13',
+    }));
+    expect(skPlist).not.toContain('dk.e1000=0');
+  });
+
+  it('Ivy Bridge-E capped at Monterey in compatibility', () => {
+    // Tested indirectly — Ivy Bridge-E should throw on Tahoe SMBIOS
+    expect(() => getSMBIOSForProfile(fakeProfile({
+      generation: 'Ivy Bridge-E',
+      targetOS: 'macOS Tahoe 26',
+    }))).not.toThrow(); // HEDT goes to MacPro7,1, which is valid
+  });
+
+  it('HEDT generations get SSDT-EC-USBX and SSDT-PLUG', () => {
+    for (const gen of ['Ivy Bridge-E', 'Haswell-E', 'Broadwell-E', 'Cascade Lake-X'] as const) {
+      const r = getRequiredResources(fakeProfile({ generation: gen }));
+      expect(r.ssdts, gen).toContain('SSDT-PLUG.aml');
+      expect(r.ssdts, gen).toContain('SSDT-EC-USBX.aml');
+    }
+  });
+
+  it('Cascade Lake-X includes SSDT-UNC', () => {
+    const r = getRequiredResources(fakeProfile({ generation: 'Cascade Lake-X' }));
+    expect(r.ssdts).toContain('SSDT-UNC.aml');
+  });
+
+  it('Pre-Sandy Bridge does NOT include SSDT-PLUG', () => {
+    for (const gen of ['Penryn', 'Nehalem', 'Westmere'] as const) {
+      const r = getRequiredResources(fakeProfile({ generation: gen }));
+      expect(r.ssdts, gen).not.toContain('SSDT-PLUG.aml');
+      expect(r.ssdts, gen).toContain('SSDT-EC.aml');
+    }
+  });
+
+  it('LegacyNvram covers B360/H370/Q370/B365', () => {
+    for (const board of ['MSI B360M', 'ASRock H370', 'Lenovo Q370', 'ASUS B365M']) {
+      const plist = generateConfigPlist(fakeProfile({
+        generation: 'Coffee Lake',
+        motherboard: board,
+        targetOS: 'macOS Ventura 13',
+      }));
+      expect(plist, board).toContain('<key>LegacyEnable</key><true/>');
+    }
+  });
+
+  it('SSDT-PMC includes B365 and Q370', () => {
+    for (const board of ['MSI B365M', 'Lenovo Q370']) {
+      const r = getRequiredResources(fakeProfile({
+        generation: 'Coffee Lake',
+        motherboard: board,
+      }));
+      expect(r.ssdts, board).toContain('SSDT-PMC.aml');
+    }
+  });
 });

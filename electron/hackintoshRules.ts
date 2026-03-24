@@ -326,7 +326,8 @@ export function classifyGpu(device: HardwareGpuDeviceSummary): GpuAssessment {
       lower.includes('w5700') ||
       lower.includes('w6600') ||
       lower.includes('w6800') ||
-      lower.includes('vega') ||
+      // Vega dGPU (56/64/Frontier/VII) — but NOT numbered APUs (Vega 3/6/8/9/10/11)
+      (lower.includes('vega') && !(/vega \d{1,2}\b/.test(lower)) && !lower.includes('radeon(tm) graphics')) ||
       lower.includes('polaris') ||
       lower.includes('rx 460') ||
       lower.includes('rx 470') ||
@@ -349,7 +350,7 @@ export function classifyGpu(device: HardwareGpuDeviceSummary): GpuAssessment {
         lower.includes('rx 570') ||
         lower.includes('rx 580') ||
         lower.includes('rx 590') ||
-        lower.includes('vega') ||
+        (lower.includes('vega') && !(/vega \d{1,2}\b/.test(lower))) ||
         lower.includes('radeon vii') ||
         lower.includes('lexa') ||
         lower.includes('baffin') ||
@@ -472,9 +473,12 @@ export function hasMacProEraAmdGpu(gpus: Array<string | HardwareGpuDeviceSummary
       lower.includes('rx 5600') ||
       lower.includes('rx 5700') ||
       lower.includes('rx 6600') ||
-      lower.includes('rx 6950') ||
+      lower.includes('rx 6650') ||
+      lower.includes('rx 6700') ||
+      lower.includes('rx 6750') ||
       lower.includes('rx 6800') ||
-      lower.includes('rx 6900')
+      lower.includes('rx 6900') ||
+      lower.includes('rx 6950')
     );
   });
 }
