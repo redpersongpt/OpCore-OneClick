@@ -205,7 +205,7 @@ describe('buildResourcePlan — architecture matrix', () => {
       name: 'Intel Coffee Lake laptop',
       profile: fakeProfile({ generation: 'Coffee Lake', isLaptop: true }),
       expectedKexts: ['Lilu.kext', 'VirtualSMC.kext', 'SMCBatteryManager.kext', 'VoodooPS2Controller.kext'],
-      expectedSsdts: ['SSDT-PNLF.aml', 'SSDT-GPIO.aml'],
+      expectedSsdts: ['SSDT-PNLF.aml'],
     },
   ];
 

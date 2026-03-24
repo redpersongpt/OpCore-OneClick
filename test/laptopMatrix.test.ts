@@ -79,10 +79,10 @@ describe('Laptop SSDT policy', () => {
     }
   });
 
-  it('Haswell+ laptops get SSDT-GPIO (I2C trackpad support)', () => {
+  it('PS2 laptop path does NOT require SSDT-GPIO (GPIO is I2C-only)', () => {
     for (const gen of ['Haswell', 'Broadwell', 'Skylake', 'Kaby Lake', 'Coffee Lake', 'Comet Lake'] as const) {
       const { ssdts } = getRequiredResources(laptop({ generation: gen }));
-      expect(ssdts, gen).toContain('SSDT-GPIO.aml');
+      expect(ssdts, gen).not.toContain('SSDT-GPIO.aml');
     }
   });
 
@@ -251,32 +251,32 @@ describe('Office laptop generation matrix', () => {
     {
       name: 'Dell Latitude E5470 (Skylake)',
       gen: 'Skylake', mb: 'Dell Latitude E5470', os: 'macOS Ventura 13',
-      checks: { smbios: 'MacBookPro14,1', hasPNLF: true, hasGPIO: true, hasBattery: true, hasPS2: true },
+      checks: { smbios: 'MacBookPro14,1', hasPNLF: true, hasGPIO: false, hasBattery: true, hasPS2: true },
     },
     {
       name: 'HP EliteBook 840 G3 (Skylake)',
       gen: 'Skylake', mb: 'HP EliteBook 840 G3', os: 'macOS Ventura 13',
-      checks: { smbios: 'MacBookPro14,1', hasPNLF: true, hasGPIO: true, hasBattery: true, hasPS2: true },
+      checks: { smbios: 'MacBookPro14,1', hasPNLF: true, hasGPIO: false, hasBattery: true, hasPS2: true },
     },
     {
       name: 'Dell Latitude 7480 (Kaby Lake)',
       gen: 'Kaby Lake', mb: 'Dell Latitude 7480', os: 'macOS Ventura 13',
-      checks: { smbios: 'MacBookPro14,1', hasPNLF: true, hasGPIO: true, hasBattery: true, hasPS2: true },
+      checks: { smbios: 'MacBookPro14,1', hasPNLF: true, hasGPIO: false, hasBattery: true, hasPS2: true },
     },
     {
       name: 'HP EliteBook 840 G5 (Coffee Lake)',
       gen: 'Coffee Lake', mb: 'HP EliteBook 840 G5', os: 'macOS Ventura 13',
-      checks: { smbios: 'MacBookPro15,2', hasPNLF: true, hasGPIO: true, hasBattery: true, hasPS2: true },
+      checks: { smbios: 'MacBookPro15,2', hasPNLF: true, hasGPIO: false, hasBattery: true, hasPS2: true },
     },
     {
       name: 'Lenovo ThinkBook 14 (Comet Lake)',
       gen: 'Comet Lake', mb: 'Lenovo ThinkBook 14', os: 'macOS Ventura 13',
-      checks: { smbios: 'MacBookPro16,1', hasPNLF: true, hasGPIO: true, hasBattery: true, hasPS2: true },
+      checks: { smbios: 'MacBookPro16,1', hasPNLF: true, hasGPIO: false, hasBattery: true, hasPS2: true },
     },
     {
       name: 'Dell Latitude 5400 (Coffee Lake)',
       gen: 'Coffee Lake', mb: 'Dell Latitude 5400', os: 'macOS Sonoma 14',
-      checks: { smbios: 'MacBookPro15,2', hasPNLF: true, hasGPIO: true, hasBattery: true, hasPS2: true },
+      checks: { smbios: 'MacBookPro15,2', hasPNLF: true, hasGPIO: false, hasBattery: true, hasPS2: true },
     },
   ];
 
@@ -287,7 +287,7 @@ describe('Office laptop generation matrix', () => {
 
       const { kexts, ssdts } = getRequiredResources(p);
       if (checks.hasPNLF) expect(ssdts).toContain('SSDT-PNLF.aml');
-      if (checks.hasGPIO) expect(ssdts).toContain('SSDT-GPIO.aml');
+      expect(ssdts).not.toContain('SSDT-GPIO.aml');
       if (checks.hasBattery) expect(kexts).toContain('SMCBatteryManager.kext');
       if (checks.hasPS2) expect(kexts).toContain('VoodooPS2Controller.kext');
 

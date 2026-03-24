@@ -371,9 +371,9 @@ describe('Dortania: SSDT selection', () => {
     expect(r.ssdts).toContain('SSDT-PNLF.aml');
   });
 
-  it('Haswell+ laptop gets SSDT-GPIO (I2C trackpad)', () => {
+  it('PS2 laptop path does NOT include SSDT-GPIO (I2C-only SSDT)', () => {
     const r = getRequiredResources(profile({ isLaptop: true, generation: 'Coffee Lake' }));
-    expect(r.ssdts).toContain('SSDT-GPIO.aml');
+    expect(r.ssdts).not.toContain('SSDT-GPIO.aml');
   });
 
   it('Sandy/Ivy Bridge laptop gets SSDT-XOSI (pre-I2C)', () => {
@@ -886,13 +886,13 @@ describe('Dortania: Skylake desktop + RX 580 (i7-6700K, MSI H110M, RTL8111H)', (
 import { resolveAudioLayoutId } from '../electron/configGenerator.js';
 import { getAMDPatches, AMD_PATCH_COMPLETENESS } from '../electron/amdPatches.js';
 
-describe('Dortania Gap: SSDT-GPIO for Haswell+ laptops', () => {
-  for (const gen of ['Haswell', 'Broadwell', 'Skylake', 'Kaby Lake', 'Coffee Lake', 'Comet Lake', 'Ice Lake'] as const) {
-    it(`${gen} laptop includes SSDT-GPIO`, () => {
+describe('Dortania: SSDT-GPIO only for I2C path (not PS2 conservative path)', () => {
+  it('PS2 laptop path does NOT include SSDT-GPIO for any generation', () => {
+    for (const gen of ['Haswell', 'Broadwell', 'Skylake', 'Kaby Lake', 'Coffee Lake', 'Comet Lake', 'Ice Lake'] as const) {
       const r = getRequiredResources(profile({ generation: gen, isLaptop: true }));
-      expect(r.ssdts).toContain('SSDT-GPIO.aml');
-    });
-  }
+      expect(r.ssdts, `${gen} PS2 laptop should not require SSDT-GPIO`).not.toContain('SSDT-GPIO.aml');
+    }
+  });
 
   it('Sandy/Ivy Bridge laptop does NOT include SSDT-GPIO', () => {
     for (const gen of ['Sandy Bridge', 'Ivy Bridge'] as const) {

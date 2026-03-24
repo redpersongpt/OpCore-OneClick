@@ -385,7 +385,7 @@ describe('getRequiredResources — kext selection matrix', () => {
     expect(r.kexts).toContain('SMCBatteryManager.kext');
     expect(r.kexts).toContain('VoodooPS2Controller.kext');
     expect(r.ssdts).toContain('SSDT-PNLF.aml');
-    expect(r.ssdts).toContain('SSDT-GPIO.aml');
+    expect(r.ssdts).not.toContain('SSDT-GPIO.aml');
   });
 
   it('includes laptop SSDTs for AMD laptop', () => {

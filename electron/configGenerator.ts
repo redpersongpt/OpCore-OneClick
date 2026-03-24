@@ -694,13 +694,17 @@ export function getRequiredResources(profile: HardwareProfile) {
         // Backlight — SSDT-PNLF is required for all Intel laptop displays
         pushSsdt('SSDT-PNLF.aml');
 
-        // SSDT-GPIO: required for VoodooI2C trackpads on Haswell+ laptops
-        // SSDT-XOSI: fallback for Windows ACPI compatibility when GPIO causes issues
-        // Source: Dortania Getting-Started-With-ACPI — Haswell+ laptops need GPIO or XOSI
-        if (['Haswell', 'Broadwell', 'Skylake', 'Kaby Lake', 'Coffee Lake', 'Comet Lake', 'Ice Lake'].includes(profile.generation)) {
-            pushSsdt('SSDT-GPIO.aml');
-        }
-        // Pre-Haswell laptops use SSDT-XOSI only (no I2C, PS2 trackpads)
+        // SSDT-GPIO is ONLY needed for VoodooI2C (I2C trackpads). Since this
+        // generator uses the conservative PS2 path (VoodooPS2Controller above),
+        // SSDT-GPIO is NOT required. Adding it without VoodooI2C serves no purpose
+        // and creates a hard build dependency on supplemental Dortania downloads.
+        //
+        // If future versions add VoodooI2C support, SSDT-GPIO should be gated on
+        // detected I2C hardware, not applied unconditionally to all laptops.
+        //
+        // SSDT-XOSI: Windows ACPI compatibility shim — useful for PS2 laptops
+        // on Sandy/Ivy Bridge where ACPI _OSI checks affect trackpad behavior.
+        // Source: Dortania Getting-Started-With-ACPI
         if (['Sandy Bridge', 'Ivy Bridge'].includes(profile.generation)) {
             pushSsdt('SSDT-XOSI.aml');
         }
