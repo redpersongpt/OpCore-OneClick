@@ -1,4 +1,4 @@
-import { getAMDPatches } from './amdPatches.js';
+import { getAMDPatches, AMD_PATCH_COMPLETENESS } from './amdPatches.js';
 import {
     classifyGpu,
     getBestSupportedGpuPath,
@@ -9,6 +9,51 @@ import {
     parseMacOSVersion,
     type HardwareGpuDeviceSummary,
 } from './hackintoshRules.js';
+
+// ── SIP Policy ──────────────────────────────────────────────────────────────
+// csr-active-config values, least-permissive first.
+// Each level justifies exactly what it enables and why.
+//
+// CSR_ALLOW_UNTESTED_KEXTS      = 0x001
+// CSR_ALLOW_UNRESTRICTED_FS     = 0x002
+// CSR_ALLOW_UNRESTRICTED_DTRACE = 0x020
+// CSR_ALLOW_UNRESTRICTED_NVRAM  = 0x040
+// CSR_ALLOW_UNAUTHENTICATED_ROOT = 0x800
+//
+// Standard hackintosh (Dortania recommendation): 0x67
+//   Allows unsigned kexts, unrestricted FS, DTRACE, NVRAM writes.
+//   Sufficient for OpenCore + kexts on all supported macOS versions.
+//
+// Root-patching builds (OCLP-dependent GPU paths): 0xFEF
+//   Full SIP disable minus Apple Internal. Required for OCLP to
+//   patch the GPU driver stack into the sealed system volume.
+
+export function getSIPPolicy(profile: HardwareProfile, gpuDevices: HardwareGpuDeviceSummary[]): { value: string; reason: string } {
+    const assessments = gpuDevices.map(classifyGpu);
+    const osVer = parseMacOSVersion(profile.targetOS);
+
+    // Builds using OCLP-dependent GPU paths (legacy NVIDIA Kepler, older AMD GCN,
+    // or unsupported GPUs running on older macOS with root patches)
+    const hasOCLPPath = assessments.some(a =>
+        a.tier === 'supported_with_limit' && a.maxMacOSVersion !== null && osVer > a.maxMacOSVersion
+    );
+
+    if (hasOCLPPath) {
+        // 0xFEF = full SIP disable except CSR_ALLOW_APPLE_INTERNAL
+        // Needed for OCLP root volume patching on legacy GPU paths.
+        return {
+            value: '7w8AAA==', // 0x00000FEF little-endian
+            reason: 'OCLP root-patching path detected — near-full SIP disable required',
+        };
+    }
+
+    // Standard Hackintosh: Dortania-recommended minimum
+    // 0x67 = kexts + FS + DTRACE + NVRAM
+    return {
+        value: 'ZwAAAA==', // 0x00000067 little-endian
+        reason: 'Standard SIP policy — allows unsigned kexts and NVRAM writes',
+    };
+}
 
 // Kexts that have no binary (Info.plist only) — must use empty ExecutablePath in config.plist
 const CODELESS_KEXTS = new Set([
@@ -654,6 +699,7 @@ export function generateConfigPlist(profile: HardwareProfile): string {
     }
 
     const audioLayoutId = profile.audioLayoutId ?? 1;
+    const sipPolicy = getSIPPolicy(profile, gpuDevices);
     let bootArgs = profile.bootArgs;
 
     if (profile.strategy === 'conservative') {
@@ -1022,7 +1068,7 @@ export function generateConfigPlist(profile: HardwareProfile): string {
                 <key>ForceDisplayRotationInEFI</key><integer>0</integer>
                 <key>SystemAudioVolume</key><data>Rg==</data>
                 <key>boot-args</key><string>${bootArgs.trim()}</string>
-                <key>csr-active-config</key><data>/w8AAA==</data>
+                <key>csr-active-config</key><data>${sipPolicy.value}</data>
                 <key>prev-lang:kbd</key><string>en-US:0</string>
                 <key>run-efi-updater</key><string>No</string>
             </dict>

@@ -263,6 +263,15 @@ const LILU_PLUGIN_KEXTS = new Set([
   'CPUTopologyRebuild.kext',
   'NootRX.kext',
   'NootedRed.kext',
+  'NVMeFix.kext',
+]);
+
+const VIRTUALSMC_PLUGIN_KEXTS = new Set([
+  'SMCProcessor.kext',
+  'SMCSuperIO.kext',
+  'SMCBatteryManager.kext',
+  'SMCLightSensor.kext',
+  'SMCDellSensors.kext',
 ]);
 
 // ── Main Validator ───────────────────────────────────────────────────────────
@@ -473,6 +482,17 @@ export async function validateEfi(
           [...topLevelKexts].filter(kext => LILU_PLUGIN_KEXTS.has(kext)).join(', '),
         ));
       }
+
+      if (topLevelKexts.size > 0 && !topLevelKexts.has('VirtualSMC.kext') && [...topLevelKexts].some(kext => VIRTUALSMC_PLUGIN_KEXTS.has(kext))) {
+        issues.push(blocked(
+          'KEXT_VIRTUALSMC_DEPENDENCY',
+          'VirtualSMC plugin selected without VirtualSMC.kext',
+          'VirtualSMC.kext',
+          'EFI/OC/Kexts/VirtualSMC.kext',
+          'One or more VirtualSMC plugins are present but VirtualSMC.kext is missing from config.plist',
+          [...topLevelKexts].filter(kext => VIRTUALSMC_PLUGIN_KEXTS.has(kext)).join(', '),
+        ));
+      }
     }
 
     if (await isDir(driversDir)) {
@@ -563,6 +583,18 @@ export async function validateEfi(
       ));
     }
 
+    // AMD patch completeness — warn that cpuid_cores_per_package patches are not included
+    if (profile && profile.architecture === 'AMD' && hasAMDPatches(plistContent)) {
+      issues.push(warning(
+        'AMD_PATCHES_INCOMPLETE',
+        'AMD cpuid_cores_per_package patches are not included',
+        'Kernel patches',
+        'EFI/OC/config.plist',
+        'The generated AMD kernel patches do not include cpuid_cores_per_package. macOS may report incorrect CPU topology. Source these patches from https://github.com/AMD-OSX/AMD_Vanilla for your specific macOS version and core count.',
+        `Core count: ${profile.coreCount ?? 'unknown'}`,
+      ));
+    }
+
     // Empty Find/Replace values
     const patches = extractPatchFindReplace(plistContent);
     for (const patch of patches) {
@@ -576,6 +608,34 @@ export async function validateEfi(
           patch.comment ? `Patch: ${patch.comment}` : null,
         ));
       }
+    }
+  }
+
+  // ── 4b. PlatformInfo honesty (warning) ────────────────────────────────
+
+  if (plistContent) {
+    const serial = extractSimplePlistValue(plistContent, 'SystemSerialNumber');
+    const uuid = extractSimplePlistValue(plistContent, 'SystemUUID');
+    const mlb = extractSimplePlistValue(plistContent, 'MLB');
+
+    const PLACEHOLDER_PATTERNS = [
+      /^W0+1$/,                                    // W0000000001
+      /^M0+1$/,                                    // M000000000001
+      /^0{8}(-0{4}){3}-0{12}$/,                   // 00000000-0000-0000-0000-000000000000
+      /^[A-Z]0{5,}/,                               // Any letter + many zeros
+    ];
+
+    const isPlaceholder = (v: string | null) => v ? PLACEHOLDER_PATTERNS.some(p => p.test(v)) : false;
+
+    if (isPlaceholder(serial) || isPlaceholder(mlb) || isPlaceholder(uuid)) {
+      issues.push(warning(
+        'PLATFORMINFO_PLACEHOLDER_SERIALS',
+        'PlatformInfo contains placeholder serial numbers',
+        'PlatformInfo',
+        'EFI/OC/config.plist',
+        'MLB, SystemSerialNumber, or SystemUUID contain obvious placeholder values. iMessage, FaceTime, and Apple ID sign-in will fail. Generate valid serials with GenSMBIOS before booting.',
+        `MLB: ${mlb ?? 'missing'}, Serial: ${serial ?? 'missing'}, UUID: ${uuid ?? 'missing'}`,
+      ));
     }
   }
 

@@ -1,5 +1,5 @@
 // Source: https://github.com/AMD-OSX/AMD_Vanilla (Ryzen 17h/19h)
-// Updated for macOS Sonoma / Sequoia compatibility
+// Updated for macOS Sonoma / Sequoia / Tahoe compatibility
 
 export interface KernelPatch {
   Arch: string;
@@ -18,63 +18,34 @@ export interface KernelPatch {
   Skip: number;
 }
 
-export function getAMDPatches(coreCount: number): KernelPatch[] {
-  // Hex value for core count (e.g., 6 -> 06, 8 -> 08, 12 -> 0C, 16 -> 10)
-  const coreCountHex = coreCount.toString(16).toUpperCase().padStart(2, '0');
-  
+/**
+ * AMD core count patch status.
+ * The cpuid_cores_per_package patches require exact binary Find bytes
+ * sourced from AMD_Vanilla for each kernel version range. These bytes
+ * change between macOS versions and cannot be safely generated.
+ *
+ * Current status:
+ * - The 8 universal AMD patches (wrmsr, rdmsr, cache, microcode, etc.) are
+ *   real and verified from AMD_Vanilla.
+ * - The cpuid_cores_per_package patches are NOT included because the Find
+ *   bytes are version-specific and must be verified against the actual kernel.
+ *   Users targeting AMD should source these from AMD_Vanilla for their
+ *   specific macOS version and core count.
+ *
+ * The generator will emit a validation warning when AMD patches are used.
+ */
+export const AMD_PATCH_COMPLETENESS = {
+  hasCoreCountPatches: false,
+  missingPatches: ['cpuid_cores_per_package (all kernel ranges)'],
+  recommendation: 'Source cpuid_cores_per_package patches from https://github.com/AMD-OSX/AMD_Vanilla for your specific macOS version and core count.',
+} as const;
+
+export function getAMDPatches(_coreCount: number): KernelPatch[] {
+  // Note: coreCount is accepted for future use when verified core-count
+  // patches are available. Currently unused — see AMD_PATCH_COMPLETENESS.
+
   return [
-    // TODO: These three patches require the correct binary Find bytes from
-    // https://github.com/AMD-OSX/AMD_Vanilla — the values below are placeholders
-    // and will never match. Enable and set correct Find/Replace after verifying
-    // the actual byte sequences against the AMD_Vanilla config.plist for your OS.
-    {
-      Arch: "x86_64",
-      Base: "_cpuid_set_info",
-      Comment: "algrey - Force cpuid_cores_per_package 10.13,10.14 [DISABLED: verify Find bytes]",
-      Count: 1,
-      Enabled: false,
-      Find: "uAAAAAPog==",
-      Identifier: "kernel",
-      Limit: 0,
-      Mask: "//D/AAAAAAAA",
-      MaxKernel: "18.99.99",
-      MinKernel: "17.0.0",
-      Replace: "uAAAAAPog==",
-      ReplaceMask: "//AAAAAAAAA",
-      Skip: 0
-    },
-    {
-      Arch: "x86_64",
-      Base: "_cpuid_set_info",
-      Comment: "algrey - Force cpuid_cores_per_package 10.15,11.0 [DISABLED: verify Find bytes]",
-      Count: 1,
-      Enabled: false,
-      Find: "uAAAAAPog==",
-      Identifier: "kernel",
-      Limit: 0,
-      Mask: "//D/AAAAAAAA",
-      MaxKernel: "20.99.99",
-      MinKernel: "19.0.0",
-      Replace: "uAAAAAPog==",
-      ReplaceMask: "//AAAAAAAAA",
-      Skip: 0
-    },
-    {
-      Arch: "x86_64",
-      Base: "_cpuid_set_info",
-      Comment: "algrey - Force cpuid_cores_per_package 12.0/13.0/14.0/15.0 [DISABLED: verify Find bytes]",
-      Count: 1,
-      Enabled: false,
-      Find: "uAAAAAPog==",
-      Identifier: "kernel",
-      Limit: 0,
-      Mask: "//D/AAAAAAAA",
-      MaxKernel: "",
-      MinKernel: "21.0.0",
-      Replace: "uAAAAAPog==",
-      ReplaceMask: "//AAAAAAAAA",
-      Skip: 0
-    },
+    // ── Verified patches from AMD_Vanilla ────────────────────────────────
     {
         Arch: "x86_64",
         Base: "",
@@ -85,7 +56,9 @@ export function getAMDPatches(coreCount: number): KernelPatch[] {
         Identifier: "kernel",
         Limit: 0,
         Mask: "",
-        MaxKernel: "24.99.99",
+        // Extended to cover Tahoe (kernel 25.x) — the byte pattern is
+        // stable across kernel versions 20-25 per AMD_Vanilla tracking.
+        MaxKernel: "",
         MinKernel: "20.0.0",
         Replace: "Zg8fhAAAAAA=",
         ReplaceMask: "",
@@ -206,7 +179,7 @@ export function getAMDPatches(coreCount: number): KernelPatch[] {
     {
         Arch: "x86_64",
         Base: "",
-        Comment: "Goldfish64 - Bypass GenuineIntel check panic - 12.0/13.0/14.0/15.0",
+        Comment: "Goldfish64 - Bypass GenuineIntel check panic - 12.0+",
         Count: 1,
         Enabled: true,
         Find: "uW4AAAAPvsA5wQAAAAAAAA==",

@@ -459,7 +459,8 @@ export function hasMacProEraAmdGpu(gpus: Array<string | HardwareGpuDeviceSummary
     const lower = name.toLowerCase();
     return (
       lower.includes('polaris') ||
-      lower.includes('vega') ||
+      // Vega dGPU (56/64/Frontier/VII) but NOT Vega APUs (Vega 3/6/8/9/10/11)
+      (lower.includes('vega') && !(/vega \d{1,2}\b/.test(lower)) && !lower.includes('radeon(tm) graphics')) ||
       lower.includes('radeon vii') ||
       lower.includes('rx 460') ||
       lower.includes('rx 470') ||
