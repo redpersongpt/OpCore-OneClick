@@ -19,12 +19,16 @@ import { describe, it, expect } from 'vitest';
 import {
   resolveGpuVendor,
   isSoftwareDisplayAdapter,
+  isGenericGpuName,
   normalizeWindowsGpuList,
   inferIntelIgpuName,
   enhanceGenericGpuNames,
   resolveAudioCodec,
+  resolveNetworkAdapter,
+  classifyNetworkType,
   type GpuDevice,
   type AudioDevice,
+  type NetworkDevice,
 } from '../electron/hardwareDetect.js';
 import { detectCpuGeneration, detectArchitecture, mapDetectedToProfile } from '../electron/hardwareMapper.js';
 import { classifyGpu, type HardwareGpuDeviceSummary } from '../electron/hackintoshRules.js';
@@ -72,6 +76,26 @@ function makeHPProBook450G2(): DetectedHardware {
       codecName: 'ALC282',
       confidence: 'detected',
     }],
+    networkDevices: [
+      {
+        name: 'Intel(R) Ethernet Connection I218-LM',
+        vendorId: '8086',
+        deviceId: '155a',
+        vendorName: 'Intel',
+        adapterFamily: 'Intel I218-LM',
+        type: 'ethernet',
+        confidence: 'detected',
+      },
+      {
+        name: 'Intel(R) Wireless 7260',
+        vendorId: '8086',
+        deviceId: '08b1',
+        vendorName: 'Intel',
+        adapterFamily: 'Intel Wireless 7260',
+        type: 'wifi',
+        confidence: 'detected',
+      },
+    ],
   };
 }
 
@@ -585,6 +609,7 @@ describe('Confidence model — partial detection behavior', () => {
       isLaptop: false,
       isVM: false,
       audioDevices: [],
+      networkDevices: [],
     };
     const interp = interpretHardware(hw);
     expect(interp.overallConfidence).toBe('low');
@@ -672,5 +697,469 @@ describe('Old office laptop detection matrix', () => {
       expect(igpu, `${s.name} should produce iGPU name`).not.toBeNull();
       expect(igpu).toContain('Intel');
     }
+  });
+});
+
+// ─── 8. DXDIAG / CHIP TYPE FALLBACK ────────────────────────────────────────
+
+describe('DxDiag chip type fallback — VideoProcessor field', () => {
+  it('isGenericGpuName identifies generic names', () => {
+    expect(isGenericGpuName('Microsoft Basic Display Adapter')).toBe(true);
+    expect(isGenericGpuName('Standard VGA Graphics Adapter')).toBe(true);
+    expect(isGenericGpuName('Unknown GPU')).toBe(true);
+    expect(isGenericGpuName('')).toBe(true);
+  });
+
+  it('isGenericGpuName passes real GPU names', () => {
+    expect(isGenericGpuName('Intel HD Graphics 4600')).toBe(false);
+    expect(isGenericGpuName('NVIDIA GeForce GTX 1080')).toBe(false);
+    expect(isGenericGpuName('Intel(R) HSW Mobile/Desktop Graphics Controller')).toBe(false);
+    expect(isGenericGpuName('AMD Radeon RX 580')).toBe(false);
+  });
+
+  // VideoProcessor (chip type) is the DxDiag equivalent — it contains the real
+  // GPU description even when Windows Name is generic. The GPU parsing code
+  // uses VideoProcessor as a fallback when Name is generic.
+  it('chip type string "Intel(R) HSW Mobile/Desktop..." is not generic', () => {
+    expect(isGenericGpuName('Intel(R) HSW Mobile/Desktop Graphics Controller')).toBe(false);
+  });
+
+  it('chip type string with Intel keyword resolves to Intel vendor', () => {
+    expect(resolveGpuVendor(null, 'Intel(R) HSW Mobile/Desktop Graphics Controller')).toBe('Intel');
+  });
+
+  it('chip type string with HD Graphics resolves to Intel vendor', () => {
+    expect(resolveGpuVendor(null, 'Intel(R) HD Graphics Family')).toBe('Intel');
+  });
+});
+
+// ─── 9. WI-FI / ETHERNET HARDWARE DETECTION ────────────────────────────────
+
+describe('Network adapter detection — Intel Ethernet', () => {
+  const intelEthernetCases: [string, string, string][] = [
+    // [deviceId, expectedFamily, description]
+    ['155a', 'Intel I218-LM', 'I218-LM (Haswell laptop)'],
+    ['1559', 'Intel I218-V', 'I218-V (Haswell desktop)'],
+    ['153a', 'Intel I217-LM', 'I217-LM (Haswell desktop)'],
+    ['153b', 'Intel I217-V', 'I217-V (Haswell desktop)'],
+    ['156f', 'Intel I219-LM', 'I219-LM v1 (Skylake laptop)'],
+    ['1570', 'Intel I219-V', 'I219-V v1 (Skylake desktop)'],
+    ['15b7', 'Intel I219-LM', 'I219-LM v4 (Kaby Lake)'],
+    ['15b8', 'Intel I219-V', 'I219-V v4 (Kaby Lake)'],
+    ['15bb', 'Intel I219-LM', 'I219-LM v5 (Coffee Lake)'],
+    ['1539', 'Intel I211-AT', 'I211-AT (desktop, needs AppleIGB)'],
+    ['1502', 'Intel 82579LM', '82579LM (Sandy/Ivy Bridge)'],
+    ['1503', 'Intel 82579V', '82579V (Sandy Bridge desktop)'],
+    ['10d3', 'Intel 82574L', '82574L (server/workstation)'],
+    ['15f2', 'Intel I225-V', 'I225-V (Alder Lake desktop)'],
+    ['125b', 'Intel I226-V', 'I226-V (Raptor Lake desktop)'],
+  ];
+
+  for (const [did, expected, desc] of intelEthernetCases) {
+    it(`Intel 8086:${did} → ${desc}`, () => {
+      const result = resolveNetworkAdapter('8086', did, 'Ethernet Controller');
+      expect(result.vendorName).toBe('Intel');
+      expect(result.adapterFamily).toBe(expected);
+      expect(result.type).toBe('ethernet');
+    });
+  }
+});
+
+describe('Network adapter detection — Realtek Ethernet', () => {
+  it('RTL8111 (10ec:8168)', () => {
+    const result = resolveNetworkAdapter('10ec', '8168', 'Realtek PCIe GbE');
+    expect(result.vendorName).toBe('Realtek');
+    expect(result.adapterFamily).toBe('Realtek RTL8111');
+    expect(result.type).toBe('ethernet');
+  });
+
+  it('RTL8125 2.5G (10ec:8125)', () => {
+    const result = resolveNetworkAdapter('10ec', '8125', 'Realtek Gaming Ethernet');
+    expect(result.vendorName).toBe('Realtek');
+    expect(result.adapterFamily).toBe('Realtek RTL8125');
+    expect(result.type).toBe('ethernet');
+  });
+
+  it('RTL8101/8102 (10ec:8136)', () => {
+    const result = resolveNetworkAdapter('10ec', '8136', 'Realtek FE NIC');
+    expect(result.vendorName).toBe('Realtek');
+    expect(result.adapterFamily).toBe('Realtek RTL8101/8102');
+    expect(result.type).toBe('ethernet');
+  });
+
+  it('unknown Realtek device ID → partial info', () => {
+    const result = resolveNetworkAdapter('10ec', 'ffff', 'Some Realtek');
+    expect(result.vendorName).toBe('Realtek');
+    expect(result.adapterFamily).toBe('Realtek (unknown model)');
+  });
+});
+
+describe('Network adapter detection — Intel Wi-Fi', () => {
+  const intelWifiCases: [string, string, string][] = [
+    ['08b1', 'Intel Wireless 7260', 'Wireless 7260 (Haswell era)'],
+    ['095a', 'Intel Wireless 7265', 'Wireless 7265 (Broadwell era)'],
+    ['24f3', 'Intel Wireless 8260', 'Wireless 8260 (Skylake era)'],
+    ['24fd', 'Intel Wireless 8265', 'Wireless 8265 (Kaby Lake era)'],
+    ['2526', 'Intel Wireless 9260', 'Wireless 9260 (Coffee Lake era)'],
+    ['9df0', 'Intel Wireless 9560', 'Wireless 9560 (Coffee Lake)'],
+    ['2723', 'Intel Wi-Fi 6 AX200', 'Wi-Fi 6 AX200'],
+    ['02f0', 'Intel Wi-Fi 6 AX201', 'Wi-Fi 6 AX201'],
+    ['2725', 'Intel Wi-Fi 6E AX210', 'Wi-Fi 6E AX210'],
+    ['3165', 'Intel Wireless 3165', 'Wireless 3165 (budget)'],
+  ];
+
+  for (const [did, expected, desc] of intelWifiCases) {
+    it(`Intel 8086:${did} → ${desc}`, () => {
+      const result = resolveNetworkAdapter('8086', did, 'Wi-Fi Adapter');
+      expect(result.vendorName).toBe('Intel');
+      expect(result.adapterFamily).toBe(expected);
+      expect(result.type).toBe('wifi');
+    });
+  }
+});
+
+describe('Network adapter detection — Broadcom Wi-Fi', () => {
+  it('BCM4360 (14e4:43a0)', () => {
+    const result = resolveNetworkAdapter('14e4', '43a0', 'Wireless');
+    expect(result.vendorName).toBe('Broadcom');
+    expect(result.adapterFamily).toBe('Broadcom BCM4360');
+    expect(result.type).toBe('wifi');
+  });
+
+  it('BCM4352 (14e4:43b1)', () => {
+    const result = resolveNetworkAdapter('14e4', '43b1', 'Wireless');
+    expect(result.vendorName).toBe('Broadcom');
+    expect(result.adapterFamily).toBe('Broadcom BCM4352');
+  });
+
+  it('BCM43602 (14e4:43ba)', () => {
+    const result = resolveNetworkAdapter('14e4', '43ba', 'AirPort');
+    expect(result.vendorName).toBe('Broadcom');
+    expect(result.adapterFamily).toBe('Broadcom BCM43602');
+  });
+
+  it('unknown Broadcom → partial info with wifi type', () => {
+    const result = resolveNetworkAdapter('14e4', 'ffff', 'Wireless Network');
+    expect(result.vendorName).toBe('Broadcom');
+    expect(result.adapterFamily).toBe('Broadcom Wi-Fi (unknown model)');
+    expect(result.type).toBe('wifi');
+  });
+});
+
+describe('Network adapter detection — Atheros/Killer', () => {
+  it('Killer E2200 (1969:e091)', () => {
+    const result = resolveNetworkAdapter('1969', 'e091', 'Killer E2200');
+    expect(result.vendorName).toBe('Atheros');
+    expect(result.adapterFamily).toBe('Killer E2200');
+    expect(result.type).toBe('ethernet');
+  });
+
+  it('Atheros AR8161 (1969:1091)', () => {
+    const result = resolveNetworkAdapter('1969', '1091', 'Atheros Ethernet');
+    expect(result.vendorName).toBe('Atheros');
+    expect(result.adapterFamily).toBe('Atheros AR8161');
+  });
+});
+
+describe('Network device type classification', () => {
+  it('wireless keywords → wifi', () => {
+    expect(classifyNetworkType('Intel(R) Wireless-AC 8265')).toBe('wifi');
+    expect(classifyNetworkType('Intel(R) Wi-Fi 6 AX200 160MHz')).toBe('wifi');
+    expect(classifyNetworkType('Broadcom 802.11ac Wireless')).toBe('wifi');
+    expect(classifyNetworkType('Intel Centrino Advanced-N 6205')).toBe('wifi');
+    expect(classifyNetworkType('Intel Dual Band Wireless-AC 7260')).toBe('wifi');
+  });
+
+  it('ethernet keywords → ethernet', () => {
+    expect(classifyNetworkType('Intel(R) Ethernet Connection I219-V')).toBe('ethernet');
+    expect(classifyNetworkType('Realtek PCIe GbE Family Controller')).toBe('ethernet');
+    expect(classifyNetworkType('Intel(R) 82579LM Gigabit Network Connection')).toBe('ethernet');
+    expect(classifyNetworkType('Killer E2200 Gigabit Ethernet Controller')).toBe('ethernet');
+  });
+
+  it('ambiguous → unknown', () => {
+    expect(classifyNetworkType('Some Random Network Device')).toBe('unknown');
+  });
+});
+
+describe('Network adapter — null/unknown vendor handling', () => {
+  it('null vendor returns Unknown', () => {
+    const result = resolveNetworkAdapter(null, null, 'Something');
+    expect(result.vendorName).toBe('Unknown');
+    expect(result.adapterFamily).toBeNull();
+  });
+
+  it('unknown vendor ID returns Unknown', () => {
+    const result = resolveNetworkAdapter('dead', 'beef', 'Mystery NIC');
+    expect(result.vendorName).toBe('Unknown');
+    expect(result.adapterFamily).toBeNull();
+  });
+});
+
+// ─── 10. EXPANDED OLD OFFICE LAPTOP FULL PIPELINE MATRIX ───────────────────
+
+describe('Old office laptop full pipeline matrix — with network + audio', () => {
+  interface OfficeLaptopFixture {
+    name: string;
+    cpu: string;
+    expectedGen: string;
+    model: string;
+    gpu: { name: string; vendorId: string; deviceId: string };
+    audio: { vendorId: string; deviceId: string; expectedCodec: string };
+    ethernet: { vendorId: string; deviceId: string; expectedFamily: string };
+    wifi: { vendorId: string; deviceId: string; expectedFamily: string };
+  }
+
+  const fixtures: OfficeLaptopFixture[] = [
+    {
+      name: 'HP ProBook 450 G2 (Haswell)',
+      cpu: 'Intel(R) Core(TM) i7-4510U CPU @ 2.00GHz',
+      expectedGen: 'Haswell',
+      model: 'HP ProBook 450 G2',
+      gpu: { name: 'Microsoft Basic Display Adapter', vendorId: '8086', deviceId: '0a16' },
+      audio: { vendorId: '10ec', deviceId: '0282', expectedCodec: 'ALC282' },
+      ethernet: { vendorId: '8086', deviceId: '155a', expectedFamily: 'Intel I218-LM' },
+      wifi: { vendorId: '8086', deviceId: '08b1', expectedFamily: 'Intel Wireless 7260' },
+    },
+    {
+      name: 'ThinkPad T440 (Haswell)',
+      cpu: 'Intel(R) Core(TM) i5-4300U CPU @ 1.90GHz',
+      expectedGen: 'Haswell',
+      model: 'Lenovo ThinkPad T440',
+      gpu: { name: 'Intel HD Graphics 4400', vendorId: '8086', deviceId: '0a16' },
+      audio: { vendorId: '10ec', deviceId: '0292', expectedCodec: 'ALC292' },
+      ethernet: { vendorId: '8086', deviceId: '155a', expectedFamily: 'Intel I218-LM' },
+      wifi: { vendorId: '8086', deviceId: '08b1', expectedFamily: 'Intel Wireless 7260' },
+    },
+    {
+      name: 'ThinkPad T450s (Broadwell)',
+      cpu: 'Intel(R) Core(TM) i5-5300U CPU @ 2.30GHz',
+      expectedGen: 'Broadwell',
+      model: 'Lenovo ThinkPad T450s',
+      gpu: { name: 'Intel HD Graphics 5500', vendorId: '8086', deviceId: '1616' },
+      audio: { vendorId: '10ec', deviceId: '0292', expectedCodec: 'ALC292' },
+      ethernet: { vendorId: '8086', deviceId: '15a2', expectedFamily: 'Intel I218-LM' },
+      wifi: { vendorId: '8086', deviceId: '095a', expectedFamily: 'Intel Wireless 7265' },
+    },
+    {
+      name: 'Dell Latitude E7450 (Broadwell)',
+      cpu: 'Intel(R) Core(TM) i7-5600U CPU @ 2.60GHz',
+      expectedGen: 'Broadwell',
+      model: 'Dell Latitude E7450',
+      gpu: { name: 'Intel HD Graphics 5500', vendorId: '8086', deviceId: '1616' },
+      audio: { vendorId: '10ec', deviceId: '0255', expectedCodec: 'ALC255' },
+      ethernet: { vendorId: '8086', deviceId: '15a2', expectedFamily: 'Intel I218-LM' },
+      wifi: { vendorId: '8086', deviceId: '095a', expectedFamily: 'Intel Wireless 7265' },
+    },
+    {
+      name: 'HP EliteBook 840 G3 (Skylake)',
+      cpu: 'Intel(R) Core(TM) i5-6300U CPU @ 2.40GHz',
+      expectedGen: 'Skylake',
+      model: 'HP EliteBook 840 G3',
+      gpu: { name: 'Intel HD Graphics 520', vendorId: '8086', deviceId: '1916' },
+      audio: { vendorId: '14f1', deviceId: '5098', expectedCodec: 'Conexant' },
+      ethernet: { vendorId: '8086', deviceId: '156f', expectedFamily: 'Intel I219-LM' },
+      wifi: { vendorId: '8086', deviceId: '24f3', expectedFamily: 'Intel Wireless 8260' },
+    },
+    {
+      name: 'Dell Latitude 5480 (Kaby Lake)',
+      cpu: 'Intel(R) Core(TM) i5-7300U CPU @ 2.60GHz',
+      expectedGen: 'Kaby Lake',
+      model: 'Dell Latitude 5480',
+      gpu: { name: 'Intel HD Graphics 620', vendorId: '8086', deviceId: '5916' },
+      audio: { vendorId: '10ec', deviceId: '0256', expectedCodec: 'ALC256' },
+      ethernet: { vendorId: '8086', deviceId: '15b7', expectedFamily: 'Intel I219-LM' },
+      wifi: { vendorId: '8086', deviceId: '24fd', expectedFamily: 'Intel Wireless 8265' },
+    },
+    {
+      name: 'ThinkPad T480 (Coffee Lake)',
+      cpu: 'Intel(R) Core(TM) i5-8250U CPU @ 1.60GHz',
+      expectedGen: 'Coffee Lake',
+      model: 'Lenovo ThinkPad T480',
+      gpu: { name: 'Intel UHD Graphics 620', vendorId: '8086', deviceId: '5917' },
+      audio: { vendorId: '10ec', deviceId: '0285', expectedCodec: 'ALC285' },
+      ethernet: { vendorId: '8086', deviceId: '15bb', expectedFamily: 'Intel I219-LM' },
+      wifi: { vendorId: '8086', deviceId: '2526', expectedFamily: 'Intel Wireless 9260' },
+    },
+    {
+      name: 'ThinkPad X230 (Ivy Bridge)',
+      cpu: 'Intel(R) Core(TM) i5-3320M CPU @ 2.60GHz',
+      expectedGen: 'Ivy Bridge',
+      model: 'Lenovo ThinkPad X230',
+      gpu: { name: 'Intel HD Graphics 4000', vendorId: '8086', deviceId: '0166' },
+      audio: { vendorId: '10ec', deviceId: '0269', expectedCodec: 'ALC269' },
+      ethernet: { vendorId: '8086', deviceId: '1502', expectedFamily: 'Intel 82579LM' },
+      wifi: { vendorId: '8086', deviceId: '08b1', expectedFamily: 'Intel Wireless 7260' },
+    },
+    {
+      name: 'HP ProBook 640 G1 (Haswell, generic driver)',
+      cpu: 'Intel(R) Core(TM) i5-4200M CPU @ 2.50GHz',
+      expectedGen: 'Haswell',
+      model: 'HP ProBook 640 G1',
+      gpu: { name: 'Microsoft Basic Display Adapter', vendorId: '8086', deviceId: '0416' },
+      audio: { vendorId: '10ec', deviceId: '0282', expectedCodec: 'ALC282' },
+      ethernet: { vendorId: '8086', deviceId: '153a', expectedFamily: 'Intel I217-LM' },
+      wifi: { vendorId: '8086', deviceId: '08b1', expectedFamily: 'Intel Wireless 7260' },
+    },
+    {
+      name: 'Dell Latitude E6430 (Ivy Bridge)',
+      cpu: 'Intel(R) Core(TM) i5-3340M CPU @ 2.70GHz',
+      expectedGen: 'Ivy Bridge',
+      model: 'Dell Latitude E6430',
+      gpu: { name: 'Intel HD Graphics 4000', vendorId: '8086', deviceId: '0166' },
+      audio: { vendorId: '10ec', deviceId: '0269', expectedCodec: 'ALC269' },
+      ethernet: { vendorId: '8086', deviceId: '1502', expectedFamily: 'Intel 82579LM' },
+      wifi: { vendorId: '8086', deviceId: '08b1', expectedFamily: 'Intel Wireless 7260' },
+    },
+    {
+      name: 'HP EliteBook 850 G5 (Coffee Lake)',
+      cpu: 'Intel(R) Core(TM) i7-8550U CPU @ 1.80GHz',
+      expectedGen: 'Coffee Lake',
+      model: 'HP EliteBook 850 G5',
+      gpu: { name: 'Intel UHD Graphics 620', vendorId: '8086', deviceId: '5917' },
+      audio: { vendorId: '14f1', deviceId: '510f', expectedCodec: 'Conexant' },
+      ethernet: { vendorId: '8086', deviceId: '15bb', expectedFamily: 'Intel I219-LM' },
+      wifi: { vendorId: '8086', deviceId: '24fd', expectedFamily: 'Intel Wireless 8265' },
+    },
+    {
+      name: 'ThinkPad L440 (Haswell, Realtek Ethernet)',
+      cpu: 'Intel(R) Core(TM) i5-4300M CPU @ 2.60GHz',
+      expectedGen: 'Haswell',
+      model: 'Lenovo ThinkPad L440',
+      gpu: { name: 'Intel HD Graphics 4600', vendorId: '8086', deviceId: '0416' },
+      audio: { vendorId: '10ec', deviceId: '0292', expectedCodec: 'ALC292' },
+      ethernet: { vendorId: '10ec', deviceId: '8168', expectedFamily: 'Realtek RTL8111' },
+      wifi: { vendorId: '8086', deviceId: '08b1', expectedFamily: 'Intel Wireless 7260' },
+    },
+  ];
+
+  for (const f of fixtures) {
+    describe(f.name, () => {
+      it('CPU generation', () => {
+        expect(detectCpuGeneration(f.cpu)).toBe(f.expectedGen);
+      });
+
+      it('detected as laptop', () => {
+        expect(inferLaptopFormFactor({ cpuName: f.cpu, modelName: f.model })).toBe(true);
+      });
+
+      it('audio codec detection', () => {
+        const codec = resolveAudioCodec(f.audio.vendorId, f.audio.deviceId);
+        expect(codec).not.toBeNull();
+        expect(codec).toContain(f.audio.expectedCodec);
+      });
+
+      it('Ethernet adapter detection', () => {
+        const result = resolveNetworkAdapter(f.ethernet.vendorId, f.ethernet.deviceId, 'Ethernet');
+        expect(result.adapterFamily).toBe(f.ethernet.expectedFamily);
+        expect(result.type).toBe('ethernet');
+      });
+
+      it('Wi-Fi adapter detection', () => {
+        const result = resolveNetworkAdapter(f.wifi.vendorId, f.wifi.deviceId, 'Wireless');
+        expect(result.adapterFamily).toBe(f.wifi.expectedFamily);
+        expect(result.type).toBe('wifi');
+      });
+
+      it('full profile mapping produces valid profile', () => {
+        const hw: DetectedHardware = {
+          cpu: { name: f.cpu, vendor: 'GenuineIntel', vendorName: 'Intel', confidence: 'detected' },
+          gpus: [{ ...f.gpu, vendorName: 'Intel', confidence: 'detected' as const }],
+          primaryGpu: { ...f.gpu, vendorName: 'Intel', confidence: 'detected' as const },
+          motherboardVendor: f.model.split(' ')[0],
+          motherboardModel: f.model,
+          ramBytes: 8 * 1024 * 1024 * 1024,
+          coreCount: 2,
+          isLaptop: true,
+          isVM: false,
+          audioDevices: [{
+            name: 'Audio Device',
+            vendorId: f.audio.vendorId,
+            deviceId: f.audio.deviceId,
+            codecName: resolveAudioCodec(f.audio.vendorId, f.audio.deviceId),
+            confidence: 'detected',
+          }],
+          networkDevices: [
+            {
+              name: 'Ethernet',
+              vendorId: f.ethernet.vendorId,
+              deviceId: f.ethernet.deviceId,
+              ...resolveNetworkAdapter(f.ethernet.vendorId, f.ethernet.deviceId, 'Ethernet'),
+              confidence: 'detected' as const,
+            },
+            {
+              name: 'Wi-Fi',
+              vendorId: f.wifi.vendorId,
+              deviceId: f.wifi.deviceId,
+              ...resolveNetworkAdapter(f.wifi.vendorId, f.wifi.deviceId, 'Wireless'),
+              confidence: 'detected' as const,
+            },
+          ],
+        };
+
+        // Apply GPU name enhancement for generic adapter names
+        const enhanced: DetectedHardware = {
+          ...hw,
+          gpus: enhanceGenericGpuNames(hw.gpus, hw.cpu.name),
+        };
+        enhanced.primaryGpu = enhanced.gpus[0];
+
+        const profile = mapDetectedToProfile(enhanced);
+        expect(profile.generation).toBe(f.expectedGen);
+        expect(profile.architecture).toBe('Intel');
+        expect(profile.isLaptop).toBe(true);
+        expect(profile.gpu).toContain('Intel');
+        expect(profile.nicChipset).toBe(f.ethernet.expectedFamily);
+        expect(profile.wifiChipset).toBe(f.wifi.expectedFamily);
+      });
+    });
+  }
+});
+
+// ─── 11. NETWORK INTERPRETATION IN FULL PIPELINE ───────────────────────────
+
+describe('Network interpretation in hardware interpretation pipeline', () => {
+  it('detected ethernet and wifi show in interpretation', () => {
+    const hw = makeHPProBook450G2();
+    const enhanced: DetectedHardware = {
+      ...hw,
+      gpus: enhanceGenericGpuNames(hw.gpus, hw.cpu.name),
+    };
+    enhanced.primaryGpu = enhanced.gpus[0];
+    const interp = interpretHardware(enhanced);
+    expect(interp.network.ethernet.value).toBe('Intel I218-LM');
+    expect(interp.network.ethernet.basis).toBe('detected');
+    expect(interp.network.wifi.value).toBe('Intel Wireless 7260');
+    expect(interp.network.wifi.basis).toBe('detected');
+  });
+
+  it('no network devices show as not detected', () => {
+    const hw: DetectedHardware = {
+      ...makeHPProBook450G2(),
+      networkDevices: [],
+    };
+    const interp = interpretHardware(hw);
+    expect(interp.network.ethernet.value).toBe('Not detected');
+    expect(interp.network.ethernet.basis).toBe('unknown');
+    expect(interp.network.wifi.value).toBe('Not detected');
+    expect(interp.network.wifi.basis).toBe('unknown');
+  });
+
+  it('ethernet only (no wifi) shows partial detection', () => {
+    const hw: DetectedHardware = {
+      ...makeHPProBook450G2(),
+      networkDevices: [{
+        name: 'Intel Ethernet',
+        vendorId: '8086',
+        deviceId: '155a',
+        vendorName: 'Intel',
+        adapterFamily: 'Intel I218-LM',
+        type: 'ethernet',
+        confidence: 'detected',
+      }],
+    };
+    const interp = interpretHardware(hw);
+    expect(interp.network.ethernet.value).toBe('Intel I218-LM');
+    expect(interp.network.wifi.value).toBe('Not detected');
   });
 });

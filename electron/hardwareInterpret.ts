@@ -67,6 +67,11 @@ export interface AudioInterpretation {
   layoutId: InterpretedFact;
 }
 
+export interface NetworkInterpretation {
+  ethernet: InterpretedFact;
+  wifi: InterpretedFact;
+}
+
 export interface HardwareInterpretation {
   /** Overall interpretation confidence */
   overallConfidence: 'high' | 'medium' | 'low';
@@ -80,6 +85,7 @@ export interface HardwareInterpretation {
   allGpus: GpuInterpretation[];
   board: BoardInterpretation;
   audio: AudioInterpretation;
+  network: NetworkInterpretation;
   ram: InterpretedFact;
   vmDetected: InterpretedFact;
 }
@@ -490,6 +496,41 @@ export function interpretHardware(hw: DetectedHardware): HardwareInterpretation 
     },
   };
 
+  // ── Network ──
+  const ethernetDevices = hw.networkDevices?.filter(n => n.type === 'ethernet') ?? [];
+  const wifiDevices = hw.networkDevices?.filter(n => n.type === 'wifi') ?? [];
+  const primaryEthernet = ethernetDevices.find(n => n.adapterFamily) ?? ethernetDevices[0];
+  const primaryWifi = wifiDevices.find(n => n.adapterFamily) ?? wifiDevices[0];
+
+  const networkInterp: NetworkInterpretation = {
+    ethernet: {
+      label: 'Ethernet Adapter',
+      value: primaryEthernet?.adapterFamily ?? (primaryEthernet ? `${primaryEthernet.vendorName} (unresolved)` : 'Not detected'),
+      basis: primaryEthernet?.adapterFamily ? (primaryEthernet.vendorId ? 'detected' : 'inferred') : 'unknown',
+      reasoning: primaryEthernet?.adapterFamily
+        ? `Ethernet adapter resolved from PCI vendor:device ${primaryEthernet.vendorId}:${primaryEthernet.deviceId}`
+        : primaryEthernet
+          ? `Ethernet device found ("${primaryEthernet.name}") but adapter family could not be resolved`
+          : 'No Ethernet adapter detected by hardware scan.',
+      verifyHint: !primaryEthernet?.adapterFamily
+        ? 'Check your Ethernet adapter in Device Manager — the correct kext depends on the chipset (Intel/Realtek/Atheros)'
+        : null,
+    },
+    wifi: {
+      label: 'Wi-Fi Adapter',
+      value: primaryWifi?.adapterFamily ?? (primaryWifi ? `${primaryWifi.vendorName} (unresolved)` : 'Not detected'),
+      basis: primaryWifi?.adapterFamily ? (primaryWifi.vendorId ? 'detected' : 'inferred') : 'unknown',
+      reasoning: primaryWifi?.adapterFamily
+        ? `Wi-Fi adapter resolved from PCI vendor:device ${primaryWifi.vendorId}:${primaryWifi.deviceId}`
+        : primaryWifi
+          ? `Wi-Fi device found ("${primaryWifi.name}") but adapter family could not be resolved`
+          : 'No Wi-Fi adapter detected by hardware scan.',
+      verifyHint: !primaryWifi?.adapterFamily
+        ? 'Check your Wi-Fi adapter — Intel Wi-Fi requires itlwm/AirportItlwm, Broadcom may need AirportBrcmFixup'
+        : null,
+    },
+  };
+
   // ── RAM ──
   const ramGB = Math.round(hw.ramBytes / 1024 / 1024 / 1024);
   const ramInterp: InterpretedFact = {
@@ -571,6 +612,7 @@ export function interpretHardware(hw: DetectedHardware): HardwareInterpretation 
     allGpus: allGpuInterps,
     board: boardInterp,
     audio: audioInterp,
+    network: networkInterp,
     ram: ramInterp,
     vmDetected: vmInterp,
   };

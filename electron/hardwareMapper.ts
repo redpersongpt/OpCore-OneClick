@@ -106,6 +106,12 @@ export function mapDetectedToProfile(hw: DetectedHardware): HardwareProfile {
   const audioCodec = primaryAudio?.codecName ?? undefined;
   const audioLayoutId = resolveAudioLayoutId(audioCodec);
 
+  // Resolve network adapters
+  const primaryEthernet = hw.networkDevices?.find(n => n.type === 'ethernet' && n.adapterFamily);
+  const primaryWifi = hw.networkDevices?.find(n => n.type === 'wifi' && n.adapterFamily);
+  const nicChipset = primaryEthernet?.adapterFamily ?? undefined;
+  const wifiChipset = primaryWifi?.adapterFamily ?? undefined;
+
   const profile: HardwareProfile = {
     cpu: cpuModel,
     architecture,
@@ -128,6 +134,8 @@ export function mapDetectedToProfile(hw: DetectedHardware): HardwareProfile {
     isVM: hw.isVM,
     audioCodec,
     audioLayoutId,
+    nicChipset,
+    wifiChipset,
     scanConfidence,
   };
   profile.smbios = getSMBIOSForProfile(profile);

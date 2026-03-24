@@ -119,6 +119,10 @@ export interface HardwareProfile {
     isVM?: boolean;
     audioCodec?: string;
     audioLayoutId?: number;
+    /** Detected Ethernet adapter family, e.g. "Intel I219-V", "Realtek RTL8111" */
+    nicChipset?: string;
+    /** Detected Wi-Fi adapter family, e.g. "Intel Wireless 8265", "Broadcom BCM4360" */
+    wifiChipset?: string;
     strategy?: 'canonical' | 'conservative' | 'blocked';
     /**
      * Overall confidence level of the hardware scan result.

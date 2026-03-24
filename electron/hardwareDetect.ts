@@ -37,6 +37,24 @@ export interface AudioDevice {
   confidence: DetectionConfidence;
 }
 
+export type NetworkDeviceType = 'ethernet' | 'wifi' | 'unknown';
+
+export interface NetworkDevice {
+  /** Raw device name from OS */
+  name: string;
+  /** PCI/PnP vendor ID, e.g. "8086" for Intel */
+  vendorId: string | null;
+  /** PCI/PnP device ID */
+  deviceId: string | null;
+  /** Resolved vendor name */
+  vendorName: string;
+  /** Resolved adapter family/chipset, e.g. "Intel I219-V", "Realtek RTL8111" */
+  adapterFamily: string | null;
+  /** ethernet or wifi */
+  type: NetworkDeviceType;
+  confidence: DetectionConfidence;
+}
+
 export interface DetectedHardware {
   cpu: CpuInfo;
   gpus: GpuDevice[];
@@ -48,6 +66,7 @@ export interface DetectedHardware {
   isLaptop: boolean;
   isVM: boolean;
   audioDevices: AudioDevice[];
+  networkDevices: NetworkDevice[];
 }
 
 // ── PCI vendor ID map (GPU vendors relevant to Hackintosh) ────────────────────
@@ -95,6 +114,192 @@ const REALTEK_DEVICE_TO_CODEC: Record<string, string> = {
   '0b00': 'ALC1200', '0b50': 'ALC1220',
 };
 
+// ── Network adapter vendor/device mapping ────────────────────────────────────
+// Maps PCI vendor+device IDs to adapter families for Hackintosh kext selection.
+// Only covers adapters relevant to macOS kext decisions (Intel Ethernet, Realtek,
+// Intel Wi-Fi, Broadcom Wi-Fi, Atheros/Killer).
+
+const NETWORK_VENDOR_MAP: Record<string, string> = {
+  '8086': 'Intel',
+  '10ec': 'Realtek',
+  '14e4': 'Broadcom',
+  '1969': 'Atheros',
+  '168c': 'Atheros',
+  '1b4b': 'Marvell',
+  '1186': 'D-Link',
+  '15b7': 'Killer',
+};
+
+// Intel Ethernet device IDs → adapter family
+// Source: IntelMausi supported list + AppleIGB compatibility
+const INTEL_ETHERNET_DEVICES: Record<string, string> = {
+  // I217 (Haswell desktop/laptop)
+  '153a': 'Intel I217-LM', '153b': 'Intel I217-V',
+  // I218 (Haswell/Broadwell laptop)
+  '155a': 'Intel I218-LM', '1559': 'Intel I218-V',
+  '15a0': 'Intel I218-LM', '15a1': 'Intel I218-V',
+  '15a2': 'Intel I218-LM', '15a3': 'Intel I218-V',
+  // I219 (Skylake+ desktop/laptop — very common in office machines)
+  '156f': 'Intel I219-LM', '1570': 'Intel I219-V',
+  '15b7': 'Intel I219-LM', '15b8': 'Intel I219-V',
+  '15bb': 'Intel I219-LM', '15bc': 'Intel I219-V',
+  '15bd': 'Intel I219-LM', '15be': 'Intel I219-V',
+  '15d7': 'Intel I219-LM', '15d8': 'Intel I219-V',
+  '15e3': 'Intel I219-LM', '15e4': 'Intel I219-V',  // v8+
+  '0d4e': 'Intel I219-LM', '0d4f': 'Intel I219-V',
+  '0d4c': 'Intel I219-LM', '0d4d': 'Intel I219-V',
+  '0d53': 'Intel I219-LM', '0d55': 'Intel I219-V',
+  '15f9': 'Intel I219-LM', '15fa': 'Intel I219-V',
+  '15fb': 'Intel I219-LM', '15fc': 'Intel I219-V',
+  // I211 (desktop, needs AppleIGB on Monterey+)
+  '1539': 'Intel I211-AT',
+  // I210
+  '1533': 'Intel I210-AT', '1536': 'Intel I210-IT',
+  // I225/I226 (Alder Lake+ desktop)
+  '15f2': 'Intel I225-V', '15f3': 'Intel I225-LM',
+  '125b': 'Intel I226-V', '125c': 'Intel I226-LM',
+  // Older (82574L, 82579LM — ThinkPad/Latitude era)
+  '10d3': 'Intel 82574L', '10ea': 'Intel 82577LM',
+  '10eb': 'Intel 82577LC', '10ef': 'Intel 82578DC',
+  '10f0': 'Intel 82578DM', '1502': 'Intel 82579LM',
+  '1503': 'Intel 82579V',
+};
+
+// Realtek Ethernet device IDs → adapter family
+const REALTEK_ETHERNET_DEVICES: Record<string, string> = {
+  '8136': 'Realtek RTL8101/8102', '8168': 'Realtek RTL8111',
+  '8169': 'Realtek RTL8169', '8125': 'Realtek RTL8125',
+  '8126': 'Realtek RTL8126', '2502': 'Realtek RTL8125',
+  '2600': 'Realtek RTL8125',
+};
+
+// Intel Wi-Fi device IDs → adapter family (common office laptop cards)
+// Source: OpenIntelWireless/itlwm supported device list
+const INTEL_WIFI_DEVICES: Record<string, string> = {
+  // Intel Wireless 7260 (Haswell era)
+  '08b1': 'Intel Wireless 7260', '08b2': 'Intel Wireless 7260',
+  // Intel Wireless 7265 (Broadwell era)
+  '095a': 'Intel Wireless 7265', '095b': 'Intel Wireless 7265',
+  // Intel Wireless 3160/3165/3168
+  '08b3': 'Intel Wireless 3160', '08b4': 'Intel Wireless 3160',
+  '3165': 'Intel Wireless 3165', '3166': 'Intel Wireless 3165',
+  '3168': 'Intel Wireless 3168',
+  // Intel Wireless 8260 (Skylake era)
+  '24f3': 'Intel Wireless 8260', '24f4': 'Intel Wireless 8260',
+  // Intel Wireless 8265 (Kaby Lake era)
+  '24fd': 'Intel Wireless 8265',
+  // Intel Wireless 9260/9461/9462/9560 (Coffee Lake era)
+  '2526': 'Intel Wireless 9260',
+  '9df0': 'Intel Wireless 9560', '9df4': 'Intel Wireless 9560',
+  '30dc': 'Intel Wireless 9560', '31dc': 'Intel Wireless 9560',
+  '9461': 'Intel Wireless 9461', '9462': 'Intel Wireless 9462',
+  // Intel Wi-Fi 6 AX200/AX201/AX210/AX211
+  '2723': 'Intel Wi-Fi 6 AX200',
+  '02f0': 'Intel Wi-Fi 6 AX201', '06f0': 'Intel Wi-Fi 6 AX201',
+  'a0f0': 'Intel Wi-Fi 6 AX201', '34f0': 'Intel Wi-Fi 6 AX201',
+  '2725': 'Intel Wi-Fi 6E AX210',
+  '7a70': 'Intel Wi-Fi 6E AX211', '51f0': 'Intel Wi-Fi 6E AX211',
+  '51f1': 'Intel Wi-Fi 6E AX211', '54f0': 'Intel Wi-Fi 6E AX211',
+};
+
+// Broadcom Wi-Fi device IDs → adapter family (common in Dell/HP)
+const BROADCOM_WIFI_DEVICES: Record<string, string> = {
+  '4331': 'Broadcom BCM4331', '4353': 'Broadcom BCM43224',
+  '43a0': 'Broadcom BCM4360', '43a3': 'Broadcom BCM4350',
+  '43b1': 'Broadcom BCM4352', '43b2': 'Broadcom BCM4352',
+  '43ba': 'Broadcom BCM43602', '43dc': 'Broadcom BCM4355',
+  '4464': 'Broadcom BCM4364', '4488': 'Broadcom BCM4377',
+};
+
+// Atheros/Killer Ethernet device IDs
+const ATHEROS_ETHERNET_DEVICES: Record<string, string> = {
+  'e091': 'Killer E2200', 'e0a1': 'Killer E2400',
+  'e0b1': 'Killer E2500', '10a1': 'Killer E2600',
+  '1091': 'Atheros AR8161', '1083': 'Atheros AR8151',
+  'e062': 'Qualcomm Atheros Killer E2200',
+};
+
+/**
+ * Classify network device type from PCI class or device name.
+ */
+export function classifyNetworkType(name: string, pciClass?: string): NetworkDeviceType {
+  const lower = name.toLowerCase();
+  if (lower.includes('wi-fi') || lower.includes('wifi') || lower.includes('wireless') ||
+      lower.includes('wlan') || lower.includes('802.11') || lower.includes('centrino') ||
+      lower.includes('airport') || lower.includes('dual band')) {
+    return 'wifi';
+  }
+  if (lower.includes('ethernet') || lower.includes('gigabit') || lower.includes('network connection') ||
+      lower.includes('lan') || lower.includes('nic') || lower.includes('gbe') ||
+      lower.includes('i217') || lower.includes('i218') || lower.includes('i219') ||
+      lower.includes('i211') || lower.includes('i225') || lower.includes('i226') ||
+      lower.includes('rtl8111') || lower.includes('rtl8168') || lower.includes('rtl8125') ||
+      lower.includes('killer e') || lower.includes('82579') || lower.includes('82574')) {
+    return 'ethernet';
+  }
+  // PCI class 0200 = Ethernet, 0280 = Wireless
+  if (pciClass === '0200') return 'ethernet';
+  if (pciClass === '0280') return 'wifi';
+  return 'unknown';
+}
+
+/**
+ * Resolve a network adapter's family/chipset from vendor+device IDs.
+ */
+export function resolveNetworkAdapter(vendorId: string | null, deviceId: string | null, name: string): {
+  vendorName: string;
+  adapterFamily: string | null;
+  type: NetworkDeviceType;
+} {
+  const vid = vendorId?.toLowerCase() ?? '';
+  const did = deviceId?.toLowerCase() ?? '';
+  const vendorName = (vid && NETWORK_VENDOR_MAP[vid]) || 'Unknown';
+
+  let adapterFamily: string | null = null;
+  let type: NetworkDeviceType = classifyNetworkType(name);
+
+  if (vid === '8086') {
+    // Intel — check Ethernet first, then Wi-Fi
+    if (INTEL_ETHERNET_DEVICES[did]) {
+      adapterFamily = INTEL_ETHERNET_DEVICES[did];
+      type = 'ethernet';
+    } else if (INTEL_WIFI_DEVICES[did]) {
+      adapterFamily = INTEL_WIFI_DEVICES[did];
+      type = 'wifi';
+    } else {
+      // Fallback: classify from name
+      adapterFamily = type === 'wifi' ? 'Intel Wi-Fi (unknown model)' :
+                       type === 'ethernet' ? 'Intel Ethernet (unknown model)' : null;
+    }
+  } else if (vid === '10ec') {
+    if (REALTEK_ETHERNET_DEVICES[did]) {
+      adapterFamily = REALTEK_ETHERNET_DEVICES[did];
+      type = 'ethernet';
+    } else {
+      adapterFamily = 'Realtek (unknown model)';
+    }
+  } else if (vid === '14e4') {
+    if (BROADCOM_WIFI_DEVICES[did]) {
+      adapterFamily = BROADCOM_WIFI_DEVICES[did];
+      type = 'wifi';
+    } else {
+      adapterFamily = type === 'wifi' ? 'Broadcom Wi-Fi (unknown model)' :
+                       type === 'ethernet' ? 'Broadcom Ethernet (unknown model)' : null;
+    }
+  } else if (vid === '1969' || vid === '168c' || vid === '15b7') {
+    if (ATHEROS_ETHERNET_DEVICES[did]) {
+      adapterFamily = ATHEROS_ETHERNET_DEVICES[did];
+      type = 'ethernet';
+    } else if (type === 'wifi') {
+      adapterFamily = 'Atheros Wi-Fi (unknown model)';
+    } else {
+      adapterFamily = 'Atheros/Killer (unknown model)';
+    }
+  }
+
+  return { vendorName, adapterFamily, type };
+}
+
 export function resolveAudioCodec(vendorId: string | null, deviceId: string | null): string | null {
   if (!vendorId || !deviceId) return null;
   const vid = vendorId.toLowerCase();
@@ -123,6 +328,19 @@ export function resolveGpuVendor(vendorId: string | null, rawName: string): stri
 
 function pickFallbackCpuName(): string {
   return os.cpus()[0]?.model?.trim() || 'Unknown CPU';
+}
+
+/**
+ * Check if a GPU name is generic/uninformative (e.g. "Microsoft Basic Display Adapter",
+ * "Standard VGA Graphics Adapter", "Unknown GPU").
+ */
+export function isGenericGpuName(name: string): boolean {
+  const lower = name.toLowerCase();
+  return lower.includes('basic display adapter')
+    || lower.includes('standard vga')
+    || lower.includes('standard display')
+    || lower === 'unknown gpu'
+    || lower === '';
 }
 
 export function isSoftwareDisplayAdapter(gpu: GpuDevice): boolean {
@@ -199,12 +417,7 @@ export function inferIntelIgpuName(cpuName: string): string | null {
  */
 export function enhanceGenericGpuNames(gpus: GpuDevice[], cpuName: string): GpuDevice[] {
   return gpus.map(gpu => {
-    const name = gpu.name.toLowerCase();
-    const isGenericName = name.includes('basic display adapter')
-      || name.includes('standard vga')
-      || name === 'unknown gpu';
-
-    if (!isGenericName) return gpu;
+    if (!isGenericGpuName(gpu.name)) return gpu;
     if (gpu.vendorId?.toLowerCase() !== '8086') return gpu;
 
     // Real Intel hardware with generic driver — infer iGPU name from CPU
@@ -240,7 +453,7 @@ function resolveCpuVendor(vendorStr: string, rawName: string): { vendor: string;
 export const WINDOWS_HARDWARE_QUERIES = {
   cpuName: '(Get-CimInstance CIM_Processor).Name',
   cpuVendor: '(Get-CimInstance CIM_Processor).Manufacturer',
-  gpuJson: 'Get-CimInstance CIM_VideoController | Select-Object Name, PNPDeviceID | ConvertTo-Json -Compress',
+  gpuJson: 'Get-CimInstance CIM_VideoController | Select-Object Name, PNPDeviceID, VideoProcessor | ConvertTo-Json -Compress',
   boardJson: 'Get-CimInstance Win32_BaseBoard | Select-Object Manufacturer, Product | ConvertTo-Json -Compress',
   chassisTypes: '(Get-CimInstance CIM_SystemEnclosure).ChassisTypes',
   manufacturer: '(Get-CimInstance CIM_ComputerSystem).Manufacturer',
@@ -248,6 +461,7 @@ export const WINDOWS_HARDWARE_QUERIES = {
   batteryJson: 'Get-CimInstance Win32_Battery | Select-Object -First 1 | ConvertTo-Json -Compress',
   coreCount: '(Get-CimInstance CIM_Processor).NumberOfCores',
   audioJson: "Get-CimInstance Win32_PnPEntity -Filter \"PNPClass='MEDIA'\" | Select-Object Name, PNPDeviceID | ConvertTo-Json -Compress",
+  networkJson: "Get-CimInstance Win32_PnPEntity -Filter \"PNPClass='NET'\" | Select-Object Name, PNPDeviceID | ConvertTo-Json -Compress",
 } as const;
 
 // ── Windows ───────────────────────────────────────────────────────────────────
@@ -269,10 +483,11 @@ export async function detectWindowsHardware(): Promise<DetectedHardware> {
     ps(WINDOWS_HARDWARE_QUERIES.manufacturer, '', 6_000),
     ps(WINDOWS_HARDWARE_QUERIES.coreCount, '', 8_000),
   ]);
-  const [modelRes, batteryRes, audioRes] = await Promise.all([
+  const [modelRes, batteryRes, audioRes, networkRes] = await Promise.all([
     ps(WINDOWS_HARDWARE_QUERIES.model, '', 3_500),
     ps(WINDOWS_HARDWARE_QUERIES.batteryJson, '', 3_500),
     ps(WINDOWS_HARDWARE_QUERIES.audioJson, '', 6_000),
+    ps(WINDOWS_HARDWARE_QUERIES.networkJson, '', 6_000),
   ]);
 
   const cpuName = cpuRes.stdout.trim().split('\n')[0] || pickFallbackCpuName();
@@ -280,6 +495,9 @@ export async function detectWindowsHardware(): Promise<DetectedHardware> {
   const { vendor, vendorName } = resolveCpuVendor(cpuVendorRaw, cpuName);
 
   // Parse GPU JSON (may be array or single object)
+  // VideoProcessor field is the DxDiag "Chip Type" equivalent — contains the real
+  // GPU chip description even when Name is generic (e.g. "Microsoft Basic Display Adapter").
+  // Example: VideoProcessor = "Intel(R) HSW Mobile/Desktop Graphics Controller"
   let gpus: GpuDevice[] = [];
   try {
     const raw = JSON.parse(gpuRes.stdout.trim());
@@ -290,7 +508,12 @@ export async function detectWindowsHardware(): Promise<DetectedHardware> {
       const devMatch = pnp.match(/DEV_([0-9A-Fa-f]{4})/);
       const vendorId = venMatch ? venMatch[1].toLowerCase() : null;
       const deviceId = devMatch ? devMatch[1].toLowerCase() : null;
-      const name: string = e.Name ?? 'Unknown GPU';
+      let name: string = e.Name ?? 'Unknown GPU';
+      // Use VideoProcessor (chip type) as fallback when Name is generic
+      const chipType: string = e.VideoProcessor ?? '';
+      if (isGenericGpuName(name) && chipType && !isGenericGpuName(chipType)) {
+        name = chipType.trim();
+      }
       return {
         name,
         vendorId,
@@ -332,6 +555,31 @@ export async function detectWindowsHardware(): Promise<DetectedHardware> {
     }
   } catch { /* audio detection is best-effort */ }
 
+  // Network — parse PnP entity list for network adapters with vendor/device IDs
+  const networkDevices: NetworkDevice[] = [];
+  try {
+    const rawNetwork = JSON.parse(networkRes.stdout.trim());
+    const networkEntries = Array.isArray(rawNetwork) ? rawNetwork : [rawNetwork];
+    for (const entry of networkEntries.filter(Boolean)) {
+      const pnp: string = entry.PNPDeviceID ?? '';
+      const venMatch = pnp.match(/VEN_([0-9A-Fa-f]{4})/);
+      const devMatch = pnp.match(/DEV_([0-9A-Fa-f]{4})/);
+      const netVendorId = venMatch ? venMatch[1].toLowerCase() : null;
+      const netDeviceId = devMatch ? devMatch[1].toLowerCase() : null;
+      const netName = entry.Name ?? 'Unknown Network Device';
+      const resolved = resolveNetworkAdapter(netVendorId, netDeviceId, netName);
+      networkDevices.push({
+        name: netName,
+        vendorId: netVendorId,
+        deviceId: netDeviceId,
+        vendorName: resolved.vendorName,
+        adapterFamily: resolved.adapterFamily,
+        type: resolved.type,
+        confidence: netVendorId ? 'detected' as const : 'partially-detected' as const,
+      });
+    }
+  } catch { /* network detection is best-effort */ }
+
   // Board
   let boardVendor = 'Unknown', boardModel = 'Unknown';
   try {
@@ -367,6 +615,7 @@ export async function detectWindowsHardware(): Promise<DetectedHardware> {
     isLaptop,
     isVM,
     audioDevices,
+    networkDevices,
   };
 }
 
@@ -379,7 +628,7 @@ export async function detectLinuxHardware(): Promise<DetectedHardware> {
       maxBuffer: 1024 * 1024,
     }).catch(() => ({ stdout: fallback }));
 
-  const [cpuRes, gpuRes, boardVendorRes, boardModelRes, chassisRes, sysVendorRes, batteryRes, memRes, audioRes] = await Promise.all([
+  const [cpuRes, gpuRes, boardVendorRes, boardModelRes, chassisRes, sysVendorRes, batteryRes, memRes, audioRes, networkRes] = await Promise.all([
     run('cat /proc/cpuinfo'),
     run('lspci -nn 2>/dev/null | grep -iE "VGA|3D|Display"'),
     run('cat /sys/class/dmi/id/board_vendor 2>/dev/null'),
@@ -389,6 +638,7 @@ export async function detectLinuxHardware(): Promise<DetectedHardware> {
     run('ls /sys/class/power_supply 2>/dev/null | grep -E "^BAT"'),
     run('grep MemTotal /proc/meminfo'),
     run('lspci -nn 2>/dev/null | grep -iE "audio|HDA"'),
+    run('lspci -nn 2>/dev/null | grep -iE "Ethernet|Network|Wireless|Wi-Fi"'),
   ]);
 
   // CPU
@@ -446,6 +696,27 @@ export async function detectLinuxHardware(): Promise<DetectedHardware> {
     });
   }
 
+  // Network — parse lspci Ethernet/Wireless entries
+  const networkDevices: NetworkDevice[] = [];
+  const networkLines = networkRes.stdout.trim().split('\n').filter(Boolean);
+  for (const line of networkLines) {
+    const idMatch = line.match(/\[([0-9a-f]{4}):([0-9a-f]{4})\]/i);
+    const netVendorId = idMatch ? idMatch[1].toLowerCase() : null;
+    const netDeviceId = idMatch ? idMatch[2].toLowerCase() : null;
+    const nameMatch = line.match(/\]:\s*(.+?)(?:\s*\[[0-9a-f]{4}:[0-9a-f]{4}\])?(?:\s*\(rev|$)/i);
+    const netName = nameMatch ? nameMatch[1].trim() : 'Unknown Network Device';
+    const resolved = resolveNetworkAdapter(netVendorId, netDeviceId, netName);
+    networkDevices.push({
+      name: netName,
+      vendorId: netVendorId,
+      deviceId: netDeviceId,
+      vendorName: resolved.vendorName,
+      adapterFamily: resolved.adapterFamily,
+      type: resolved.type,
+      confidence: netVendorId ? 'detected' as const : 'partially-detected' as const,
+    });
+  }
+
   return {
     cpu: { name: cpuName, vendor, vendorName, confidence: vendor !== 'Unknown' ? 'detected' : 'unverified' },
     gpus,
@@ -457,6 +728,7 @@ export async function detectLinuxHardware(): Promise<DetectedHardware> {
     isLaptop,
     isVM,
     audioDevices,
+    networkDevices,
   };
 }
 
@@ -469,13 +741,14 @@ export async function detectMacHardware(): Promise<DetectedHardware> {
       maxBuffer: 1024 * 1024,
     }).catch(() => ({ stdout: fallback }));
 
-  const [cpuRes, cpuVendorRes, gpuRes, memRes, modelRes, audioRes] = await Promise.all([
+  const [cpuRes, cpuVendorRes, gpuRes, memRes, modelRes, audioRes, networkRes] = await Promise.all([
     run('sysctl -n machdep.cpu.brand_string'),
     run('sysctl -n machdep.cpu.vendor 2>/dev/null'),
     run("system_profiler SPDisplaysDataType 2>/dev/null | grep -E 'Chipset Model|Vendor ID|Device ID'"),
     run('sysctl -n hw.memsize'),
     run('system_profiler SPHardwareDataType 2>/dev/null | grep -E "Model Identifier|Model Name"'),
     run("system_profiler SPAudioDataType 2>/dev/null | grep -E 'Device Name|Manufacturer'"),
+    run("system_profiler SPNetworkDataType 2>/dev/null | grep -E 'Type:|Hardware:'"),
   ]);
 
   const cpuName = cpuRes.stdout.trim() || 'Unknown CPU';
@@ -530,6 +803,26 @@ export async function detectMacHardware(): Promise<DetectedHardware> {
     }
   }
 
+  // Network — best-effort from system_profiler
+  const networkDevices: NetworkDevice[] = [];
+  const networkLines = networkRes.stdout.split('\n').map(l => l.trim());
+  for (const line of networkLines) {
+    if (line.startsWith('Hardware:')) {
+      const hw = line.split(':')[1]?.trim() || '';
+      if (hw && hw !== 'None') {
+        networkDevices.push({
+          name: hw,
+          vendorId: null,
+          deviceId: null,
+          vendorName: hw.toLowerCase().includes('airport') ? 'Apple' : 'Unknown',
+          adapterFamily: null,
+          type: hw.toLowerCase().includes('wi-fi') || hw.toLowerCase().includes('airport') ? 'wifi' : 'ethernet',
+          confidence: 'partially-detected',
+        });
+      }
+    }
+  }
+
   return {
     cpu: { name: cpuName, vendor, vendorName, confidence: vendor !== 'Unknown' ? 'detected' : 'unverified' },
     gpus,
@@ -541,6 +834,7 @@ export async function detectMacHardware(): Promise<DetectedHardware> {
     isLaptop,
     isVM: false,
     audioDevices,
+    networkDevices,
   };
 }
 

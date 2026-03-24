@@ -1,7 +1,7 @@
 {
   "name": "opcore-oneclick",
   "private": true,
-  "version": "3.0.1",
+  "version": "3.0.2",
   "description": "OpCore-OneClick deployment utility",
   "author": "OpCore-OneClick contributors",
   "main": "dist-electron/electron/main.js",
