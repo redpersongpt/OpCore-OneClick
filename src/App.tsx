@@ -1879,11 +1879,15 @@ export default function App() {
     const liveBiosState = (biosReady || allowAcceptedSession) ? biosState : await refreshBiosState(profile, { redirectIfBlocked: true });
     if (!liveBiosState) {
       buildStartRequestedRef.current = false;
+      setProgress(0);
+      setStatus('');
       return;
     }
     const guard = await ensureBuildGuard(profile, { surfaceError: true });
     if (!guard.allowed) {
       buildStartRequestedRef.current = false;
+      setProgress(0);
+      setStatus('');
       return;
     }
     isDeployingRef.current = true;
@@ -2295,24 +2299,53 @@ export default function App() {
         pendingRendererExpectation: null,
         stalledReason: e.message || 'Build failed',
       });
-      const message = e.message || 'Build failed. Please check the hardware compatibility.';
+      const rawMessage = e.message || 'Build failed. Please check the hardware compatibility.';
+      const msg = rawMessage.toLowerCase();
+
+      // Classify which stage failed based on error content — generic 'build_ipc_failed'
+      // was hiding the real cause. The stage determines the error code and suggestion.
+      let code = 'build_ipc_failed';
+      let title = 'EFI build failed';
+      let suggestion = 'Return to the previous step, confirm the BIOS/build prerequisites, then retry the EFI build once.';
+      if (msg.includes('preflight') || msg.includes('confidence')) {
+        code = 'preflight_failed';
+        title = 'Preflight check failed';
+        suggestion = 'Check network connectivity and GitHub API access, then retry.';
+      } else if (msg.includes('kext') || msg.includes('unavailable')) {
+        code = 'kext_fetch_failed';
+        title = 'Kext download failed';
+        suggestion = 'Check your internet connection. If the issue persists, retry — the app will use embedded fallbacks where available.';
+      } else if (msg.includes('recovery') || msg.includes('apple.com') || msg.includes('dmg')) {
+        code = 'recovery_download_failed';
+        title = 'Recovery download failed';
+        suggestion = 'Check your internet connection and retry. The download will resume from where it left off.';
+      } else if (msg.includes('validation') || msg.includes('validator')) {
+        code = 'validation_failed';
+        title = 'EFI validation failed';
+        suggestion = 'The generated EFI did not pass integrity checks. Try rebuilding from the report step.';
+      } else if (msg.includes('simulation')) {
+        code = 'simulation_failed';
+        title = 'Build simulation failed';
+        suggestion = 'The build dry-run detected a problem. Check compatibility and retry.';
+      }
+
       setGlobalNotice(null);
       setGlobalError(JSON.stringify({
-        code: 'build_ipc_failed',
-        message: 'EFI build failed',
-        explanation: message,
-        decisionSummary: message,
-        suggestion: 'Return to the previous step, confirm the BIOS/build prerequisites, then retry the EFI build once.',
+        code,
+        message: title,
+        explanation: rawMessage,
+        decisionSummary: rawMessage,
+        suggestion,
         category: 'build_error',
         severity: 'warning',
         targetStep: 'report',
-        rawMessage: message,
+        rawMessage,
       }));
       logUiEvent('error_surface_opened', {
         step: 'building',
-        code: 'build_ipc_failed',
-        message: 'EFI build failed',
-        rawMessage: message,
+        code,
+        message: title,
+        rawMessage,
       });
       setStep('report');
     } finally {
@@ -2723,6 +2756,22 @@ export default function App() {
   const handleRecoveryRetry = async () => {
     const target = recoveryPayload?.targetStep ?? step;
     logUiEvent('recovery_retry_clicked', { targetStep: target });
+
+    // Determine the retry action BEFORE clearing the error — if no action
+    // is available, keep the error visible instead of leaving a blank screen.
+    const retryAction = resolveRecoveryRetryAction({
+      targetStep: target,
+      hasProfile: Boolean(profile),
+      hasMethod: Boolean(method),
+      buildReady,
+    });
+
+    if (retryAction.kind === 'noop') {
+      // No retry action available — do NOT clear the error.
+      // User sees the error panel with no retry, which is honest.
+      return;
+    }
+
     setGlobalError(null);
     if (target === 'building' || target === 'kext-fetch' || target === 'recovery-download') {
       buildRunIdRef.current += 1;
@@ -2732,12 +2781,7 @@ export default function App() {
       isDeployingRef.current = false;
       buildStartRequestedRef.current = false;
     }
-    switch (resolveRecoveryRetryAction({
-      targetStep: target,
-      hasProfile: Boolean(profile),
-      hasMethod: Boolean(method),
-      buildReady,
-    }).kind) {
+    switch (retryAction.kind) {
       case 'scan':
         await startScan();
         return;
@@ -2757,6 +2801,7 @@ export default function App() {
         if (method) await selectMethod(method);
         return;
       default:
+        // Unknown action kind — restore the error so the user isn't stranded.
         return;
     }
   };
