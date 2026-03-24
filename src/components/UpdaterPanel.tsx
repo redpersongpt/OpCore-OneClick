@@ -22,10 +22,10 @@ function buildPrimaryAction(state: AppUpdateState | null): {
   icon: 'restart' | 'download' | 'none';
 } {
   if (state?.installing) {
-    return { label: 'Applying update…', icon: 'restart', disabled: true };
+    return { label: 'Closing to install…', icon: 'restart', disabled: true };
   }
   if (state?.restartRequired) {
-    return { label: 'Restart to update', icon: 'restart', disabled: false };
+    return { label: 'Restart now', icon: 'restart', disabled: false };
   }
   if (state?.readyToInstall) {
     return {
@@ -58,23 +58,23 @@ export default function UpdaterPanel({
   const refreshBusy = !!(state?.checking || state?.downloading || state?.installing);
 
   const headline = state?.installing
-    ? 'Applying update…'
+    ? 'Installing update…'
     : state?.restartRequired
-    ? 'Restart to finish updating'
+    ? 'Update ready — restart to finish'
     : state?.checking
     ? 'Checking for updates…'
     : state?.downloading
-    ? 'Downloading…'
+    ? `Downloading ${state.latestVersion ?? 'update'}…`
     : state?.readyToInstall
-    ? 'Ready to install'
+    ? `${state.latestVersion ?? 'Update'} ready to install`
     : state?.available
     ? `${state.latestVersion ?? 'Update'} available`
     : 'Up to date';
 
   const detail = state?.installing
-    ? `${state.latestVersion ?? 'Update'} is being handed off to the installer.`
+    ? 'The app will close and reopen automatically.'
     : state?.restartRequired
-    ? `${state.latestVersion ?? 'Update'} is staged and ready.`
+    ? `${state.latestVersion ?? 'Update'} is downloaded and ready. Restart to finish installing.`
     : state?.error
     ? state.error
     : state?.available

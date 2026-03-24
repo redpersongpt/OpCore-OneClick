@@ -50,7 +50,7 @@ export default function FailureRecoveryPanel({
                 <AlertTriangle className="h-5 w-5" />
               </div>
               <div className="space-y-1">
-                <div className="text-[11px] font-black uppercase tracking-[0.24em] text-white/35">Recovery</div>
+                <div className="text-[11px] font-black uppercase tracking-[0.24em] text-white/35">Something needs attention</div>
                 <h2 className="text-2xl font-black tracking-tight text-white">{title}</h2>
               </div>
             </div>

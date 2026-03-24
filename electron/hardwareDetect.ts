@@ -55,6 +55,41 @@ export interface NetworkDevice {
   confidence: DetectionConfidence;
 }
 
+export type InputStackType = 'ps2' | 'i2c' | 'unknown';
+
+export interface InputDevice {
+  /** Raw device name from OS */
+  name: string;
+  /** Full PnP device ID string */
+  pnpDeviceId: string;
+  /** Whether this device indicates I2C input hardware */
+  isI2C: boolean;
+  confidence: DetectionConfidence;
+}
+
+/**
+ * I2C HID device signatures in PnP device IDs.
+ * PNP0C50 = HID-over-I2C standard device
+ * INT33C2/C3/C6 = Intel I2C controller (Haswell/Broadwell era)
+ * INT3432/3433 = Intel I2C controller (Skylake+ era)
+ * MSFT0001 = Microsoft I2C HID minidriver
+ * Any ACPI path containing "I2C" indicates I2C bus presence
+ */
+const I2C_PNP_SIGNATURES = /PNP0C50|INT33C[2-6]|INT343[2-3]|MSFT0001|\\\\.*I2C/i;
+
+export function isI2CDeviceId(pnpDeviceId: string): boolean {
+  return I2C_PNP_SIGNATURES.test(pnpDeviceId);
+}
+
+export function deriveInputStack(inputDevices: InputDevice[], isLaptop: boolean): InputStackType {
+  if (!isLaptop) return 'unknown';
+  if (inputDevices.length === 0) return 'unknown';
+  const hasI2C = inputDevices.some(d => d.isI2C);
+  if (hasI2C) return 'i2c';
+  // If we detected HID devices but none are I2C, assume PS2
+  return 'ps2';
+}
+
 export interface DetectedHardware {
   cpu: CpuInfo;
   gpus: GpuDevice[];
@@ -67,6 +102,7 @@ export interface DetectedHardware {
   isVM: boolean;
   audioDevices: AudioDevice[];
   networkDevices: NetworkDevice[];
+  inputDevices: InputDevice[];
 }
 
 // ── PCI vendor ID map (GPU vendors relevant to Hackintosh) ────────────────────
@@ -462,6 +498,7 @@ export const WINDOWS_HARDWARE_QUERIES = {
   coreCount: '(Get-CimInstance CIM_Processor).NumberOfCores',
   audioJson: "Get-CimInstance Win32_PnPEntity -Filter \"PNPClass='MEDIA'\" | Select-Object Name, PNPDeviceID | ConvertTo-Json -Compress",
   networkJson: "Get-CimInstance Win32_PnPEntity -Filter \"PNPClass='NET'\" | Select-Object Name, PNPDeviceID | ConvertTo-Json -Compress",
+  hidJson: "Get-CimInstance Win32_PnPEntity -Filter \"PNPClass='HIDClass'\" | Select-Object Name, PNPDeviceID | ConvertTo-Json -Compress",
 } as const;
 
 // ── Windows ───────────────────────────────────────────────────────────────────
@@ -483,11 +520,12 @@ export async function detectWindowsHardware(): Promise<DetectedHardware> {
     ps(WINDOWS_HARDWARE_QUERIES.manufacturer, '', 6_000),
     ps(WINDOWS_HARDWARE_QUERIES.coreCount, '', 8_000),
   ]);
-  const [modelRes, batteryRes, audioRes, networkRes] = await Promise.all([
+  const [modelRes, batteryRes, audioRes, networkRes, hidRes] = await Promise.all([
     ps(WINDOWS_HARDWARE_QUERIES.model, '', 3_500),
     ps(WINDOWS_HARDWARE_QUERIES.batteryJson, '', 3_500),
     ps(WINDOWS_HARDWARE_QUERIES.audioJson, '', 6_000),
     ps(WINDOWS_HARDWARE_QUERIES.networkJson, '', 6_000),
+    ps(WINDOWS_HARDWARE_QUERIES.hidJson, '', 6_000),
   ]);
 
   const cpuName = cpuRes.stdout.trim().split('\n')[0] || pickFallbackCpuName();
@@ -580,6 +618,23 @@ export async function detectWindowsHardware(): Promise<DetectedHardware> {
     }
   } catch { /* network detection is best-effort */ }
 
+  // Input devices — detect I2C vs PS2 from HID class PnP device IDs
+  const inputDevices: InputDevice[] = [];
+  try {
+    const rawHid = JSON.parse(hidRes.stdout.trim());
+    const hidEntries = Array.isArray(rawHid) ? rawHid : [rawHid];
+    for (const entry of hidEntries.filter(Boolean)) {
+      const pnpId: string = entry.PNPDeviceID ?? '';
+      if (!pnpId) continue;
+      inputDevices.push({
+        name: entry.Name ?? 'Unknown HID Device',
+        pnpDeviceId: pnpId,
+        isI2C: isI2CDeviceId(pnpId),
+        confidence: 'detected',
+      });
+    }
+  } catch { /* input detection is best-effort */ }
+
   // Board
   let boardVendor = 'Unknown', boardModel = 'Unknown';
   try {
@@ -616,6 +671,7 @@ export async function detectWindowsHardware(): Promise<DetectedHardware> {
     isVM,
     audioDevices,
     networkDevices,
+    inputDevices,
   };
 }
 
@@ -628,7 +684,7 @@ export async function detectLinuxHardware(): Promise<DetectedHardware> {
       maxBuffer: 1024 * 1024,
     }).catch(() => ({ stdout: fallback }));
 
-  const [cpuRes, gpuRes, boardVendorRes, boardModelRes, chassisRes, sysVendorRes, batteryRes, memRes, audioRes, networkRes] = await Promise.all([
+  const [cpuRes, gpuRes, boardVendorRes, boardModelRes, chassisRes, sysVendorRes, batteryRes, memRes, audioRes, networkRes, i2cRes] = await Promise.all([
     run('cat /proc/cpuinfo'),
     run('lspci -nn 2>/dev/null | grep -iE "VGA|3D|Display"'),
     run('cat /sys/class/dmi/id/board_vendor 2>/dev/null'),
@@ -639,6 +695,7 @@ export async function detectLinuxHardware(): Promise<DetectedHardware> {
     run('grep MemTotal /proc/meminfo'),
     run('lspci -nn 2>/dev/null | grep -iE "audio|HDA"'),
     run('lspci -nn 2>/dev/null | grep -iE "Ethernet|Network|Wireless|Wi-Fi"'),
+    run('ls /sys/bus/i2c/devices 2>/dev/null'),
   ]);
 
   // CPU
@@ -717,6 +774,20 @@ export async function detectLinuxHardware(): Promise<DetectedHardware> {
     });
   }
 
+  // Input devices — detect I2C from /sys/bus/i2c/devices
+  const inputDevices: InputDevice[] = [];
+  const i2cDeviceList = i2cRes.stdout.trim().split('\n').filter(Boolean);
+  if (i2cDeviceList.length > 0) {
+    for (const dev of i2cDeviceList) {
+      inputDevices.push({
+        name: dev.trim(),
+        pnpDeviceId: `/sys/bus/i2c/devices/${dev.trim()}`,
+        isI2C: true,
+        confidence: 'detected',
+      });
+    }
+  }
+
   return {
     cpu: { name: cpuName, vendor, vendorName, confidence: vendor !== 'Unknown' ? 'detected' : 'unverified' },
     gpus,
@@ -729,6 +800,7 @@ export async function detectLinuxHardware(): Promise<DetectedHardware> {
     isVM,
     audioDevices,
     networkDevices,
+    inputDevices,
   };
 }
 
@@ -835,6 +907,7 @@ export async function detectMacHardware(): Promise<DetectedHardware> {
     isVM: false,
     audioDevices,
     networkDevices,
+    inputDevices: [], // macOS: not applicable (running on target machine, not host)
   };
 }
 

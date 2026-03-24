@@ -26,16 +26,38 @@ import {
   resolveAudioCodec,
   resolveNetworkAdapter,
   classifyNetworkType,
+  isI2CDeviceId,
+  deriveInputStack,
   type GpuDevice,
   type AudioDevice,
   type NetworkDevice,
+  type InputDevice,
 } from '../electron/hardwareDetect.js';
 import { detectCpuGeneration, detectArchitecture, mapDetectedToProfile } from '../electron/hardwareMapper.js';
 import { classifyGpu, type HardwareGpuDeviceSummary } from '../electron/hackintoshRules.js';
 import { interpretHardware } from '../electron/hardwareInterpret.js';
 import { inferLaptopFormFactor } from '../electron/formFactor.js';
-import { resolveAudioLayoutId } from '../electron/configGenerator.js';
+import { resolveAudioLayoutId, getRequiredResources } from '../electron/configGenerator.js';
+import type { HardwareProfile } from '../electron/configGenerator.js';
 import type { DetectedHardware } from '../electron/hardwareDetect.js';
+
+function fakeProfile(overrides: Partial<HardwareProfile> = {}): HardwareProfile {
+  return {
+    cpu: 'Intel Core i7-10700K',
+    architecture: 'Intel',
+    generation: 'Comet Lake',
+    gpu: 'Intel UHD 630',
+    ram: '16 GB',
+    motherboard: 'Generic',
+    targetOS: 'macOS Sequoia 15.x',
+    smbios: 'iMac20,1',
+    kexts: [],
+    ssdts: [],
+    bootArgs: '-v keepsyms=1 debug=0x100',
+    isLaptop: false,
+    ...overrides,
+  };
+}
 
 // ─── HP ProBook 450 G2 fixture ──────────────────────────────────────────────
 // Real repro: Haswell i7-4510U, missing Intel GPU driver, Realtek ALC282 audio.
@@ -96,6 +118,7 @@ function makeHPProBook450G2(): DetectedHardware {
         confidence: 'detected',
       },
     ],
+    inputDevices: [], // Old office laptop — PS2 trackpad, no I2C HID devices detected
   };
 }
 
@@ -610,6 +633,7 @@ describe('Confidence model — partial detection behavior', () => {
       isVM: false,
       audioDevices: [],
       networkDevices: [],
+      inputDevices: [],
     };
     const interp = interpretHardware(hw);
     expect(interp.overallConfidence).toBe('low');
@@ -1095,6 +1119,7 @@ describe('Old office laptop full pipeline matrix — with network + audio', () =
               confidence: 'detected' as const,
             },
           ],
+          inputDevices: [],
         };
 
         // Apply GPU name enhancement for generic adapter names
@@ -1161,5 +1186,163 @@ describe('Network interpretation in hardware interpretation pipeline', () => {
     const interp = interpretHardware(hw);
     expect(interp.network.ethernet.value).toBe('Intel I218-LM');
     expect(interp.network.wifi.value).toBe('Not detected');
+  });
+});
+
+// ─── 12. I2C VS PS2 DETECTION ──────────────────────────────────────────────
+
+describe('I2C device ID detection', () => {
+  it('PNP0C50 (HID-over-I2C standard) → I2C', () => {
+    expect(isI2CDeviceId('ACPI\\PNP0C50\\1')).toBe(true);
+  });
+
+  it('INT33C3 (Intel I2C controller, Haswell) → I2C', () => {
+    expect(isI2CDeviceId('ACPI\\INT33C3\\0')).toBe(true);
+  });
+
+  it('INT3432 (Intel I2C controller, Skylake) → I2C', () => {
+    expect(isI2CDeviceId('ACPI\\INT3432\\0')).toBe(true);
+  });
+
+  it('INT3433 (Intel I2C controller, Skylake) → I2C', () => {
+    expect(isI2CDeviceId('ACPI\\INT3433\\0')).toBe(true);
+  });
+
+  it('MSFT0001 (Microsoft I2C HID minidriver) → I2C', () => {
+    expect(isI2CDeviceId('ACPI\\MSFT0001\\0')).toBe(true);
+  });
+
+  it('path containing I2C in double-backslash PnP format → I2C', () => {
+    // Windows PnP IDs use double-backslash in raw PowerShell output
+    expect(isI2CDeviceId('ACPI\\\\ELAN_I2C_DEVICE\\\\0')).toBe(true);
+  });
+
+  it('regular HID device (no I2C signature) → not I2C', () => {
+    expect(isI2CDeviceId('HID\\VID_046D&PID_C52B\\1')).toBe(false);
+  });
+
+  it('PS2 keyboard device → not I2C', () => {
+    expect(isI2CDeviceId('ACPI\\PNP0303\\0')).toBe(false);
+  });
+
+  it('USB mouse device → not I2C', () => {
+    expect(isI2CDeviceId('USB\\VID_0461&PID_4D64\\5')).toBe(false);
+  });
+});
+
+describe('Input stack derivation', () => {
+  it('laptop with I2C device → i2c', () => {
+    const devices: InputDevice[] = [
+      { name: 'I2C HID Device', pnpDeviceId: 'ACPI\\PNP0C50\\1', isI2C: true, confidence: 'detected' },
+      { name: 'HID Keyboard', pnpDeviceId: 'ACPI\\PNP0303\\0', isI2C: false, confidence: 'detected' },
+    ];
+    expect(deriveInputStack(devices, true)).toBe('i2c');
+  });
+
+  it('laptop with only PS2/USB HID devices → ps2', () => {
+    const devices: InputDevice[] = [
+      { name: 'HID Keyboard', pnpDeviceId: 'ACPI\\PNP0303\\0', isI2C: false, confidence: 'detected' },
+      { name: 'USB Mouse', pnpDeviceId: 'USB\\VID_0461\\0', isI2C: false, confidence: 'detected' },
+    ];
+    expect(deriveInputStack(devices, true)).toBe('ps2');
+  });
+
+  it('laptop with no HID devices → unknown (conservative)', () => {
+    expect(deriveInputStack([], true)).toBe('unknown');
+  });
+
+  it('desktop → always unknown regardless of devices', () => {
+    const devices: InputDevice[] = [
+      { name: 'I2C HID Device', pnpDeviceId: 'ACPI\\PNP0C50\\1', isI2C: true, confidence: 'detected' },
+    ];
+    expect(deriveInputStack(devices, false)).toBe('unknown');
+  });
+});
+
+// ─── 13. VOODOOI2C-AWARE LAPTOP PATH ───────────────────────────────────────
+
+describe('VoodooI2C-aware laptop path in config generator', () => {
+  it('I2C laptop gets VoodooI2C + VoodooI2CHID + SSDT-GPIO', () => {
+    const { kexts, ssdts } = getRequiredResources(fakeProfile({
+      generation: 'Skylake',
+      isLaptop: true,
+      inputStack: 'i2c',
+    }));
+    expect(kexts).toContain('VoodooI2C.kext');
+    expect(kexts).toContain('VoodooI2CHID.kext');
+    expect(kexts).toContain('VoodooPS2Controller.kext'); // keyboard still PS2
+    expect(ssdts).toContain('SSDT-GPIO.aml');
+  });
+
+  it('PS2 laptop does NOT get VoodooI2C or SSDT-GPIO', () => {
+    const { kexts, ssdts } = getRequiredResources(fakeProfile({
+      generation: 'Skylake',
+      isLaptop: true,
+      inputStack: 'ps2',
+    }));
+    expect(kexts).toContain('VoodooPS2Controller.kext');
+    expect(kexts).not.toContain('VoodooI2C.kext');
+    expect(kexts).not.toContain('VoodooI2CHID.kext');
+    expect(ssdts).not.toContain('SSDT-GPIO.aml');
+  });
+
+  it('unknown inputStack stays conservative PS2 path', () => {
+    const { kexts, ssdts } = getRequiredResources(fakeProfile({
+      generation: 'Coffee Lake',
+      isLaptop: true,
+      inputStack: 'unknown',
+    }));
+    expect(kexts).toContain('VoodooPS2Controller.kext');
+    expect(kexts).not.toContain('VoodooI2C.kext');
+    expect(ssdts).not.toContain('SSDT-GPIO.aml');
+  });
+
+  it('undefined inputStack (legacy profile) stays conservative PS2', () => {
+    const { kexts, ssdts } = getRequiredResources(fakeProfile({
+      generation: 'Haswell',
+      isLaptop: true,
+    }));
+    expect(kexts).toContain('VoodooPS2Controller.kext');
+    expect(kexts).not.toContain('VoodooI2C.kext');
+    expect(ssdts).not.toContain('SSDT-GPIO.aml');
+  });
+
+  it('I2C on Sandy Bridge stays PS2 (pre-I2C era)', () => {
+    const { kexts, ssdts } = getRequiredResources(fakeProfile({
+      generation: 'Sandy Bridge',
+      isLaptop: true,
+      inputStack: 'i2c',
+    }));
+    // Sandy Bridge does not support I2C path in generator
+    expect(kexts).toContain('VoodooPS2Controller.kext');
+    expect(ssdts).not.toContain('SSDT-GPIO.aml');
+    expect(ssdts).toContain('SSDT-XOSI.aml');
+  });
+
+  it('desktop never gets VoodooI2C regardless of inputStack', () => {
+    const { kexts, ssdts } = getRequiredResources(fakeProfile({
+      generation: 'Coffee Lake',
+      isLaptop: false,
+      inputStack: 'i2c',
+    }));
+    expect(kexts).not.toContain('VoodooI2C.kext');
+    expect(kexts).not.toContain('VoodooI2CHID.kext');
+    expect(kexts).not.toContain('VoodooPS2Controller.kext');
+    expect(ssdts).not.toContain('SSDT-GPIO.aml');
+  });
+
+  it('old office laptop (HP ProBook 450 G2) stays PS2 with no SSDT-GPIO', () => {
+    const hw = makeHPProBook450G2();
+    const enhanced: DetectedHardware = {
+      ...hw,
+      gpus: enhanceGenericGpuNames(hw.gpus, hw.cpu.name),
+    };
+    enhanced.primaryGpu = enhanced.gpus[0];
+    const profile = mapDetectedToProfile(enhanced);
+    expect(profile.inputStack).toBe('unknown'); // no HID devices in fixture
+    const { kexts, ssdts } = getRequiredResources(profile);
+    expect(kexts).toContain('VoodooPS2Controller.kext');
+    expect(kexts).not.toContain('VoodooI2C.kext');
+    expect(ssdts).not.toContain('SSDT-GPIO.aml');
   });
 });

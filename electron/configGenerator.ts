@@ -123,6 +123,8 @@ export interface HardwareProfile {
     nicChipset?: string;
     /** Detected Wi-Fi adapter family, e.g. "Intel Wireless 8265", "Broadcom BCM4360" */
     wifiChipset?: string;
+    /** Detected laptop input stack type */
+    inputStack?: 'ps2' | 'i2c' | 'unknown';
     strategy?: 'canonical' | 'conservative' | 'blocked';
     /**
      * Overall confidence level of the hardware scan result.
@@ -685,23 +687,27 @@ export function getRequiredResources(profile: HardwareProfile) {
         // EC register access for modern laptops
         pushUnique('ECEnabler.kext');
 
-        // Input stack: PS2 is the safe conservative choice for most business laptops.
-        // I2C trackpads exist on some Skylake+ laptops but require specific ACPI patches
-        // that are board-specific. PS2 covers ThinkPads, Latitudes, EliteBooks reliably.
-        // VoodooPS2Controller handles both PS/2 keyboard and Synaptics/ALPS trackpads.
-        pushUnique('VoodooPS2Controller.kext');
+        // Input stack: detection-backed selection between PS2 and I2C paths.
+        // PS2 is the safe conservative default for old business laptops.
+        // I2C path is only used when hardware scan explicitly detected I2C HID devices.
+        // Unknown input stack stays on conservative PS2 — never guess I2C.
+        if (profile.inputStack === 'i2c' &&
+            ['Haswell', 'Broadwell', 'Skylake', 'Kaby Lake', 'Coffee Lake', 'Comet Lake', 'Ice Lake'].includes(profile.generation)) {
+            // Detection-backed I2C path: VoodooI2C + satellite plugin + SSDT-GPIO
+            // Source: Dortania ACPI guide — SSDT-GPIO required for VoodooI2C trackpads
+            pushUnique('VoodooI2C.kext');
+            pushUnique('VoodooI2CHID.kext');
+            pushSsdt('SSDT-GPIO.aml');
+            // PS2 keyboard still needs VoodooPS2Controller even on I2C trackpad laptops
+            pushUnique('VoodooPS2Controller.kext');
+        } else {
+            // PS2-only path (default, conservative): covers ThinkPads, Latitudes, EliteBooks
+            pushUnique('VoodooPS2Controller.kext');
+        }
 
         // Backlight — SSDT-PNLF is required for all Intel laptop displays
         pushSsdt('SSDT-PNLF.aml');
 
-        // SSDT-GPIO is ONLY needed for VoodooI2C (I2C trackpads). Since this
-        // generator uses the conservative PS2 path (VoodooPS2Controller above),
-        // SSDT-GPIO is NOT required. Adding it without VoodooI2C serves no purpose
-        // and creates a hard build dependency on supplemental Dortania downloads.
-        //
-        // If future versions add VoodooI2C support, SSDT-GPIO should be gated on
-        // detected I2C hardware, not applied unconditionally to all laptops.
-        //
         // SSDT-XOSI: Windows ACPI compatibility shim — useful for PS2 laptops
         // on Sandy/Ivy Bridge where ACPI _OSI checks affect trackpad behavior.
         // Source: Dortania Getting-Started-With-ACPI

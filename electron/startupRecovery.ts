@@ -145,7 +145,7 @@ export function describeStartupFailure(input: StartupFailurePageInput): StartupF
         likelyCause: 'The main renderer navigation failed before the UI could paint. This is usually caused by a bad packaged asset path, a missing renderer file, or a startup-time browser load error.',
         nextActions: [
           'Retry the app once.',
-          'If the failure repeats, use Back to Safety to start with cleared saved state.',
+          'If the failure repeats, use Start Over to start with cleared saved state.',
           'If that still fails, reinstall the app and attach the copied report to an issue.',
         ],
         technicalSummary: redactSensitiveText(`did-fail-load (${input.errorCode ?? 'unknown'}): ${input.errorDescription ?? 'unknown'} @ ${input.validatedURL ?? 'unknown'}`),
@@ -158,7 +158,7 @@ export function describeStartupFailure(input: StartupFailurePageInput): StartupF
         likelyCause: 'The UI process crashed or exited during startup, so the app fell back to a recovery screen instead of leaving a blank or black window.',
         nextActions: [
           'Retry the app once.',
-          'If the app opens but returns here again, use Back to Safety to clear saved UI state.',
+          'If the app opens but returns here again, use Start Over to clear saved UI state.',
           'Copy the report and open an issue if the renderer keeps exiting.',
         ],
         technicalSummary: redactSensitiveText(`renderer-process-gone: reason=${input.reason ?? 'unknown'} exitCode=${String(input.exitCode ?? 'unknown')}`),
@@ -172,7 +172,7 @@ export function describeStartupFailure(input: StartupFailurePageInput): StartupF
         likelyCause: 'The HTML shell loaded, but the preload bridge or renderer bootstrap failed before React could finish mounting.',
         nextActions: [
           'Retry the app once.',
-          'Use Back to Safety to clear saved state and start from the welcome screen.',
+          'Use Start Over to clear saved state and start from the welcome screen.',
           'If the timeout repeats, copy the report and open an issue.',
         ],
         technicalSummary: redactSensitiveText(input.detail ?? 'Renderer ready handshake timed out.'),
@@ -380,7 +380,7 @@ export function buildStartupFailurePageUrl(input: StartupFailurePageInput): stri
           <button class="primary" id="retry-button"${retryTarget ? '' : ' disabled'}>Retry</button>
           <button id="copy-button">Copy Report</button>
           <a class="button secondary" id="issue-link" href="${escapeHtml(issueUrl)}" target="_blank" rel="noopener noreferrer">Open Issue</a>
-          <button class="warning" id="safe-button"${safeTarget ? '' : ' disabled'}>Back to Safety</button>
+          <button class="warning" id="safe-button"${safeTarget ? '' : ' disabled'}>Start Over</button>
         </div>
         <p class="foot">Destructive operations remain locked. This screen only helps you recover or report the failure.</p>
         <div class="status" id="status-text" aria-live="polite"></div>

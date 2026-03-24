@@ -85,8 +85,8 @@ describe('UpdaterPanel – action visibility across states', () => {
         onOpenRelease={noop}
       />,
     );
-    expect(screen.getByText('Restart to update')).toBeInTheDocument();
-    expect(screen.getByText('Restart to finish updating')).toBeInTheDocument();
+    expect(screen.getByText('Restart now')).toBeInTheDocument();
+    expect(screen.getByText('Update ready — restart to finish')).toBeInTheDocument();
   });
 
   it('installing: shows applying state instead of falling back to up-to-date', () => {
@@ -98,8 +98,8 @@ describe('UpdaterPanel – action visibility across states', () => {
         onOpenRelease={noop}
       />,
     );
-    expect(screen.getAllByText('Applying update…').length).toBeGreaterThanOrEqual(1);
-    expect(screen.getByText('2.7.3 is being handed off to the installer.')).toBeInTheDocument();
+    expect(screen.getByText('Installing update…')).toBeInTheDocument();
+    expect(screen.getByText('The app will close and reopen automatically.')).toBeInTheDocument();
   });
 
   it('error state: shows error message and Release link', () => {
@@ -127,7 +127,7 @@ describe('UpdaterPanel – action visibility across states', () => {
     expect(screen.getByText('Up to date')).toBeInTheDocument();
     expect(screen.queryByText('Download update')).toBeNull();
     expect(screen.queryByText('Install update')).toBeNull();
-    expect(screen.queryByText('Restart to update')).toBeNull();
+    expect(screen.queryByText('Restart now')).toBeNull();
   });
 
   it('panel is compact – no min-height constraint', () => {

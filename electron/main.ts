@@ -3062,7 +3062,16 @@ app.whenReady().then(async () => {
   };
 
   // State persistence
-  ipcHandle('get-persisted-state', () => loadState());
+  ipcHandle('get-persisted-state', () => {
+    const state = loadState();
+    // Auto-clear stale app state (>24 hours) to prevent stuck recheck loops
+    if (state && Date.now() - state.timestamp > 24 * 60 * 60 * 1000) {
+      log('INFO', 'state', 'Auto-cleared stale app state (>24 hours old)', { step: state.currentStep });
+      saveState(null);
+      return null;
+    }
+    return state;
+  });
   ipcHandle('save-state', (_event, state: AppState) => saveState(state));
   ipcHandle('clear-state', () => { if (fs.existsSync(STATE_FILE)) fs.unlinkSync(STATE_FILE); });
 
@@ -3192,14 +3201,18 @@ app.whenReady().then(async () => {
       return { hasSession: false, stage: null, fingerprint: null, stale: false, message: 'No BIOS session found.' };
     }
     const stale = Date.now() - session.timestamp > 7 * 24 * 60 * 60 * 1000;
+    // Auto-clear stale sessions (>7 days) — prevents stuck recheck loops from old state
+    if (stale) {
+      clearBiosSession(app.getPath('userData'));
+      log('INFO', 'bios', 'Auto-cleared stale BIOS session (>7 days old)', { stage: session.stage });
+      return { hasSession: false, stage: null, fingerprint: null, stale: false, message: 'Stale BIOS session was automatically cleared.' };
+    }
     return {
       hasSession: true,
       stage: session.stage,
       fingerprint: session.hardwareFingerprint,
-      stale,
-      message: stale
-        ? 'BIOS session is older than 7 days and may be stale.'
-        : `BIOS session active — stage: ${session.stage}`,
+      stale: false,
+      message: `BIOS session active — stage: ${session.stage}`,
     };
   });
 

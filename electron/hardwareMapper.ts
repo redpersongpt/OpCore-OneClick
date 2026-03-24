@@ -7,6 +7,7 @@
 
 import os from 'os';
 import type { DetectedHardware } from './hardwareDetect.js';
+import { deriveInputStack } from './hardwareDetect.js';
 import type { HardwareProfile } from './configGenerator.js';
 import { getSMBIOSForProfile, resolveAudioLayoutId } from './configGenerator.js';
 
@@ -111,6 +112,7 @@ export function mapDetectedToProfile(hw: DetectedHardware): HardwareProfile {
   const primaryWifi = hw.networkDevices?.find(n => n.type === 'wifi' && n.adapterFamily);
   const nicChipset = primaryEthernet?.adapterFamily ?? undefined;
   const wifiChipset = primaryWifi?.adapterFamily ?? undefined;
+  const inputStack = deriveInputStack(hw.inputDevices ?? [], hw.isLaptop);
 
   const profile: HardwareProfile = {
     cpu: cpuModel,
@@ -136,6 +138,7 @@ export function mapDetectedToProfile(hw: DetectedHardware): HardwareProfile {
     audioLayoutId,
     nicChipset,
     wifiChipset,
+    inputStack,
     scanConfidence,
   };
   profile.smbios = getSMBIOSForProfile(profile);

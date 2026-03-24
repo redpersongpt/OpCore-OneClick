@@ -115,7 +115,7 @@ export function buildFailureRecoveryViewModel(input: string | FailureRecoveryPay
         || payload.contextNote
         || payload.validationDetail
         || structured.what
-        || 'The current step could not complete with the app state or system state that was available.',
+        || 'The step could not finish. This is usually caused by a missing file, a network issue, or incomplete hardware data.',
     ),
     nextActions: nextActions.length > 0
       ? nextActions.map((action) => redactSensitiveText(action))

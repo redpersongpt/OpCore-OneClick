@@ -1118,6 +1118,9 @@ export default function App() {
       if (result.redirect) _setStepRaw(result.redirect);
       return result;
     }
+    // Clear stale error modal on successful step transition — prevents old errors
+    // from blocking or confusing the user after navigating to a new step.
+    if (globalError) setGlobalError(null);
     logUiEvent('step_transition_allowed', { target });
     _setStepRaw(target);
     return result;
@@ -4127,7 +4130,7 @@ export default function App() {
                   tone: 'primary',
                 },
                 {
-                  label: 'Back to Safety',
+                  label: profile ? 'Go to Report' : 'Start Over',
                   onClick: handleBackToSafety,
                   tone: 'subtle',
                 },
