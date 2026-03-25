@@ -855,6 +855,10 @@ export function getRequiredResources(profile: HardwareProfile) {
             // SSDT-PM is generated post-install via ssdtPRGen.sh — not shipped in initial EFI.
             // Source: Dortania sandy-bridge.html, ivy-bridge.html
             pushSsdt('SSDT-EC.aml');
+            // SSDT-IMEI: required when CPU/chipset are mismatched (SB on 7-series, IVB on 6-series).
+            // Safe to include unconditionally — no-op when not needed.
+            // Source: Dortania sandy-bridge.html, ivy-bridge.html
+            pushSsdt('SSDT-IMEI.aml');
         } else {
             // Pre-Sandy Bridge (Penryn/Nehalem/Westmere/etc) — no XCPM, EC only
             pushSsdt('SSDT-EC.aml');
@@ -937,6 +941,13 @@ export function generateConfigPlist(profile: HardwareProfile): string {
     // Coffee Lake+ laptop backlight fix
     if (profile.isLaptop && ['Coffee Lake', 'Comet Lake', 'Rocket Lake', 'Alder Lake', 'Raptor Lake'].includes(profile.generation)) {
         if (!bootArgs.includes('-igfxblr')) bootArgs += ' -igfxblr';
+    }
+
+    // Ice Lake framebuffer fixes — Source: Dortania config-laptop.plist/icelake.html
+    // -igfxcdc: Clock Driving Fix, -igfxdvmt: DVMT Pre-Allocated Stolen Memory fix
+    if (profile.generation === 'Ice Lake') {
+        if (!bootArgs.includes('-igfxcdc')) bootArgs += ' -igfxcdc';
+        if (!bootArgs.includes('-igfxdvmt')) bootArgs += ' -igfxdvmt';
     }
 
     // Tahoe (26+): Intel Bluetooth needs -ibtcompatbeta — Source: tahoe.html
