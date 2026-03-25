@@ -61,6 +61,33 @@ const CODELESS_KEXTS = new Set([
     'AppleMCEReporterDisabler.kext',
 ]);
 
+// Plugin kexts that live inside a parent kext's Contents/PlugIns/ directory.
+// BundlePath must use the nested path (e.g. "VoodooI2C.kext/Contents/PlugIns/VoodooI2CHID.kext")
+// and ExecutablePath must be relative to the plugin bundle, not the parent.
+export const PLUGIN_KEXT_PARENTS: Record<string, string> = {
+    'VoodooI2CHID.kext': 'VoodooI2C.kext',
+};
+
+/**
+ * Resolve the config.plist BundlePath for a kext.
+ * Plugin kexts get a nested path under their parent kext.
+ */
+export function resolveKextBundlePath(kextName: string): string {
+    const parent = PLUGIN_KEXT_PARENTS[kextName];
+    if (parent) return `${parent}/Contents/PlugIns/${kextName}`;
+    return kextName;
+}
+
+/**
+ * Resolve the config.plist ExecutablePath for a kext.
+ * Returns the path relative to the kext bundle (whether top-level or plugin).
+ */
+export function resolveKextExecutablePath(kextName: string): string {
+    if (CODELESS_KEXTS.has(kextName)) return '';
+    const baseName = kextName.replace('.kext', '');
+    return `Contents/MacOS/${baseName}`;
+}
+
 // ── Audio Codec → Layout-ID Map ─────────────────────────────────────────────
 // Source: https://github.com/acidanthera/AppleALC/wiki/Supported-codecs
 // First entry is the safest default for each codec.
@@ -1161,14 +1188,15 @@ export function generateConfigPlist(profile: HardwareProfile): string {
         <key>Add</key>
         <array>
             ${kexts.map(kext => {
-                const isCodeless = CODELESS_KEXTS.has(kext);
+                const bundlePath = resolveKextBundlePath(kext);
+                const executablePath = resolveKextExecutablePath(kext);
                 return `
             <dict>
                 <key>Arch</key><string>Any</string>
-                <key>BundlePath</key><string>${kext}</string>
+                <key>BundlePath</key><string>${bundlePath}</string>
                 <key>Comment</key><string>${kext}</string>
                 <key>Enabled</key><true/>
-                <key>ExecutablePath</key><string>${isCodeless ? '' : `Contents/MacOS/${kext.replace('.kext', '')}`}</string>
+                <key>ExecutablePath</key><string>${executablePath}</string>
                 <key>MaxKernel</key><string></string>
                 <key>MinKernel</key><string></string>
                 <key>PlistPath</key><string>Contents/Info.plist</string>

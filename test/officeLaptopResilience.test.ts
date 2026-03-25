@@ -37,7 +37,14 @@ import { detectCpuGeneration, detectArchitecture, mapDetectedToProfile } from '.
 import { classifyGpu, type HardwareGpuDeviceSummary } from '../electron/hackintoshRules.js';
 import { interpretHardware } from '../electron/hardwareInterpret.js';
 import { inferLaptopFormFactor } from '../electron/formFactor.js';
-import { resolveAudioLayoutId, getRequiredResources } from '../electron/configGenerator.js';
+import {
+  resolveAudioLayoutId,
+  getRequiredResources,
+  generateConfigPlist,
+  resolveKextBundlePath,
+  resolveKextExecutablePath,
+  PLUGIN_KEXT_PARENTS,
+} from '../electron/configGenerator.js';
 import type { HardwareProfile } from '../electron/configGenerator.js';
 import type { DetectedHardware } from '../electron/hardwareDetect.js';
 
@@ -1344,5 +1351,119 @@ describe('VoodooI2C-aware laptop path in config generator', () => {
     expect(kexts).toContain('VoodooPS2Controller.kext');
     expect(kexts).not.toContain('VoodooI2C.kext');
     expect(ssdts).not.toContain('SSDT-GPIO.aml');
+  });
+});
+
+// ─── 14. VOODOOI2C SOURCE AND BUNDLE PATH COMPLETION ────────────────────────
+
+describe('VoodooI2C BundlePath and plugin structure', () => {
+  it('VoodooI2CHID resolves to nested plugin BundlePath', () => {
+    expect(resolveKextBundlePath('VoodooI2CHID.kext'))
+      .toBe('VoodooI2C.kext/Contents/PlugIns/VoodooI2CHID.kext');
+  });
+
+  it('VoodooI2C resolves to top-level BundlePath', () => {
+    expect(resolveKextBundlePath('VoodooI2C.kext')).toBe('VoodooI2C.kext');
+  });
+
+  it('regular kexts are unaffected by plugin path resolution', () => {
+    expect(resolveKextBundlePath('Lilu.kext')).toBe('Lilu.kext');
+    expect(resolveKextBundlePath('VoodooPS2Controller.kext')).toBe('VoodooPS2Controller.kext');
+    expect(resolveKextBundlePath('AppleALC.kext')).toBe('AppleALC.kext');
+  });
+
+  it('VoodooI2CHID has correct ExecutablePath', () => {
+    expect(resolveKextExecutablePath('VoodooI2CHID.kext')).toBe('Contents/MacOS/VoodooI2CHID');
+  });
+
+  it('VoodooI2C has correct ExecutablePath', () => {
+    expect(resolveKextExecutablePath('VoodooI2C.kext')).toBe('Contents/MacOS/VoodooI2C');
+  });
+
+  it('codeless kexts have empty ExecutablePath', () => {
+    expect(resolveKextExecutablePath('AppleMCEReporterDisabler.kext')).toBe('');
+  });
+
+  it('PLUGIN_KEXT_PARENTS maps VoodooI2CHID → VoodooI2C', () => {
+    expect(PLUGIN_KEXT_PARENTS['VoodooI2CHID.kext']).toBe('VoodooI2C.kext');
+  });
+});
+
+describe('VoodooI2C config.plist generation correctness', () => {
+  it('I2C laptop config.plist contains nested VoodooI2CHID BundlePath', () => {
+    const profile = fakeProfile({
+      generation: 'Skylake',
+      isLaptop: true,
+      inputStack: 'i2c',
+    });
+    const plist = generateConfigPlist(profile);
+    // VoodooI2C as top-level
+    expect(plist).toContain('<string>VoodooI2C.kext</string>');
+    // VoodooI2CHID as nested plugin path
+    expect(plist).toContain('<string>VoodooI2C.kext/Contents/PlugIns/VoodooI2CHID.kext</string>');
+    // Correct executable for the plugin
+    expect(plist).toContain('<string>Contents/MacOS/VoodooI2CHID</string>');
+    // SSDT-GPIO must be present
+    expect(plist).toContain('SSDT-GPIO.aml');
+  });
+
+  it('PS2 laptop config.plist does NOT contain VoodooI2C entries', () => {
+    const profile = fakeProfile({
+      generation: 'Skylake',
+      isLaptop: true,
+      inputStack: 'ps2',
+    });
+    const plist = generateConfigPlist(profile);
+    expect(plist).toContain('<string>VoodooPS2Controller.kext</string>');
+    expect(plist).not.toContain('VoodooI2C');
+    expect(plist).not.toContain('SSDT-GPIO');
+  });
+
+  it('unknown inputStack laptop config.plist stays PS2-only', () => {
+    const profile = fakeProfile({
+      generation: 'Coffee Lake',
+      isLaptop: true,
+      inputStack: 'unknown',
+    });
+    const plist = generateConfigPlist(profile);
+    expect(plist).toContain('<string>VoodooPS2Controller.kext</string>');
+    expect(plist).not.toContain('VoodooI2C');
+  });
+});
+
+describe('VoodooI2C end-to-end agreement', () => {
+  it('generator + source registry agree: I2C path kexts are all source-backed', () => {
+    const { kexts } = getRequiredResources(fakeProfile({
+      generation: 'Kaby Lake',
+      isLaptop: true,
+      inputStack: 'i2c',
+    }));
+    // VoodooI2C and VoodooI2CHID should both be in the kext list
+    expect(kexts).toContain('VoodooI2C.kext');
+    expect(kexts).toContain('VoodooI2CHID.kext');
+    // VoodooI2CHID ships inside VoodooI2C release — only VoodooI2C needs a download entry
+    // VoodooPS2Controller still present for keyboard
+    expect(kexts).toContain('VoodooPS2Controller.kext');
+  });
+
+  it('PS2 path does NOT include VoodooI2C kexts', () => {
+    const { kexts, ssdts } = getRequiredResources(fakeProfile({
+      generation: 'Kaby Lake',
+      isLaptop: true,
+      inputStack: 'ps2',
+    }));
+    expect(kexts).not.toContain('VoodooI2C.kext');
+    expect(kexts).not.toContain('VoodooI2CHID.kext');
+    expect(ssdts).not.toContain('SSDT-GPIO.aml');
+  });
+
+  it('desktop never gets VoodooI2C regardless of inputStack', () => {
+    const { kexts } = getRequiredResources(fakeProfile({
+      generation: 'Coffee Lake',
+      isLaptop: false,
+      inputStack: 'i2c',
+    }));
+    expect(kexts).not.toContain('VoodooI2C.kext');
+    expect(kexts).not.toContain('VoodooI2CHID.kext');
   });
 });

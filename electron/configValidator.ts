@@ -274,6 +274,12 @@ const VIRTUALSMC_PLUGIN_KEXTS = new Set([
   'SMCDellSensors.kext',
 ]);
 
+// VoodooI2C plugin kexts — ship inside VoodooI2C.kext/Contents/PlugIns/
+// and require VoodooI2C as the parent kext
+const VOODOOI2C_PLUGIN_KEXTS = new Set([
+  'VoodooI2CHID.kext',
+]);
+
 // ── Main Validator ───────────────────────────────────────────────────────────
 
 export async function validateEfi(
@@ -491,6 +497,22 @@ export async function validateEfi(
           'EFI/OC/Kexts/VirtualSMC.kext',
           'One or more VirtualSMC plugins are present but VirtualSMC.kext is missing from config.plist',
           [...topLevelKexts].filter(kext => VIRTUALSMC_PLUGIN_KEXTS.has(kext)).join(', '),
+        ));
+      }
+
+      // VoodooI2C plugin kexts referenced via nested BundlePath require VoodooI2C.kext as parent
+      const hasVoodooI2CPlugin = plistKexts.some(bp => {
+        const leaf = bp.split('/').pop() ?? '';
+        return VOODOOI2C_PLUGIN_KEXTS.has(leaf);
+      });
+      if (hasVoodooI2CPlugin && !topLevelKexts.has('VoodooI2C.kext')) {
+        issues.push(blocked(
+          'KEXT_VOODOOI2C_DEPENDENCY',
+          'VoodooI2C plugin selected without VoodooI2C.kext',
+          'VoodooI2C.kext',
+          'EFI/OC/Kexts/VoodooI2C.kext',
+          'VoodooI2CHID is configured as a plugin but VoodooI2C.kext is missing from config.plist',
+          'VoodooI2CHID.kext',
         ));
       }
     }

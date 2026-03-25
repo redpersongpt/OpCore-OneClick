@@ -1704,6 +1704,7 @@ const KEXT_REGISTRY: Record<string, KextRegistryEntry> = {
   'NootRX.kext':                        { repo: 'ChefKissInc/NootRX',                  directUrl: 'https://nightly.link/ChefKissInc/NootRX/workflows/main/master/Artifacts.zip', staticVersion: 'nightly' },
   'RTCMemoryFixup.kext':                { repo: 'acidanthera/RTCMemoryFixup',          assetFilter: 'RELEASE' },
   'VoodooPS2Controller.kext':           { repo: 'acidanthera/VoodooPS2',              assetFilter: 'RELEASE' },
+  'VoodooI2C.kext':                     { repo: 'VoodooI2C/VoodooI2C',               assetFilter: 'VoodooI2C' },
   'AMDRyzenCPUPowerManagement.kext':    { repo: 'trulyspinach/SMCAMDProcessor',        directUrl: 'https://github.com/trulyspinach/SMCAMDProcessor/releases/latest/download/AMDRyzenCPUPowerManagement.kext.zip', staticVersion: 'latest' },
   'SMCAMDProcessor.kext':               { repo: 'trulyspinach/SMCAMDProcessor',        directUrl: 'https://github.com/trulyspinach/SMCAMDProcessor/releases/latest/download/SMCAMDProcessor.kext.zip', staticVersion: 'latest' },
   'AppleMCEReporterDisabler.kext':      { repo: 'acidanthera/bugtracker',              directUrl: 'https://github.com/acidanthera/bugtracker/files/3703498/AppleMCEReporterDisabler.kext.zip', staticVersion: 'bugtracker' },
