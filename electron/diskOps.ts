@@ -232,6 +232,11 @@ export function isWindowsUsbLikeDisk(input: {
 
 export function buildWindowsFlashDiskpartScript(diskNum: string, partitionSizeMB?: number): string {
   return [
+    // Disable automount BEFORE creating the partition to prevent Explorer
+    // from immediately grabbing a handle on the new raw volume.
+    // This is the root cause of FAT32 format failures (#48): Explorer
+    // auto-mounts the partition between create and format, locking it.
+    'automount disable',
     `select disk ${diskNum}`,
     'attributes disk clear readonly noerr',
     'offline disk noerr',
@@ -257,6 +262,9 @@ export function buildWindowsFormatDiskpartScript(diskNum: string, partitionNumbe
     `select partition ${partitionNumber}`,
     'format fs=fat32 quick label=OPENCORE',
     'assign noerr',
+    // Re-enable automount after format completes (disabled during Phase 1 to
+    // prevent Explorer from locking the raw partition before format — #48)
+    'automount enable',
     'rescan',
     '',
   ].join('\n');
@@ -1343,9 +1351,10 @@ export function createDiskOps(log: LogFunction): DiskOps {
             diskNum, partNum, attempt: attempt + 1,
           });
 
-          // Clear handle locks: Explorer/Shell auto-mounts new partitions immediately
+          // Clear handle locks: Explorer/Shell auto-mounts new partitions immediately.
+          // Even with automount disabled, some Windows builds still briefly grab handles.
           await detachWindowsDriveLetters(diskNum, registerProcess).catch(() => {});
-          await new Promise((resolve) => setTimeout(resolve, 500));
+          await new Promise((resolve) => setTimeout(resolve, 1500));
 
           // Phase 2 diskpart: format WITHOUT noerr
           const phase2Script = buildWindowsFormatDiskpartScript(diskNum, partNum);
@@ -1442,10 +1451,12 @@ export function createDiskOps(log: LogFunction): DiskOps {
 
       // Clear handles before Format-Volume — Explorer/Shell grabs new partitions immediately
       await detachWindowsDriveLetters(diskNum, registerProcess).catch(() => {});
-      await new Promise((resolve) => setTimeout(resolve, 800));
+      await new Promise((resolve) => setTimeout(resolve, 2000));
 
       let formatRecovered = false;
       try {
+        // Re-enable automount before Format-Volume (may have been disabled in Phase 1)
+        await runCmd('powershell -NoProfile -Command "\'automount enable\' | diskpart | Out-Null"', registerProcess).catch(() => {});
         await runCmd(
           `powershell -NoProfile -Command "try { Format-Volume -DiskNumber ${diskNum} -PartitionNumber ${partNum} -FileSystem FAT32 -NewFileSystemLabel 'OPENCORE' -Confirm:$false -Force -ErrorAction Stop } catch { throw }"`,
           registerProcess,
@@ -1478,12 +1489,14 @@ export function createDiskOps(log: LogFunction): DiskOps {
         });
       }
       if (formatRecovered && driveLetter) return { diskNum, driveLetter };
+      // Re-enable automount before throwing so Windows returns to normal state
+      await runCmd('powershell -NoProfile -Command "\'automount enable\' | diskpart | Out-Null"', registerProcess).catch(() => {});
       throw new Error(
-        `diskpart created a partition on disk ${diskNum}, but failed to format it as FAT32 OPENCORE. ` +
-        'Both diskpart format and PowerShell Format-Volume fallback failed. ' +
-        'Stage: partition exists → format failed → Format-Volume fallback also failed. ' +
+        `Disk format failed: Windows could not format the partition as FAT32. ` +
+        'Another process may be locking the drive, or the drive controller is rejecting the format command. ' +
         'Close Explorer windows, antivirus scans, or backup tools touching this drive, then retry. ' +
-        'If it keeps failing, format partition 1 manually as FAT32 and label it OPENCORE before retrying.'
+        'If it keeps failing, eject the drive, reconnect it, and try again. ' +
+        'Last resort: open an elevated Command Prompt and run: diskpart → select disk ' + diskNum + ' → select partition 1 → format fs=fat32 quick label=OPENCORE → assign'
       );
     }
 
