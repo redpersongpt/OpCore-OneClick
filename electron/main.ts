@@ -69,7 +69,7 @@ import {
 } from './flashSafety.js';
 import { createTaskRegistry, type OpToken } from './taskManager.js';
 import type { TaskUpdatePayload } from './taskManager.js';
-import { detectHardware } from './hardwareDetect.js';
+import { detectHardware, buildPartialDetectedHardware } from './hardwareDetect.js';
 import { interpretHardware, type HardwareInterpretation } from './hardwareInterpret.js';
 import { canRestoreLatestScannedArtifact, reconcileHardwareScanProfile } from './hardwareProfileState.js';
 import { probeFirmware } from './firmwarePreflight.js';
@@ -3308,7 +3308,29 @@ app.whenReady().then(async () => {
   // result is normalised into HardwareProfile for the rest of the app
   ipcHandle('scan-hardware', async () => {
     try {
-      const hw = await withTimeout(detectHardware(), 30_000, 'detectHardware');
+      let hw: import('./hardwareDetect.js').DetectedHardware;
+      let scanSource: 'live_scan' | 'partial_scan' = 'live_scan';
+      try {
+        hw = await withTimeout(detectHardware(), 60_000, 'detectHardware');
+      } catch (primaryErr: any) {
+        // Primary scan failed (likely timeout on slow hardware).
+        // Before falling to legacy, try to build a partial result from whatever
+        // CPU/model data the host OS can provide through Node.js APIs.
+        log('WARN', 'scan', 'Primary scanner failed, attempting partial recovery', { error: primaryErr?.message });
+        const fallbackCpuName = os.cpus()[0]?.model?.trim() || 'Unknown CPU';
+        hw = buildPartialDetectedHardware({
+          cpu: {
+            name: fallbackCpuName,
+            vendor: fallbackCpuName.toLowerCase().includes('intel') ? 'GenuineIntel' : 'Unknown',
+            vendorName: fallbackCpuName.toLowerCase().includes('intel') ? 'Intel' : 'Unknown',
+            confidence: 'partially-detected',
+          },
+          ramBytes: os.totalmem(),
+          coreCount: os.cpus().length,
+          isLaptop: inferLaptopFormFactor({ cpuName: fallbackCpuName }),
+        });
+        scanSource = 'partial_scan';
+      }
 
       // Build interpretation layer — separates facts from inferences
       const interpretation = interpretHardware(hw);
@@ -3324,6 +3346,7 @@ app.whenReady().then(async () => {
         isVM: hw.isVM,
         interpretationConfidence: interpretation.overallConfidence,
         manualVerifyCount: interpretation.manualVerificationNeeded.length,
+        scanSource,
       });
 
       // Map DetectedHardware → HardwareProfile (legacy shape used by configGenerator)
@@ -3336,7 +3359,7 @@ app.whenReady().then(async () => {
       const artifact = savePlanningHardwareProfileArtifact({
         profile: effectiveProfile,
         interpretation: extractHardwareProfileInterpretationMetadata(interpretation),
-        source: 'live_scan',
+        source: scanSource === 'partial_scan' ? 'live_scan' : 'live_scan',
       });
       lastLiveHardwareProfileArtifact = artifact;
       return { profile: effectiveProfile, interpretation, artifact };

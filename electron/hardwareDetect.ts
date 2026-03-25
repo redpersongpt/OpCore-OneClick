@@ -510,22 +510,27 @@ export async function detectWindowsHardware(): Promise<DetectedHardware> {
       maxBuffer: 1024 * 1024,
     }).catch(() => ({ stdout: fallback }));
 
+  // Core queries — CPU, GPU, board, chassis, manufacturer.
+  // These are essential for a usable profile and run with generous timeouts.
   const [cpuRes, cpuVendorRes, gpuRes, boardRes, chassisRes, manufRes, coresRes] = await Promise.all([
-    ps(WINDOWS_HARDWARE_QUERIES.cpuName, 'Unknown CPU', 10_000),
-    ps(WINDOWS_HARDWARE_QUERIES.cpuVendor, '', 10_000),
-    // PNPDeviceID gives "PCI\\VEN_10DE&DEV_2484&..." — extract vendor+device IDs
-    ps(WINDOWS_HARDWARE_QUERIES.gpuJson, '', 10_000),
-    ps(WINDOWS_HARDWARE_QUERIES.boardJson, '', 8_000),
-    ps(WINDOWS_HARDWARE_QUERIES.chassisTypes, '', 6_000),
-    ps(WINDOWS_HARDWARE_QUERIES.manufacturer, '', 6_000),
-    ps(WINDOWS_HARDWARE_QUERIES.coreCount, '', 8_000),
+    ps(WINDOWS_HARDWARE_QUERIES.cpuName, 'Unknown CPU', 15_000),
+    ps(WINDOWS_HARDWARE_QUERIES.cpuVendor, '', 15_000),
+    ps(WINDOWS_HARDWARE_QUERIES.gpuJson, '', 15_000),
+    ps(WINDOWS_HARDWARE_QUERIES.boardJson, '', 10_000),
+    ps(WINDOWS_HARDWARE_QUERIES.chassisTypes, '', 8_000),
+    ps(WINDOWS_HARDWARE_QUERIES.manufacturer, '', 8_000),
+    ps(WINDOWS_HARDWARE_QUERIES.coreCount, '', 10_000),
   ]);
+
+  // Secondary queries — model, battery, audio, network, HID.
+  // These enrich the profile but a usable result can be built without them.
+  // Use shorter timeouts so slow machines don't stall the primary scan.
   const [modelRes, batteryRes, audioRes, networkRes, hidRes] = await Promise.all([
-    ps(WINDOWS_HARDWARE_QUERIES.model, '', 3_500),
-    ps(WINDOWS_HARDWARE_QUERIES.batteryJson, '', 3_500),
-    ps(WINDOWS_HARDWARE_QUERIES.audioJson, '', 6_000),
-    ps(WINDOWS_HARDWARE_QUERIES.networkJson, '', 6_000),
-    ps(WINDOWS_HARDWARE_QUERIES.hidJson, '', 6_000),
+    ps(WINDOWS_HARDWARE_QUERIES.model, '', 6_000),
+    ps(WINDOWS_HARDWARE_QUERIES.batteryJson, '', 6_000),
+    ps(WINDOWS_HARDWARE_QUERIES.audioJson, '', 8_000),
+    ps(WINDOWS_HARDWARE_QUERIES.networkJson, '', 8_000),
+    ps(WINDOWS_HARDWARE_QUERIES.hidJson, '', 8_000),
   ]);
 
   const cpuName = cpuRes.stdout.trim().split('\n')[0] || pickFallbackCpuName();
@@ -920,6 +925,40 @@ export async function detectMacHardware(): Promise<DetectedHardware> {
 }
 
 import { sim } from './simulation.js';
+
+/**
+ * Build a minimal DetectedHardware from whatever partial data is available.
+ * Used when the primary scanner partially completes before an error.
+ */
+export function buildPartialDetectedHardware(partial: Partial<DetectedHardware>): DetectedHardware {
+  const fallbackCpu: CpuInfo = {
+    name: pickFallbackCpuName(),
+    vendor: 'Unknown',
+    vendorName: 'Unknown',
+    confidence: 'unverified',
+  };
+  const fallbackGpu: GpuDevice = {
+    name: 'Unknown GPU',
+    vendorId: null,
+    deviceId: null,
+    vendorName: 'Unknown',
+    confidence: 'unverified',
+  };
+  return {
+    cpu: partial.cpu ?? fallbackCpu,
+    gpus: partial.gpus?.length ? partial.gpus : [fallbackGpu],
+    primaryGpu: partial.primaryGpu ?? partial.gpus?.[0] ?? fallbackGpu,
+    motherboardVendor: partial.motherboardVendor ?? 'Unknown',
+    motherboardModel: partial.motherboardModel ?? 'Unknown',
+    ramBytes: partial.ramBytes ?? os.totalmem(),
+    coreCount: partial.coreCount ?? os.cpus().length,
+    isLaptop: partial.isLaptop ?? false,
+    isVM: partial.isVM ?? false,
+    audioDevices: partial.audioDevices ?? [],
+    networkDevices: partial.networkDevices ?? [],
+    inputDevices: partial.inputDevices ?? [],
+  };
+}
 
 // ── Entry point ───────────────────────────────────────────────────────────────
 

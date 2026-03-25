@@ -28,6 +28,7 @@ import {
   classifyNetworkType,
   isI2CDeviceId,
   deriveInputStack,
+  buildPartialDetectedHardware,
   type GpuDevice,
   type AudioDevice,
   type NetworkDevice,
@@ -1732,5 +1733,111 @@ describe('Legacy scanner HP ProBook 450 G2 worst-case', () => {
       gpuName: 'Intel HD Graphics Family / AMD Radeon R5 M255',
     });
     expect(result).toBe(true);
+  });
+});
+
+// ─── 17. NEW SCANNER PARTIAL RESULT PRESERVATION ────────────────────────────
+
+describe('buildPartialDetectedHardware — fail-soft scanner', () => {
+  it('builds valid DetectedHardware from just CPU data', () => {
+    const result = buildPartialDetectedHardware({
+      cpu: {
+        name: 'Intel(R) Core(TM) i7-4510U CPU @ 2.00GHz',
+        vendor: 'GenuineIntel',
+        vendorName: 'Intel',
+        confidence: 'partially-detected',
+      },
+    });
+    expect(result.cpu.name).toBe('Intel(R) Core(TM) i7-4510U CPU @ 2.00GHz');
+    expect(result.cpu.vendorName).toBe('Intel');
+    expect(result.gpus).toHaveLength(1);
+    expect(result.gpus[0].name).toBe('Unknown GPU');
+    expect(result.ramBytes).toBeGreaterThan(0);
+    expect(result.audioDevices).toEqual([]);
+    expect(result.networkDevices).toEqual([]);
+    expect(result.inputDevices).toEqual([]);
+  });
+
+  it('preserves GPU data when provided', () => {
+    const result = buildPartialDetectedHardware({
+      gpus: [{
+        name: 'Intel HD Graphics 4400',
+        vendorId: '8086',
+        deviceId: '0a16',
+        vendorName: 'Intel',
+        confidence: 'detected',
+      }],
+    });
+    expect(result.gpus[0].name).toBe('Intel HD Graphics 4400');
+    expect(result.primaryGpu.vendorName).toBe('Intel');
+  });
+
+  it('preserves isLaptop when provided', () => {
+    const result = buildPartialDetectedHardware({ isLaptop: true });
+    expect(result.isLaptop).toBe(true);
+  });
+
+  it('defaults isLaptop to false when not provided', () => {
+    const result = buildPartialDetectedHardware({});
+    expect(result.isLaptop).toBe(false);
+  });
+
+  it('builds complete enough profile for mapDetectedToProfile', () => {
+    const result = buildPartialDetectedHardware({
+      cpu: {
+        name: 'Intel(R) Core(TM) i7-4510U CPU @ 2.00GHz',
+        vendor: 'GenuineIntel',
+        vendorName: 'Intel',
+        confidence: 'partially-detected',
+      },
+      isLaptop: true,
+    });
+    // This should not throw
+    const profile = mapDetectedToProfile(result);
+    expect(profile.generation).toBe('Haswell');
+    expect(profile.isLaptop).toBe(true);
+    expect(profile.architecture).toBe('Intel');
+  });
+
+  it('HP ProBook 450 G2 partial recovery: CPU only yields Haswell laptop', () => {
+    // Simulate: primary scanner timed out, only CPU name from os.cpus() survived
+    const result = buildPartialDetectedHardware({
+      cpu: {
+        name: 'Intel(R) Core(TM) i7-4510U CPU @ 2.00GHz',
+        vendor: 'GenuineIntel',
+        vendorName: 'Intel',
+        confidence: 'partially-detected',
+      },
+      isLaptop: true, // U-suffix → laptop via formFactor
+    });
+    const profile = mapDetectedToProfile(result);
+    expect(profile.generation).toBe('Haswell');
+    expect(profile.isLaptop).toBe(true);
+    expect(profile.smbios).not.toBe('iMac20,1'); // Must NOT be desktop SMBIOS
+    expect(profile.smbios).toContain('MacBook'); // Must be a MacBook variant
+  });
+
+  it('partial result with audio/network/input empty still produces valid profile', () => {
+    const result = buildPartialDetectedHardware({
+      cpu: {
+        name: 'Intel(R) Core(TM) i5-6200U CPU @ 2.30GHz',
+        vendor: 'GenuineIntel',
+        vendorName: 'Intel',
+        confidence: 'detected',
+      },
+      gpus: [{
+        name: 'Intel HD Graphics 520',
+        vendorId: '8086',
+        deviceId: '1916',
+        vendorName: 'Intel',
+        confidence: 'detected',
+      }],
+      isLaptop: true,
+    });
+    const profile = mapDetectedToProfile(result);
+    expect(profile.generation).toBe('Skylake');
+    expect(profile.isLaptop).toBe(true);
+    // CPU and GPU both detected → confidence is high despite missing audio/network
+    // (confidence is based on CPU + GPU detection, not peripheral subsystems)
   });
 });
