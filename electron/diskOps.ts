@@ -564,10 +564,17 @@ export function createDiskOps(log: LogFunction): DiskOps {
     // Try soft dismount (/D) first, then hard-remove (/P) for any handle-locked volume.
     // /P is safe here: this function is only called immediately before a destructive
     // diskpart clean that wipes the entire disk anyway.
-    await runCmd(
-      `powershell -NoProfile -Command "Get-Partition -DiskNumber ${diskNum} | Where-Object { $_.DriveLetter } | ForEach-Object { $letter = $_.DriveLetter + ':'; try { mountvol $letter /D } catch {}; try { mountvol $letter /P } catch {} }"`,
-      register,
-    );
+    // Also set the partition offline to force Windows to release ALL handles (#49).
+    try {
+      await runCmd(
+        `powershell -NoProfile -Command "Get-Partition -DiskNumber ${diskNum} -ErrorAction SilentlyContinue | Where-Object { $_.DriveLetter } | ForEach-Object { $letter = $_.DriveLetter + ':'; try { mountvol $letter /D } catch {}; try { mountvol $letter /P } catch {}; Write-Output ('Detached ' + $letter) }"`,
+        register,
+      );
+    } catch (e: any) {
+      log('WARN', 'diskOps', 'detachWindowsDriveLetters failed — volume handles may persist', {
+        diskNum, error: e?.message,
+      });
+    }
   }
 
   async function assignWindowsDriveLetter(
@@ -1378,10 +1385,12 @@ export function createDiskOps(log: LogFunction): DiskOps {
             diskNum, partNum, attempt: attempt + 1,
           });
 
+          // Re-disable automount before Phase 2 — it was re-enabled at the end of Phase 1.
+          // Without this, Explorer grabs the raw partition handle between Phase 1 and Phase 2 (#49).
+          await runCmd('powershell -NoProfile -Command "\'automount disable\' | diskpart | Out-Null"', registerProcess).catch(() => {});
           // Clear handle locks: Explorer/Shell auto-mounts new partitions immediately.
-          // Even with automount disabled, some Windows builds still briefly grab handles.
           await detachWindowsDriveLetters(diskNum, registerProcess).catch(() => {});
-          await new Promise((resolve) => setTimeout(resolve, 1500));
+          await new Promise((resolve) => setTimeout(resolve, 2000));
 
           // Phase 2 diskpart: format WITHOUT noerr
           const phase2Script = buildWindowsFormatDiskpartScript(diskNum, partNum);
@@ -1483,7 +1492,9 @@ export function createDiskOps(log: LogFunction): DiskOps {
       let formatRecovered = false;
       try {
         // Re-enable automount before Format-Volume (may have been disabled in Phase 1)
-        await runCmd('powershell -NoProfile -Command "\'automount enable\' | diskpart | Out-Null"', registerProcess).catch(() => {});
+        await runCmd('powershell -NoProfile -Command "\'automount enable\' | diskpart | Out-Null"', registerProcess).catch((e: any) => {
+          log('ERROR', 'diskOps', 'Failed to re-enable automount — run "automount enable" in diskpart manually', { error: e?.message });
+        });
         await runCmd(
           `powershell -NoProfile -Command "try { Format-Volume -DiskNumber ${diskNum} -PartitionNumber ${partNum} -FileSystem FAT32 -NewFileSystemLabel 'OPENCORE' -Confirm:$false -Force -ErrorAction Stop } catch { throw }"`,
           registerProcess,
@@ -1517,7 +1528,9 @@ export function createDiskOps(log: LogFunction): DiskOps {
       }
       if (formatRecovered && driveLetter) return { diskNum, driveLetter };
       // Re-enable automount before throwing so Windows returns to normal state
-      await runCmd('powershell -NoProfile -Command "\'automount enable\' | diskpart | Out-Null"', registerProcess).catch(() => {});
+      await runCmd('powershell -NoProfile -Command "\'automount enable\' | diskpart | Out-Null"', registerProcess).catch((e: any) => {
+          log('ERROR', 'diskOps', 'Failed to re-enable automount — run "automount enable" in diskpart manually', { error: e?.message });
+        });
       throw new Error(
         `Disk format failed: Windows could not format the partition as FAT32. ` +
         'Another process may be locking the drive, or the drive controller is rejecting the format command. ' +
@@ -1801,10 +1814,36 @@ export function createDiskOps(log: LogFunction): DiskOps {
         );
 
         try {
+          // Preflight: verify drive letter is accessible before attempting copy
+          const driveRoot = `${driveLetter}:\\`;
+          for (let driveCheck = 0; driveCheck < 5; driveCheck++) {
+            if (fs.existsSync(driveRoot)) break;
+            log('WARN', 'usb-flash', `Drive ${driveLetter}: not yet accessible, waiting...`, { attempt: driveCheck + 1 });
+            await new Promise((resolve) => setTimeout(resolve, 1000));
+          }
+          if (!fs.existsSync(driveRoot)) {
+            throw new Error(`Drive ${driveLetter}: is not accessible after format. The drive may have been ejected or the format did not complete.`);
+          }
+
           onPhase('copy', `Copying EFI to ${driveLetter}:`);
           checkAborted();
           log('DEBUG', 'usb-flash', 'Copying EFI', { driveLetter });
-          await runCmd(`xcopy /E /I /H /Y "${path.join(efiPath, 'EFI')}" "${driveLetter}:\\EFI"`, registerProcess);
+          // Retry xcopy up to 3 times — transient failures from drive stabilizing after format
+          let copyAttempt = 0;
+          const maxCopyAttempts = 3;
+          while (true) {
+            try {
+              await runCmd(`xcopy /E /I /H /Y "${path.join(efiPath, 'EFI')}" "${driveLetter}:\\EFI"`, registerProcess);
+              break;
+            } catch (copyErr) {
+              copyAttempt++;
+              if (copyAttempt >= maxCopyAttempts) throw copyErr;
+              log('WARN', 'usb-flash', `EFI copy failed (attempt ${copyAttempt}/${maxCopyAttempts}), retrying...`, {
+                driveLetter, error: (copyErr as Error).message,
+              });
+              await new Promise((resolve) => setTimeout(resolve, 1500));
+            }
+          }
 
           // Copy recovery payload if present — non-fatal so EFI flash still succeeds
           const recoveryDir = path.join(efiPath, 'com.apple.recovery.boot');
