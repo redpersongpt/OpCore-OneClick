@@ -525,9 +525,16 @@ describe('OEM laptop model detection — form factor', () => {
     })).toBe(true);
   });
 
-  it('mobile CPU suffix without battery does NOT assume laptop', () => {
+  it('U-suffix CPU alone IS enough for laptop (U is never desktop)', () => {
     expect(inferLaptopFormFactor({
       cpuName: 'Intel(R) Core(TM) i7-4510U CPU @ 2.00GHz',
+      batteryPresent: false,
+    })).toBe(true);
+  });
+
+  it('H-suffix CPU without battery or model does NOT assume laptop', () => {
+    expect(inferLaptopFormFactor({
+      cpuName: 'Intel(R) Core(TM) i7-9750H CPU @ 2.60GHz',
       batteryPresent: false,
     })).toBe(false);
   });
@@ -1564,5 +1571,166 @@ describe('agdpmod=pikera correctness', () => {
     });
     const plist = generateConfigPlist(profile);
     expect(plist).not.toContain('agdpmod=pikera');
+  });
+});
+
+// ─── 16. UPSTREAM LAPTOP CLASSIFICATION: SIGNAL FUSION ──────────────────────
+
+describe('Laptop classification — signal fusion and resilience', () => {
+  // HP ProBook 450 G2 repro: all fragile signals fail, but U-suffix alone saves it
+  it('HP ProBook 450 G2: U-suffix alone classifies as laptop even with no chassis/model/battery', () => {
+    expect(inferLaptopFormFactor({
+      cpuName: 'Intel(R) Core(TM) i7-4510U CPU @ 2.00GHz',
+      chassisTypes: [],        // query failed, empty
+      modelName: '',           // query timed out
+      batteryPresent: false,   // query timed out
+    })).toBe(true);
+  });
+
+  it('U-suffix CPUs are always laptop', () => {
+    const uCpus = [
+      'Intel(R) Core(TM) i5-4200U CPU @ 1.60GHz',
+      'Intel(R) Core(TM) i7-5500U CPU @ 2.40GHz',
+      'Intel(R) Core(TM) i5-6200U CPU @ 2.30GHz',
+      'Intel(R) Core(TM) i7-8550U CPU @ 1.80GHz',
+      'Intel(R) Core(TM) i5-10210U CPU @ 1.60GHz',
+    ];
+    for (const cpu of uCpus) {
+      expect(inferLaptopFormFactor({ cpuName: cpu }), cpu).toBe(true);
+    }
+  });
+
+  it('Y-suffix CPUs are always laptop', () => {
+    expect(inferLaptopFormFactor({
+      cpuName: 'Intel(R) Core(TM) m3-7Y30 CPU @ 1.00GHz',
+    })).toBe(true);
+  });
+
+  it('chassis fallback of empty does not force desktop', () => {
+    // Legacy scanner with failed chassis query (fallback empty instead of "3")
+    expect(inferLaptopFormFactor({
+      cpuName: 'Intel(R) Core(TM) i7-4510U CPU @ 2.00GHz',
+      chassisTypes: [],
+    })).toBe(true);
+  });
+
+  it('chassis type 3 (Desktop) with U-suffix CPU still classifies as laptop', () => {
+    // Defense: even if chassis query wrongly returns desktop type,
+    // U-suffix CPU is definitive evidence
+    expect(inferLaptopFormFactor({
+      cpuName: 'Intel(R) Core(TM) i7-4510U CPU @ 2.00GHz',
+      chassisTypes: [3],  // Desktop chassis — wrong but U overrides
+    })).toBe(true);
+  });
+
+  it('H-suffix CPU + battery = laptop', () => {
+    expect(inferLaptopFormFactor({
+      cpuName: 'Intel(R) Core(TM) i7-9750H CPU @ 2.60GHz',
+      batteryPresent: true,
+    })).toBe(true);
+  });
+
+  it('H-suffix CPU + OEM laptop model = laptop', () => {
+    expect(inferLaptopFormFactor({
+      cpuName: 'Intel(R) Core(TM) i7-9750H CPU @ 2.60GHz',
+      modelName: 'Dell Latitude 5501',
+    })).toBe(true);
+  });
+
+  it('H-suffix CPU alone is NOT laptop (could be NUC/mini)', () => {
+    expect(inferLaptopFormFactor({
+      cpuName: 'Intel(R) Core(TM) i7-9750H CPU @ 2.60GHz',
+    })).toBe(false);
+  });
+
+  it('model name "HP ProBook 450 G2" alone is laptop', () => {
+    expect(inferLaptopFormFactor({
+      cpuName: 'Unknown CPU',
+      modelName: 'HP ProBook 450 G2',
+    })).toBe(true);
+  });
+
+  it('model name "Lenovo ThinkPad T440" alone is laptop', () => {
+    expect(inferLaptopFormFactor({
+      cpuName: 'Unknown CPU',
+      modelName: '20B7S0F200',  // ThinkPad model codes are opaque
+    })).toBe(false); // opaque model code is NOT enough
+    // But with manufacturer:
+    expect(inferLaptopFormFactor({
+      cpuName: 'Unknown CPU',
+      modelName: 'ThinkPad T440',
+    })).toBe(true);
+  });
+
+  it('mobile GPU + battery = laptop', () => {
+    expect(inferLaptopFormFactor({
+      cpuName: 'Unknown CPU',
+      batteryPresent: true,
+      gpuName: 'AMD Radeon R5 M255',
+    })).toBe(true);
+  });
+
+  it('mobile GPU + mobile CPU suffix = laptop', () => {
+    expect(inferLaptopFormFactor({
+      cpuName: 'Intel(R) Core(TM) i7-4710HQ CPU @ 2.50GHz',
+      gpuName: 'NVIDIA GeForce GTX 850M',
+    })).toBe(true);
+  });
+
+  it('real desktop CPU + no other signals = desktop (correct)', () => {
+    expect(inferLaptopFormFactor({
+      cpuName: 'Intel(R) Core(TM) i7-10700K CPU @ 3.80GHz',
+    })).toBe(false);
+  });
+
+  it('real desktop CPU + desktop chassis = desktop (correct)', () => {
+    expect(inferLaptopFormFactor({
+      cpuName: 'Intel(R) Core(TM) i7-10700K CPU @ 3.80GHz',
+      chassisTypes: [3],
+    })).toBe(false);
+  });
+
+  it('AMD Ryzen desktop CPU = desktop (correct)', () => {
+    expect(inferLaptopFormFactor({
+      cpuName: 'AMD Ryzen 7 5800X 8-Core Processor',
+    })).toBe(false);
+  });
+});
+
+describe('Legacy scanner HP ProBook 450 G2 worst-case', () => {
+  it('with all queries failing (empty fallbacks), U-suffix CPU still saves laptop', () => {
+    // Simulate: chassis='', model='', battery=false, manufacturer='Unknown'
+    // Only CPU name survived: i7-4510U
+    const result = inferLaptopFormFactor({
+      cpuName: 'Intel(R) Core(TM) i7-4510U CPU @ 2.00GHz',
+      chassisTypes: [],
+      modelName: '',
+      batteryPresent: false,
+      manufacturer: 'Unknown',
+      gpuName: 'Unknown GPU',
+    });
+    expect(result).toBe(true);
+  });
+
+  it('with only model surviving, ProBook hint saves laptop', () => {
+    const result = inferLaptopFormFactor({
+      cpuName: 'Unknown CPU',
+      chassisTypes: [],
+      modelName: 'HP ProBook 450 G2',
+      batteryPresent: false,
+    });
+    expect(result).toBe(true);
+  });
+
+  it('with all signals present, definitely laptop', () => {
+    const result = inferLaptopFormFactor({
+      cpuName: 'Intel(R) Core(TM) i7-4510U CPU @ 2.00GHz',
+      chassisTypes: [10],
+      modelName: 'HP ProBook 450 G2',
+      batteryPresent: true,
+      manufacturer: 'Hewlett-Packard',
+      gpuName: 'Intel HD Graphics Family / AMD Radeon R5 M255',
+    });
+    expect(result).toBe(true);
   });
 });

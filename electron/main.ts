@@ -1544,12 +1544,12 @@ async function getWindowsHardwareInfo(): Promise<HardwareProfile> {
     runWindowsProbe("Get-CimInstance CIM_VideoController | Select-Object -ExpandProperty Name", 'Unknown GPU', 10_000),
     runWindowsProbe("Get-CimInstance CIM_BaseBoard | Select-Object -ExpandProperty Product", 'Unknown Board', 8_000),
     runWindowsProbe("Get-CimInstance CIM_Processor | Select-Object -ExpandProperty NumberOfCores", '4', 8_000),
-    runWindowsProbe("Get-CimInstance CIM_SystemEnclosure | Select-Object -ExpandProperty ChassisTypes", '3', 6_000),
+    runWindowsProbe("Get-CimInstance CIM_SystemEnclosure | Select-Object -ExpandProperty ChassisTypes", '', 6_000),
     runWindowsProbe("Get-CimInstance CIM_ComputerSystem | Select-Object -ExpandProperty Manufacturer", 'Unknown', 6_000),
   ]);
   const [modelRaw, batteryRaw] = await Promise.all([
-    runWindowsProbe("Get-CimInstance CIM_ComputerSystem | Select-Object -ExpandProperty Model", '', 3_500),
-    runWindowsProbe("Get-CimInstance Win32_Battery | Select-Object -First 1 | ConvertTo-Json -Compress", '', 3_500),
+    runWindowsProbe("Get-CimInstance CIM_ComputerSystem | Select-Object -ExpandProperty Model", '', 6_000),
+    runWindowsProbe("Get-CimInstance Win32_Battery | Select-Object -First 1 | ConvertTo-Json -Compress", '', 6_000),
   ]);
 
   const cpuModel = cpuRaw.stdout.trim().split('\n')[0] || os.cpus()[0]?.model || 'Unknown CPU';
@@ -1563,15 +1563,18 @@ async function getWindowsHardwareInfo(): Promise<HardwareProfile> {
   const motherboard = baseboardRaw.stdout.trim().split('\n')[0] || 'Unknown';
   const coreCount = parseInt(coresRaw.stdout.trim()) || 4;
   
-  const chassisTypes = chassisRaw.stdout.trim().split('\n').map(c => parseInt(c.trim()));
+  const chassisTypes = chassisRaw.stdout.trim().split('\n').map(c => parseInt(c.trim())).filter(n => !isNaN(n) && n > 0);
+  const manufacturerStr = manufRaw.stdout.trim();
   const isLaptop = inferLaptopFormFactor({
     cpuName: cpuModel,
     chassisTypes,
     modelName: modelRaw.stdout.trim(),
     batteryPresent: batteryRaw.stdout.trim().length > 0 && batteryRaw.stdout.trim() !== 'null',
+    manufacturer: manufacturerStr,
+    gpuName: gpuModel,
   });
 
-  const manuf = manufRaw.stdout.trim().toLowerCase();
+  const manuf = manufacturerStr.toLowerCase();
   const isVM = manuf.includes('vmware') || manuf.includes('qemu') || manuf.includes('innotek') || manuf.includes('microsoft corporation') || manuf.includes('parallels');
 
   const generation = detectCpuGeneration(cpuModel);

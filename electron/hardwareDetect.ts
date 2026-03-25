@@ -646,15 +646,19 @@ export async function detectWindowsHardware(): Promise<DetectedHardware> {
 
   // Chassis / laptop detection
   const chassisNums = (chassisRes.stdout.match(/\d+/g) ?? []).map(Number);
+  const manufStr = manufRes.stdout.trim();
+  const gpuNameStr = gpus.map(g => g.name).join(' / ');
   const isLaptop = inferLaptopFormFactor({
     cpuName,
     chassisTypes: chassisNums,
     modelName: modelRes.stdout.trim(),
     batteryPresent: batteryRes.stdout.trim().length > 0 && batteryRes.stdout.trim() !== 'null',
+    manufacturer: manufStr,
+    gpuName: gpuNameStr,
   });
 
   // VM detection
-  const manuf = manufRes.stdout.trim().toLowerCase();
+  const manuf = manufStr.toLowerCase();
   const isVM = /vmware|qemu|innotek|microsoft corporation|parallels|xen|hyper-v/i.test(manuf);
 
   const coreCount = parseInt(coresRes.stdout.trim()) || os.cpus().length;
@@ -723,15 +727,19 @@ export async function detectLinuxHardware(): Promise<DetectedHardware> {
 
   // Chassis / laptop
   const chassisType = parseInt(chassisRes.stdout.trim()) || 0;
+  const sysVendorStr = sysVendorRes.stdout.trim();
+  const linuxGpuNameStr = gpus.map(g => g.name).join(' / ');
   const isLaptop = inferLaptopFormFactor({
     cpuName,
     chassisTypes: chassisType ? [chassisType] : [],
     modelName: boardModelRes.stdout.trim(),
     batteryPresent: batteryRes.stdout.trim().length > 0,
+    manufacturer: sysVendorStr,
+    gpuName: linuxGpuNameStr,
   });
 
   // VM
-  const sysVendor = sysVendorRes.stdout.trim().toLowerCase();
+  const sysVendor = sysVendorStr.toLowerCase();
   const isVM = /vmware|qemu|innotek|microsoft|parallels|xen/i.test(sysVendor);
 
   // Audio — parse lspci HDA entries for vendor:device IDs
