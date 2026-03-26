@@ -134,9 +134,18 @@ jobs:
             echo "No release artifacts found."
             exit 1
           fi
-          # --clobber replaces an existing release atomically (no delete+create race)
-          gh release create "$tag" "${files[@]}" \
-            --repo "$GITHUB_REPOSITORY" \
-            --title "$tag" \
-            --latest \
-            --clobber
+          # Upload assets to existing release, or create new release if none exists.
+          # This avoids the --clobber flag (unsupported in older gh) and the
+          # delete+create race condition.
+          if gh release view "$tag" --repo "$GITHUB_REPOSITORY" &>/dev/null; then
+            echo "Release $tag already exists — uploading artifacts"
+            gh release upload "$tag" "${files[@]}" \
+              --repo "$GITHUB_REPOSITORY" \
+              --clobber
+          else
+            echo "Creating release $tag"
+            gh release create "$tag" "${files[@]}" \
+              --repo "$GITHUB_REPOSITORY" \
+              --title "$tag" \
+              --latest
+          fi
