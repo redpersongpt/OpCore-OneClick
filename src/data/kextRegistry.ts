@@ -223,6 +223,18 @@ export const KEXT_REGISTRY: KextEntry[] = [
     canonicality: 'canonical_with_caveats',
   },
   {
+    name: 'AirportBrcmFixup',
+    repo: 'acidanthera/AirportBrcmFixup',
+    required: 'conditional',
+    category: 'wifi',
+    description: 'Broadcom Wi-Fi patch set for supported non-native card families.',
+    conditions: ['Broadcom BCM4352/BCM43602 or legacy Broadcom Wi-Fi path'],
+    minOS: '10.10',
+    dependsOn: ['Lilu'],
+    orderingAfter: ['Lilu'],
+    canonicality: 'canonical_with_caveats',
+  },
+  {
     name: 'BrcmPatchRAM',
     repo: 'acidanthera/BrcmPatchRAM',
     required: 'optional',

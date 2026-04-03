@@ -309,6 +309,55 @@ describe('getRequiredResources', () => {
     expect(r.kexts).toContain('VoodooPS2Controller.kext');
   });
 
+  it('adds itlwm only when the detected Wi-Fi chipset is Intel', () => {
+    const intel = getRequiredResources(fakeProfile({
+      isLaptop: true,
+      generation: 'Coffee Lake',
+      wifiChipset: 'Intel Wi-Fi 6 AX200',
+    }));
+    const broadcom = getRequiredResources(fakeProfile({
+      isLaptop: true,
+      generation: 'Coffee Lake',
+      wifiChipset: 'Broadcom BCM4352',
+    }));
+
+    expect(intel.kexts).toContain('itlwm.kext');
+    expect(broadcom.kexts).not.toContain('itlwm.kext');
+  });
+
+  it('adds AirportBrcmFixup for BCM4352-class Broadcom Wi-Fi on Ventura and older', () => {
+    const r = getRequiredResources(fakeProfile({
+      isLaptop: true,
+      generation: 'Haswell',
+      targetOS: 'macOS Ventura',
+      wifiChipset: 'Broadcom BCM4352',
+    }));
+    expect(r.kexts).toContain('AirportBrcmFixup.kext');
+    expect(r.kexts).not.toContain('itlwm.kext');
+  });
+
+  it('does not inject AirportBrcmFixup for BCM4360-class Broadcom Wi-Fi on Ventura and older', () => {
+    const r = getRequiredResources(fakeProfile({
+      isLaptop: true,
+      generation: 'Haswell',
+      targetOS: 'macOS Ventura',
+      wifiChipset: 'Broadcom BCM4360',
+    }));
+    expect(r.kexts).not.toContain('AirportBrcmFixup.kext');
+    expect(r.kexts).not.toContain('itlwm.kext');
+  });
+
+  it('does not treat Sonoma Broadcom Wi-Fi as a normal injected AirportBrcmFixup path', () => {
+    const r = getRequiredResources(fakeProfile({
+      isLaptop: true,
+      generation: 'Haswell',
+      targetOS: 'macOS Sonoma',
+      wifiChipset: 'Broadcom BCM4352',
+    }));
+    expect(r.kexts).not.toContain('AirportBrcmFixup.kext');
+    expect(r.kexts).not.toContain('itlwm.kext');
+  });
+
   it('uses SSDT-AWAC for Coffee Lake desktops', () => {
     const r = getRequiredResources(fakeProfile({
       architecture: 'Intel',

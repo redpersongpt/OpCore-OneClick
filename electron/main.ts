@@ -1761,6 +1761,7 @@ const KEXT_REGISTRY: Record<string, KextRegistryEntry> = {
   'IntelMausi.kext':                    { repo: 'acidanthera/IntelMausi',              assetFilter: 'RELEASE' },
   'RealtekRTL8111.kext':                { repo: 'Mieze/RTL8111_driver_for_OS_X',      assetFilter: 'RealtekRTL8111' },
   'itlwm.kext':                          { repo: 'OpenIntelWireless/itlwm',            assetFilter: 'itlwm' },
+  'AirportBrcmFixup.kext':              { repo: 'acidanthera/AirportBrcmFixup',       assetFilter: 'RELEASE' },
   'USBInjectAll.kext':                  { repo: 'Sniki/OS-X-USB-Inject-All',          assetFilter: 'RELEASE' },
 };
 

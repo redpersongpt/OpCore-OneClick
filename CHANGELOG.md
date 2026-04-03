@@ -2,6 +2,14 @@
 
 Project note: the app is now branded as `OpCore-OneClick`. Legacy repo/update coordinates and the persisted app-data path remain unchanged for continuity.
 
+## 3.2.8 - 2026-04-03
+
+### Fix Broadcom Wi-Fi planning/generation drift
+- Stop auto-injecting `itlwm.kext` into modern laptops unless the detected Wi-Fi chipset is actually Intel. Broadcom laptops were incorrectly inheriting the Intel Wi-Fi path before.
+- Add a conservative Broadcom Wi-Fi policy: supported BCM4352/BCM43602 paths now pull in `AirportBrcmFixup.kext` on Ventura and older, while BCM4360 stays on the native-style pre-Sonoma path.
+- Sonoma and newer now report Broadcom Wi-Fi honestly in compatibility analysis instead of implying a clean native route where OCLP/root patches or a card swap are the real next step.
+- Add `AirportBrcmFixup.kext` to the app kext registries so the generated Broadcom Wi-Fi path is fetchable and visible in resource planning.
+
 ## 2.7.20 - 2026-03-23
 
 ### Global Network Auto-Retry and Auto-Resume

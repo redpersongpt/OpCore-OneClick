@@ -39,6 +39,7 @@ const KEXT_REGISTRY: Record<string, KextRegistryEntry> = {
   'RestrictEvents.kext':             { repo: 'acidanthera/RestrictEvents', assetFilter: 'RELEASE' },
   'NVMeFix.kext':                    { repo: 'acidanthera/NVMeFix', assetFilter: 'RELEASE' },
   'CPUTopologyRebuild.kext':         { repo: 'b00t0x/CpuTopologyRebuild', assetFilter: 'RELEASE' },
+  'AirportBrcmFixup.kext':           { repo: 'acidanthera/AirportBrcmFixup', assetFilter: 'RELEASE' },
 };
 
 // ─── Resource plan completeness ─────────────────────────────────────────────
@@ -205,6 +206,16 @@ describe('buildResourcePlan — architecture matrix', () => {
       name: 'Intel Coffee Lake laptop',
       profile: fakeProfile({ generation: 'Coffee Lake', isLaptop: true }),
       expectedKexts: ['Lilu.kext', 'VirtualSMC.kext', 'SMCBatteryManager.kext', 'VoodooPS2Controller.kext'],
+      expectedSsdts: ['SSDT-PNLF.aml'],
+    },
+    {
+      name: 'Intel Haswell laptop with Broadcom BCM4352',
+      profile: fakeProfile({
+        generation: 'Haswell',
+        isLaptop: true,
+        wifiChipset: 'Broadcom BCM4352',
+      }),
+      expectedKexts: ['Lilu.kext', 'VirtualSMC.kext', 'SMCBatteryManager.kext', 'AirportBrcmFixup.kext'],
       expectedSsdts: ['SSDT-PNLF.aml'],
     },
   ];

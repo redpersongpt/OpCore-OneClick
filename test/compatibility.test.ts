@@ -164,6 +164,35 @@ describe('checkCompatibility — warnings', () => {
   });
 });
 
+describe('checkCompatibility — Broadcom Wi-Fi policy', () => {
+  it('marks Sonoma-era Broadcom Wi-Fi as risky instead of pretending it is a clean native path', () => {
+    const report = checkCompatibility(fakeProfile({
+      generation: 'Coffee Lake',
+      isLaptop: true,
+      targetOS: 'macOS Sonoma',
+      wifiChipset: 'Broadcom BCM4352',
+      gpu: 'Intel UHD Graphics 630',
+    }));
+
+    expect(['experimental', 'risky']).toContain(report.level);
+    expect(report.warnings.some((warning) => /broadcom wi-fi/i.test(warning))).toBe(true);
+    expect(report.warnings.some((warning) => /sonoma/i.test(warning))).toBe(true);
+  });
+
+  it('marks legacy Broadcom Wi-Fi as risky on Big Sur and newer', () => {
+    const report = checkCompatibility(fakeProfile({
+      generation: 'Haswell',
+      isLaptop: true,
+      targetOS: 'macOS Big Sur 11',
+      wifiChipset: 'Broadcom BCM4331',
+      gpu: 'Intel HD Graphics 4600',
+    }));
+
+    expect(report.level).toBe('risky');
+    expect(report.warnings.some((warning) => /catalina/i.test(warning))).toBe(true);
+  });
+});
+
 // ─── Next actions ───────────────────────────────────────────────────────────
 
 describe('checkCompatibility — next actions', () => {

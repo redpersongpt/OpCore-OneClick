@@ -9,6 +9,7 @@ import {
     parseMacOSVersion,
     type HardwareGpuDeviceSummary,
 } from './hackintoshRules.js';
+import { classifyWifiChipsetFamily, getBroadcomWifiPolicy } from './wifiPolicy.js';
 
 // ── SIP Policy ──────────────────────────────────────────────────────────────
 // csr-active-config values, least-permissive first.
@@ -755,13 +756,14 @@ export function getRequiredResources(profile: HardwareProfile) {
             pushSsdt('SSDT-RHUB.aml');
         }
 
-        // Intel Wi-Fi: most laptops Skylake+ have Intel Wi-Fi cards.
-        // AirportItlwm provides native-like Wi-Fi including Recovery support,
-        // but requires SecureBootModel to be non-Disabled.
-        // Since we set SecureBootModel=Disabled for broad compat, use itlwm.
-        // itlwm uses the Heliport companion app and works without SecureBootModel.
+        // Intel Wi-Fi: only auto-select when hardware scan actually resolved an Intel card.
+        // The older blanket "modern laptop => itlwm" heuristic was wrong for Broadcom paths.
+        // Since we set SecureBootModel=Disabled for broad compat, use itlwm instead of AirportItlwm.
         // Source: Dortania ktext.html, OpenIntelWireless docs
-        if (['Skylake', 'Kaby Lake', 'Coffee Lake', 'Comet Lake', 'Ice Lake'].includes(profile.generation)) {
+        if (
+            ['Skylake', 'Kaby Lake', 'Coffee Lake', 'Comet Lake', 'Ice Lake'].includes(profile.generation)
+            && classifyWifiChipsetFamily(profile.wifiChipset) === 'intel'
+        ) {
             pushUnique('itlwm.kext');
         }
 
@@ -782,11 +784,11 @@ export function getRequiredResources(profile: HardwareProfile) {
     // Intel Bluetooth on Tahoe — Source: tahoe.html
     // (boot-arg -ibtcompatbeta handled in config generator boot-args section)
 
-    // Broadcom WiFi on Sonoma+ — Source: tahoe.html
-    // AppleBCMWLANCompanion brings back support without root patching (requires VT-d)
-    // Only for Intel systems since AMD doesn't have VT-d
-    if (osVer >= 14 && profile.architecture === 'Intel') {
-        // Will be conditionally added if Broadcom card detected
+    const broadcomWifiPolicy = getBroadcomWifiPolicy(profile.wifiChipset, profile.targetOS);
+    if (broadcomWifiPolicy) {
+        for (const kext of broadcomWifiPolicy.autoKexts) {
+            pushUnique(kext);
+        }
     }
 
     const needsAmdCpuSsdt = /\b(a520|b550|a620|b650|x670|x670e|b850|x870|x870e)\b/.test(motherboard);

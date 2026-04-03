@@ -1032,19 +1032,42 @@ describe('Dortania Gap: audio codec → layout-id', () => {
 describe('Dortania Gap: Intel Wi-Fi kext for laptops', () => {
   for (const gen of ['Skylake', 'Kaby Lake', 'Coffee Lake', 'Comet Lake', 'Ice Lake'] as const) {
     it(`${gen} laptop includes itlwm.kext`, () => {
-      const r = getRequiredResources(profile({ generation: gen, isLaptop: true }));
+      const r = getRequiredResources(profile({
+        generation: gen,
+        isLaptop: true,
+        wifiChipset: 'Intel Wi-Fi 6 AX200',
+      }));
       expect(r.kexts).toContain('itlwm.kext');
     });
   }
 
   it('desktop does NOT include itlwm', () => {
-    const r = getRequiredResources(profile({ generation: 'Coffee Lake', isLaptop: false }));
+    const r = getRequiredResources(profile({
+      generation: 'Coffee Lake',
+      isLaptop: false,
+      wifiChipset: 'Intel Wi-Fi 6 AX200',
+    }));
     expect(r.kexts).not.toContain('itlwm.kext');
   });
 
   it('Sandy Bridge laptop does NOT include itlwm', () => {
-    const r = getRequiredResources(profile({ generation: 'Sandy Bridge', isLaptop: true }));
+    const r = getRequiredResources(profile({
+      generation: 'Sandy Bridge',
+      isLaptop: true,
+      wifiChipset: 'Intel Wi-Fi 6 AX200',
+    }));
     expect(r.kexts).not.toContain('itlwm.kext');
+  });
+
+  it('Broadcom laptops do NOT inherit the Intel itlwm path', () => {
+    const r = getRequiredResources(profile({
+      generation: 'Haswell',
+      isLaptop: true,
+      wifiChipset: 'Broadcom BCM4352',
+      targetOS: 'macOS Ventura 13',
+    }));
+    expect(r.kexts).not.toContain('itlwm.kext');
+    expect(r.kexts).toContain('AirportBrcmFixup.kext');
   });
 });
 

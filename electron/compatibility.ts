@@ -11,6 +11,7 @@ import {
   hasUnsupportedDiscreteGpu,
   parseMacOSVersion,
 } from './hackintoshRules.js';
+import { getBroadcomWifiPolicy } from './wifiPolicy.js';
 
 export type CompatibilityLevel =
   | 'supported'
@@ -280,6 +281,17 @@ function buildCompatibilityNextActions(
     });
   }
 
+  if (report.warnings.some((warning) => /broadcom wi-fi/i.test(warning))) {
+    addAction({
+      title: 'Validate the Broadcom wireless path separately',
+      detail: report.warnings.some((warning) => /sonoma|sequoia|tahoe|root patches|oclp/i.test(warning))
+        ? 'This Broadcom Wi-Fi path is no longer a clean native route on newer macOS targets. Expect OCLP/root patches or a replacement card if wireless matters.'
+        : 'Broadcom Wi-Fi support on this card family is conditional. Confirm the exact card model, verify whether AirportBrcmFixup is enough, and treat Bluetooth as a separate check.',
+      source: 'rule',
+      confidence: 'medium',
+    });
+  }
+
   if (report.warnings.some((warning) => /discrete gpu/i.test(warning))) {
     addAction({
       title: 'Force the laptop onto the iGPU path',
@@ -429,6 +441,17 @@ function buildMostLikelyFailurePoints(
     });
   }
 
+  if (report.warnings.some((warning) => /broadcom wi-fi/i.test(warning))) {
+    addCandidate('broadcom-wireless', {
+      title: 'Broadcom Wi-Fi support path may still need manual validation',
+      detail: report.warnings.some((warning) => /sonoma|sequoia|tahoe|root patches|oclp/i.test(warning))
+        ? 'Newer macOS targets dropped this Broadcom path as a clean native route. Wireless may need OCLP/root patches or a replacement card even if the rest of the machine is bootable.'
+        : 'This Broadcom Wi-Fi family is only conditionally supported. Expect card-model-specific validation before you trust wireless or Bluetooth behavior.',
+      source: 'rule',
+      weight: report.warnings.some((warning) => /sonoma|sequoia|tahoe|root patches|oclp/i.test(warning)) ? 8 : 5,
+    });
+  }
+
   if (report.communityEvidence?.whatDidNotWork.some((item) => /thunderbolt/i.test(item))) {
     addCandidate('thunderbolt', {
       title: 'Thunderbolt or advanced I/O features',
@@ -514,6 +537,32 @@ export function checkCompatibility(
   let advisoryFallbackCeiling: number | null = null;
 
   report.communityEvidence = hasCommunityEvidence ? communityEvidence : null;
+
+  const broadcomWifiPolicy = getBroadcomWifiPolicy(profile.wifiChipset, profile.targetOS);
+  if (broadcomWifiPolicy?.supportClass === 'sonoma_root_patch') {
+    applyAdvisoryLevel(
+      report,
+      'risky',
+      'Broadcom Wi-Fi path detected. Sonoma and newer removed this as a clean native wireless route, so EFI planning can continue but wireless now depends on OCLP/root patches or a replacement card.',
+      `Broadcom Wi-Fi detected (${broadcomWifiPolicy.chipset}). Sonoma and newer are not a clean native path for this card family.`,
+    );
+  } else if (broadcomWifiPolicy?.supportClass === 'legacy_unsupported_on_target') {
+    applyAdvisoryLevel(
+      report,
+      'risky',
+      'Legacy Broadcom Wi-Fi path detected. The rest of the machine may still boot, but this wireless card family tops out around Catalina and should not be treated as a normal modern macOS path.',
+      `Broadcom Wi-Fi detected (${broadcomWifiPolicy.chipset}). This older card family tops out around Catalina and is not a normal ${profile.targetOS} wireless path.`,
+    );
+  } else if (broadcomWifiPolicy?.supportClass === 'unknown_broadcom') {
+    applyAdvisoryLevel(
+      report,
+      'experimental',
+      'Broadcom Wi-Fi path detected, but the exact chipset support is not modeled cleanly in the generator yet. Planning can continue, but wireless should stay an explicit manual-validation item.',
+      `Broadcom Wi-Fi detected (${broadcomWifiPolicy.chipset}), but the exact support path is not modeled yet.`,
+    );
+  } else if (broadcomWifiPolicy) {
+    pushUnique(report.warnings, broadcomWifiPolicy.summary);
+  }
 
   if (report.confidence === 'low') {
     applyAdvisoryLevel(
