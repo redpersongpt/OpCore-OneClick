@@ -494,6 +494,68 @@ function log(level: string, ctx: string, msg: string, data?: Record<string, unkn
   if (typeof fn === 'function') (fn as (c: string, m: string, d?: Record<string, unknown>) => void)(ctx, msg, data);
 }
 
+/**
+ * Safely remove a <dict>...</dict> block from plist XML that contains the given string value.
+ * Unlike a greedy regex, this finds the target <string>, then walks to its enclosing <dict>/<\/dict>
+ * so it cannot accidentally span across top-level plist sections.
+ */
+function removePlistDictContaining(xml: string, targetValue: string): string {
+  let result = xml;
+  let searchFrom = 0;
+  // eslint-disable-next-line no-constant-condition
+  while (true) {
+    const needle = `<string>${targetValue}</string>`;
+    const idx = result.indexOf(needle, searchFrom);
+    if (idx === -1) break;
+
+    // Walk backwards from idx to find the nearest <dict> that is NOT nested inside another
+    let dictStart = -1;
+    let depth = 0;
+    for (let i = idx - 1; i >= 0; i--) {
+      if (result.substring(i, i + 7) === '</dict>') {
+        depth++;
+      } else if (result.substring(i, i + 6) === '<dict>') {
+        if (depth === 0) {
+          dictStart = i;
+          break;
+        }
+        depth--;
+      }
+    }
+
+    // Walk forwards from idx to find the matching </dict>
+    let dictEnd = -1;
+    depth = 0;
+    const afterNeedle = idx + needle.length;
+    for (let i = afterNeedle; i < result.length; i++) {
+      if (result.substring(i, i + 6) === '<dict>') {
+        depth++;
+      } else if (result.substring(i, i + 7) === '</dict>') {
+        if (depth === 0) {
+          dictEnd = i + 7; // include '</dict>'
+          break;
+        }
+        depth--;
+      }
+    }
+
+    if (dictStart === -1 || dictEnd === -1) {
+      searchFrom = idx + needle.length;
+      continue;
+    }
+
+    // Also consume leading whitespace/newline before the <dict>
+    let trimStart = dictStart;
+    while (trimStart > 0 && (result[trimStart - 1] === ' ' || result[trimStart - 1] === '\t' || result[trimStart - 1] === '\n' || result[trimStart - 1] === '\r')) {
+      trimStart--;
+    }
+
+    result = result.substring(0, trimStart) + result.substring(dictEnd);
+    // Don't advance searchFrom — content shifted left
+  }
+  return result;
+}
+
 function inferFailureTriggerFromChannel(channel: string): IssueReportTrigger {
   switch (channel) {
     case 'build-efi':
@@ -1534,17 +1596,13 @@ async function createEfiStructure(
     if (fs.existsSync(configPath)) {
       let configContent = fs.readFileSync(configPath, 'utf-8');
       for (const ssdt of optionalMissing) {
-        const escaped = ssdt.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-        const ssdtBlock = new RegExp(`\\s*<dict>[\\s\\S]*?<string>${escaped}</string>[\\s\\S]*?</dict>`, 'g');
-        configContent = configContent.replace(ssdtBlock, '');
+        configContent = removePlistDictContaining(configContent, ssdt);
         log('WARN', 'efi', `Removed optional SSDT ${ssdt} from config.plist (download failed, falling back to PS2 path)`, { ssdt });
       }
       // Also remove VoodooI2C kexts if SSDT-GPIO was dropped (they need GPIO to work)
       if (optionalMissing.includes('SSDT-GPIO.aml')) {
         for (const kext of ['VoodooI2C.kext', 'VoodooI2CHID.kext', 'VoodooI2C.kext/Contents/PlugIns/VoodooI2CHID.kext']) {
-          const escapedKext = kext.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-          const kextBlock = new RegExp(`\\s*<dict>[\\s\\S]*?<string>${escapedKext}</string>[\\s\\S]*?</dict>`, 'g');
-          configContent = configContent.replace(kextBlock, '');
+          configContent = removePlistDictContaining(configContent, kext);
         }
         log('WARN', 'efi', 'Removed VoodooI2C kexts from config.plist (SSDT-GPIO unavailable, falling back to PS2)', {});
       }
@@ -3597,12 +3655,7 @@ app.whenReady().then(async () => {
           for (const fk of optionalFailures) {
             // Remove the entire <dict>...</dict> block for this kext from Kernel/Add
             const bundlePath = fk.name.endsWith('.kext') ? fk.name : `${fk.name}.kext`;
-            const escapedName = bundlePath.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-            const kextBlockPattern = new RegExp(
-              `\\s*<dict>[\\s\\S]*?<string>${escapedName}</string>[\\s\\S]*?</dict>`,
-              'g'
-            );
-            configContent = configContent.replace(kextBlockPattern, '');
+            configContent = removePlistDictContaining(configContent, bundlePath);
             log('WARN', 'kext', `Removed optional kext ${fk.name} from config.plist (download failed, non-fatal)`, {
               kext: fk.name, repo: fk.repo, error: fk.error,
             });
