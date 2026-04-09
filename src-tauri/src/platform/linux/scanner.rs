@@ -447,9 +447,14 @@ pub async fn scan() -> Result<DetectedHardware, AppError> {
     let battery_present = !battery_lines.is_empty();
 
     let gpu_name_str: String = gpus.iter().map(|g| g.name.as_str()).collect::<Vec<_>>().join(" / ");
+    let chassis_types: Vec<u32> = if chassis_type > 0 {
+        vec![chassis_type]
+    } else {
+        Vec::new()
+    };
     let is_laptop = infer_laptop_form_factor(&FormFactorEvidence {
         cpu_name: &cpu_name,
-        chassis_types: if chassis_type > 0 { &[chassis_type] } else { &[] },
+        chassis_types: &chassis_types,
         model_name: &board_model_res,
         battery_present,
         manufacturer: &sys_vendor_res,
