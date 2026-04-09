@@ -91,7 +91,7 @@ export function Modal({
               )}
 
               {/* Body */}
-              <div className={noPadding ? '' : 'px-5 py-4'}>
+              <div className={`${noPadding ? '' : 'px-5 py-4'} max-h-[70vh] overflow-y-auto`}>
                 {children}
               </div>
 

@@ -294,7 +294,7 @@ export default function Settings({ open, onClose, onOpenTroubleshoot }: Settings
         </section>
 
         {/* Diagnostics + Cache row */}
-        <section className="grid grid-cols-1 gap-3 md:grid-cols-2">
+        <section className="grid grid-cols-2 gap-3">
           <div className="rounded-lg border border-[--border-subtle] bg-[--surface-1] px-4 py-3">
             <p className="text-[0.8125rem] font-medium text-[--text-primary]">Diagnostics</p>
             <p className="text-[0.6875rem] text-[--text-tertiary] mt-1 leading-snug">
@@ -331,7 +331,7 @@ export default function Settings({ open, onClose, onOpenTroubleshoot }: Settings
         </section>
 
         {/* Send Report + Troubleshoot */}
-        <section className="grid grid-cols-1 gap-3 md:grid-cols-2">
+        <section className="grid grid-cols-2 gap-3">
           <div className="rounded-lg border border-[--border-subtle] bg-[--surface-1] px-4 py-3">
             <p className="text-[0.8125rem] font-medium text-[--text-primary] flex items-center gap-2">
               <Bug size={14} className="text-[--color-red-5]" />

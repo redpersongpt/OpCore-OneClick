@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback, useRef } from 'react';
+import { useEffect, useState, useCallback, useRef, useMemo } from 'react';
 import { AnimatePresence, motion } from 'motion/react';
 import { useWizard } from '../stores/wizard';
 import { useHardware } from '../stores/hardware';
@@ -7,6 +7,7 @@ import { useCompatibility } from '../stores/compatibility';
 import { buildProfile } from '../lib/buildProfile';
 import { formatMacOsLabel } from '../lib/macosVersion';
 import { makeDemoBuildResult } from '../lib/demoData';
+import { detectPlatform, getQuotePool, getRandomQuote } from '../lib/buildQuotes';
 import { onTaskUpdate } from '../bridge/events';
 import { EmptyState } from '../components/feedback/EmptyState';
 import { Progress } from '../components/ui/Progress';
@@ -54,6 +55,19 @@ export default function Build() {
   const [phaseMessage, setPhaseMessage] = useState('');
   const [completedPhases, setCompletedPhases] = useState<Set<string>>(new Set());
   const [started, setStarted] = useState(false);
+  const [funQuote, setFunQuote] = useState('');
+
+  // Spinning quotes during build
+  const quotePool = useMemo(() => getQuotePool(detectPlatform()), []);
+
+  useEffect(() => {
+    if (!started || buildResult) return;
+    setFunQuote(getRandomQuote(quotePool));
+    const interval = setInterval(() => {
+      setFunQuote((prev) => getRandomQuote(quotePool, prev));
+    }, 4000);
+    return () => clearInterval(interval);
+  }, [started, buildResult, quotePool]);
 
   useEffect(
     () => () => {
@@ -340,7 +354,7 @@ export default function Build() {
         <Progress value={progress * 100} variant="accent" height={3} label="Build progress" className="mb-3" />
       </motion.div>
 
-      <motion.div variants={itemVariants} className="flex items-center justify-between mb-6">
+      <motion.div variants={itemVariants} className="flex items-center justify-between mb-3">
         <div className="flex items-center gap-2">
           <motion.span
             className="size-2 rounded-full bg-[--accent]"
@@ -353,6 +367,20 @@ export default function Build() {
           {Math.round(progress * 100)}%
         </Badge>
       </motion.div>
+
+      {/* Fun quote */}
+      <AnimatePresence mode="wait">
+        <motion.p
+          key={funQuote}
+          initial={{ opacity: 0, y: 4 }}
+          animate={{ opacity: 1, y: 0 }}
+          exit={{ opacity: 0, y: -4 }}
+          transition={{ duration: 0.3 }}
+          className="text-[0.6875rem] text-[--text-tertiary] italic mb-6 min-h-[1.25rem]"
+        >
+          {funQuote}
+        </motion.p>
+      </AnimatePresence>
 
       <motion.div
         variants={itemVariants}

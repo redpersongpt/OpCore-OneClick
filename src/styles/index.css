@@ -39,6 +39,7 @@
   --color-green-3: #166534;
   --color-green-5: #22c55e;
   --color-green-6: #4ade80;
+  --color-green-7: #86efac;
 
   /* Amber */
   --color-amber-1: #1c1200;
@@ -51,6 +52,7 @@
   --color-red-3: #7f1d1d;
   --color-red-5: #ef4444;
   --color-red-6: #f87171;
+  --color-red-7: #fca5a5;
 
   /* Semantic surfaces */
   --surface-background: var(--color-gray-1);
