@@ -13,6 +13,10 @@ vi.mock('@tauri-apps/plugin-dialog', () => ({
   save: vi.fn(),
 }));
 
+vi.mock('@tauri-apps/plugin-shell', () => ({
+  open: vi.fn(),
+}));
+
 vi.mock('../bridge/invoke', () => ({
   api: {
     logGetTail: vi.fn(),
@@ -22,6 +26,10 @@ vi.mock('../bridge/invoke', () => ({
   },
 }));
 
+// Mock fetch for update checker
+const mockFetch = vi.fn();
+vi.stubGlobal('fetch', mockFetch);
+
 describe('Settings', () => {
   beforeEach(() => {
     vi.mocked(getVersion).mockResolvedValue('4.0.0');
@@ -30,6 +38,16 @@ describe('Settings', () => {
     vi.mocked(api.logGetTail).mockResolvedValue('line one\nline two');
     vi.mocked(api.saveSupportLog).mockResolvedValue(undefined);
     vi.mocked(api.clearAppCache).mockResolvedValue(undefined);
+
+    mockFetch.mockResolvedValue({
+      ok: true,
+      json: () => Promise.resolve({
+        tag_name: 'v4.0.0',
+        html_url: 'https://github.com/redpersongpt/OpCore-OneClick/releases/tag/v4.0.0',
+        body: 'Release notes',
+        published_at: '2026-01-01T00:00:00Z',
+      }),
+    });
   });
 
   it('loads version and log tail when opened', async () => {

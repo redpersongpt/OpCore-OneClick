@@ -15,6 +15,7 @@ import Review from './pages/Review';
 import Deploy from './pages/Deploy';
 import Complete from './pages/Complete';
 import Settings from './pages/Settings';
+import Troubleshoot from './pages/Troubleshoot';
 
 const pages: Record<string, React.ComponentType> = {
   welcome: Welcome,
@@ -32,6 +33,7 @@ export default function App() {
   const step = useWizard((s) => s.step);
   const handleTaskUpdate = useTasks((s) => s.handleUpdate);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [troubleshootOpen, setTroubleshootOpen] = useState(false);
 
   useEffect(() => {
     let unlisten: (() => void) | undefined;
@@ -57,7 +59,15 @@ export default function App() {
           </ErrorBoundary>
         </motion.div>
       </Shell>
-      <Settings open={settingsOpen} onClose={() => setSettingsOpen(false)} />
+      <Settings
+        open={settingsOpen}
+        onClose={() => setSettingsOpen(false)}
+        onOpenTroubleshoot={() => setTroubleshootOpen(true)}
+      />
+      <Troubleshoot
+        open={troubleshootOpen}
+        onClose={() => setTroubleshootOpen(false)}
+      />
     </>
   );
 }
