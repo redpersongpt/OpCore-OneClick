@@ -21,11 +21,11 @@
 
 ---
 
-Review-first desktop utility for building and validating OpenCore-based macOS installer workflows on supported PC hardware.
+OpCore-OneClick is a desktop app that helps you prepare an OpenCore-based macOS installer on supported PC hardware.
 
-OpCore-OneClick, formerly macOS One-Click, scans the target machine, validates the hardware path, builds the EFI, fetches required recovery resources where applicable, and prepares deployment media without hiding the risky parts.
+It scans the machine, checks the hardware path, builds the EFI, downloads recovery files when needed, and prepares the target drive without skipping the parts that still need user review.
 
-## Overview
+## What It Does
 
 - Hardware scan for CPU, GPU, chipset, storage, and peripherals
 - Compatibility validation before EFI generation or deployment
@@ -41,12 +41,18 @@ OpCore-OneClick, formerly macOS One-Click, scans the target machine, validates t
 4. Fetch the required recovery and dependency assets.
 5. Deploy to a USB drive or boot partition.
 
-## Safeguards
+## Safety Checks
 
 - Blocks unsupported GPU and display paths early
 - Verifies EFI layout and configuration consistency before deployment
 - Keeps recovery downloads resumable across restarts when the saved session is still valid
 - Leaves BIOS changes and final install decisions under user review
+
+## Platform Support
+
+- Available on Windows, macOS, and Linux
+- Built for preparing OpenCore-based macOS install media on supported PC hardware
+- Some paths still depend on your hardware, network adapter, and chosen macOS version
 
 ## Download
 
