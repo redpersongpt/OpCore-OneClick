@@ -94,6 +94,13 @@ pub fn kext_registry_entry(kext_name: &str) -> Option<KextRegistryEntry> {
         "AirportItlwm.kext" => ("OpenIntelWireless/itlwm", Some("AirportItlwm"), None, None),
         "AirportBrcmFixup.kext" => ("acidanthera/AirportBrcmFixup", Some("RELEASE"), None, None),
         "USBInjectAll.kext" => ("Sniki/OS-X-USB-Inject-All", Some("RELEASE"), None, None),
+        "IntelBluetoothFirmware.kext" => ("OpenIntelWireless/IntelBluetoothFirmware", Some("IntelBluetoothFirmware"), None, None),
+        "BlueToolFixup.kext" => ("acidanthera/BrcmPatchRAM", Some("RELEASE"), None, None),
+        "BrcmPatchRAM3.kext" => ("acidanthera/BrcmPatchRAM", Some("RELEASE"), None, None),
+        "BrcmFirmwareData.kext" => ("acidanthera/BrcmPatchRAM", Some("RELEASE"), None, None),
+        "CPUFriend.kext" => ("acidanthera/CPUFriend", Some("RELEASE"), None, None),
+        "XHCI-unsupported.kext" => ("Sniki/OS-X-USB-Inject-All", Some("RELEASE"), None, None),
+        "LucyRTL8125Ethernet.kext" => ("Mieze/LucyRTL8125Ethernet", Some("LucyRTL8125Ethernet"), None, None),
         _ => return None,
     };
 
@@ -114,9 +121,14 @@ pub fn is_optional_kext(kext_name: &str) -> bool {
             | "IntelBluetoothFirmware.kext"
             | "BlueToolFixup.kext"
             | "BrcmPatchRAM3.kext"
+            | "BrcmFirmwareData.kext"
             | "AirportBrcmFixup.kext"
             | "VoodooI2C.kext"
             | "VoodooI2CHID.kext"
+            | "CPUFriend.kext"
+            | "XHCI-unsupported.kext"
+            | "LucyRTL8125Ethernet.kext"
+            | "NVMeFix.kext"
     )
 }
 

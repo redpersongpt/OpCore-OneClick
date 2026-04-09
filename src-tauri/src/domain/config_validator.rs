@@ -169,6 +169,7 @@ pub fn validate_config_plist_content(plist_content: &str) -> PlistValidationResu
             Some(v) => {
                 v.starts_with("W00000") || v.starts_with("M00000")
                     || v == "00000000-0000-0000-0000-000000000000"
+                    || v.starts_with("OC") || v.starts_with("OCB")
             }
         }
     };
