@@ -1,8 +1,9 @@
-pub mod hardware;
-pub mod efi;
-pub mod disk;
-pub mod firmware;
-pub mod recovery;
+pub mod app;
 pub mod diagnostics;
+pub mod disk;
+pub mod efi;
+pub mod firmware;
+pub mod hardware;
+pub mod recovery;
 pub mod state;
 pub mod task;

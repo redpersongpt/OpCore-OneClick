@@ -2,15 +2,20 @@ pub mod commands;
 pub mod contracts;
 pub mod domain;
 pub mod error;
+pub mod paths;
 pub mod platform;
 pub mod safety;
+pub mod services;
 pub mod tasks;
 
 use tauri::Manager;
 
 use commands::state::AppStateManager;
+use paths::AppPaths;
 use safety::flash_auth::FlashSecurityContext;
 use tasks::registry::TaskRegistry;
+
+pub const APP_VERSION: &str = env!("CARGO_PKG_VERSION");
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
@@ -21,39 +26,42 @@ pub fn run() {
         .setup(|app| {
             let app_handle = app.handle().clone();
 
-            // Initialize app data directory
-            let app_data = app
-                .path()
-                .app_data_dir()
-                .expect("Failed to resolve app data directory");
-            std::fs::create_dir_all(&app_data).ok();
+            let app_data = app.path().app_data_dir()?;
+            let app_cache = app.path().app_cache_dir().unwrap_or_else(|_| app_data.join("cache"));
+            let paths = AppPaths::new(&app_data, &app_cache);
+            // Scratch extraction space never needs to survive a restart.
+            let _ = std::fs::remove_dir_all(&paths.work);
+            let _ = std::fs::create_dir_all(&paths.work);
 
-            // State persistence
-            let state_manager = AppStateManager::new(app_data);
-            app.manage(state_manager);
+            app.manage(AppStateManager::new(app_data));
+            app.manage(paths);
+            app.manage(TaskRegistry::new(app_handle));
+            app.manage(FlashSecurityContext::new(uuid::Uuid::new_v4().to_string()));
 
-            // Task registry with watchdog
-            let task_registry = TaskRegistry::new(app_handle);
-            app.manage(task_registry);
-
-            // Flash security context (HMAC key + session ID)
-            let session_id = uuid::Uuid::new_v4().to_string();
-            let flash_security = FlashSecurityContext::new(session_id);
-            app.manage(flash_security);
-
-            log::info!("OpCore-OneClick v5.0.0 initialized");
+            log::info!("OpCore-OneClick v{APP_VERSION} initialized");
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
+            // App
+            commands::app::get_app_info,
+            commands::app::check_for_updates,
             // Hardware
             commands::hardware::scan_hardware,
+            commands::hardware::refresh_profile,
+            commands::hardware::get_catalog,
+            commands::hardware::export_profile,
+            commands::hardware::import_profile,
             // EFI
+            commands::efi::check_compatibility,
+            commands::efi::plan_build,
+            commands::efi::get_bios_settings,
             commands::efi::build_efi,
             commands::efi::validate_efi,
-            commands::efi::check_compatibility,
+            commands::efi::export_efi,
             // Disk
             commands::disk::list_usb_devices,
             commands::disk::get_disk_info,
+            commands::disk::check_privileges,
             commands::disk::flash_prepare_confirmation,
             commands::disk::flash_usb,
             // Firmware

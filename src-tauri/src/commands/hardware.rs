@@ -1,32 +1,48 @@
+//! Hardware scan and profile commands.
+
 use std::sync::Arc;
 
 use tauri::State;
 
-use crate::contracts::DetectedHardware;
-use crate::domain::hardware_detect;
+use crate::contracts::{Catalog, ScanResult};
+use crate::domain::model::HardwareProfile;
 use crate::error::AppError;
+use crate::paths::AppPaths;
 use crate::tasks::registry::TaskRegistry;
 
+/// Scan this machine (task kind "hardware-scan"), dump ACPI tables into
+/// `paths.acpi`, and interpret the result into a profile.
 #[tauri::command]
 pub async fn scan_hardware(
     task_registry: State<'_, Arc<TaskRegistry>>,
-) -> Result<DetectedHardware, AppError> {
-    let (task_id, token) = task_registry.create("hardware-scan").await;
+    paths: State<'_, AppPaths>,
+) -> Result<ScanResult, AppError> {
+    let _ = (&task_registry, &paths);
+    todo!("scan_hardware")
+}
 
-    task_registry
-        .update_progress(&task_id, 0.1, Some("Starting hardware detection...".into()))
-        .await;
+/// Re-interpret a manually edited profile.
+#[tauri::command]
+pub async fn refresh_profile(profile: HardwareProfile) -> Result<HardwareProfile, AppError> {
+    let _ = profile;
+    todo!("refresh_profile")
+}
 
-    let result = hardware_detect::detect_hardware(&token).await;
+/// Options for the manual profile editor and version picker.
+#[tauri::command]
+pub async fn get_catalog() -> Result<Catalog, AppError> {
+    todo!("get_catalog")
+}
 
-    match &result {
-        Ok(_) => {
-            task_registry.complete(&task_id).await;
-        }
-        Err(e) => {
-            task_registry.fail(&task_id, &e.message).await;
-        }
-    }
+/// Save a profile as JSON (to build an EFI for this machine on another computer).
+#[tauri::command]
+pub async fn export_profile(profile: HardwareProfile, path: String) -> Result<(), AppError> {
+    let _ = (profile, path);
+    todo!("export_profile")
+}
 
-    result
+#[tauri::command]
+pub async fn import_profile(path: String) -> Result<HardwareProfile, AppError> {
+    let _ = path;
+    todo!("import_profile")
 }
