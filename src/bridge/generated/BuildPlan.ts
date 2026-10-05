@@ -19,7 +19,13 @@ import type { SsdtPlan } from "./SsdtPlan";
  * Pure data: produced by `domain::planner`, consumed by the build pipeline
  * and `domain::config_writer`.
  */
-export type BuildPlan = { target: MacOsVersion, smbios: SmbiosPlan, ssdts: Array<SsdtPlan>, acpiPatches: Array<AcpiPatch>, acpiDeletes: Array<AcpiDelete>, acpiQuirks: { [key in string]: PlistScalar }, booterQuirks: { [key in string]: PlistScalar }, booterPatches: Array<BinaryPatch>, deviceProperties: Array<DevicePropertyEntry>, kexts: Array<KextSelection>, kernelPatches: Array<BinaryPatch>, kernelBlocks: Array<KernelBlock>, kernelQuirks: { [key in string]: PlistScalar }, 
+export type BuildPlan = { target: MacOsVersion, smbios: SmbiosPlan, ssdts: Array<SsdtPlan>, acpiPatches: Array<AcpiPatch>, acpiDeletes: Array<AcpiDelete>, acpiQuirks: { [key in string]: PlistScalar }, booterQuirks: { [key in string]: PlistScalar }, booterPatches: Array<BinaryPatch>, deviceProperties: Array<DevicePropertyEntry>, kexts: Array<KextSelection>, kernelPatches: Array<BinaryPatch>, 
+/**
+ * AMD CPUs: physical cores per package for the AMD_Vanilla core-count
+ * patches. The build pipeline downloads the pinned AMD_Vanilla
+ * `patches.plist` and appends its patches to `kernel_patches`.
+ */
+amdCoreCount: number | null, kernelBlocks: Array<KernelBlock>, kernelQuirks: { [key in string]: PlistScalar }, 
 /**
  * Kernel->Emulate overrides (Cpuid1Data/Cpuid1Mask as Data, DummyPowerManagement).
  */

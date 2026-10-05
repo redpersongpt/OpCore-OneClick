@@ -883,6 +883,10 @@ pub struct BuildPlan {
 
     pub kexts: Vec<KextSelection>,
     pub kernel_patches: Vec<BinaryPatch>,
+    /// AMD CPUs: physical cores per package for the AMD_Vanilla core-count
+    /// patches. The build pipeline downloads the pinned AMD_Vanilla
+    /// `patches.plist` and appends its patches to `kernel_patches`.
+    pub amd_core_count: Option<u32>,
     pub kernel_blocks: Vec<KernelBlock>,
     pub kernel_quirks: SettingMap,
     /// Kernel->Emulate overrides (Cpuid1Data/Cpuid1Mask as Data, DummyPowerManagement).

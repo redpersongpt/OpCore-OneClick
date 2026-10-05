@@ -2437,6 +2437,7 @@ dependencies = [
  "futures-util",
  "hmac",
  "hostname",
+ "libc",
  "log",
  "once_cell",
  "plist",
@@ -2460,6 +2461,7 @@ dependencies = [
  "ts-rs",
  "uuid",
  "walkdir",
+ "windows-sys 0.59.0",
  "zip",
 ]
 
