@@ -1,7 +1,7 @@
 {
   "$schema": "../node_modules/@tauri-apps/cli/config.schema.json",
   "productName": "OpCore-OneClick",
-  "version": "5.0.0",
+  "version": "6.0.0",
   "identifier": "com.redpersongpt.opcore-oneclick",
   "build": {
     "frontendDist": "../dist",

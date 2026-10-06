@@ -3,7 +3,7 @@
 All notable changes to OpCore-OneClick. Versions before 4.0.0 describe the
 earlier Electron app; 4.0.0 moved to Tauri and a new app-data location.
 
-## 6.0.0 — unreleased
+## 6.0.0 — 2026-10-06
 
 A rebuild of the backend around one idea: the scan produces a hardware
 profile, a planner turns that profile into a declarative build plan, and the
@@ -26,8 +26,8 @@ EFI, the installer USB and every screen are derived from that plan.
 - Kernel → Add order is computed from the downloaded bundles' dependencies.
 - SMBIOS serials, MLB, UUID and ROM come from `macserial`; an identity can be
   kept across rebuilds so iServices stay stable.
-- All downloads are pinned to tested releases and verified by SHA-256 (NootRX,
-  which only publishes rolling builds, is validated structurally). Default
+- All downloads are verified by SHA-256, including NootRX's rolling build.
+  A changed NootRX archive requires a new verified pin. Default
   builds no longer call the GitHub API, so rate limits cannot break a build.
   "Use latest releases" resolves newer versions and falls back to the pins.
 
@@ -48,6 +48,14 @@ EFI, the installer USB and every screen are derived from that plan.
 - Skylake graphics run as Kaby Lake (device-id spoof) on Ventura and newer.
 - Unsupported GPUs (NVIDIA Turing and newer, AMD RDNA3/4, Navi 24) are
   disabled so another GPU can drive the display.
+
+### Compatibility corrections
+- AVX and RDRAND detection selects the Zlib workarounds, SurPlus patches and
+  ASPP-Override for older CPUs; Penryn with AMD Metal graphics gets AAAMouSSE.
+- CpuTopologyRebuild and the Ryzen XHCI workaround start disabled, with
+  guidance for enabling them when needed.
+- Board-specific NVRAM, USB and BIOS warnings; corrected graphics, Bluetooth,
+  virtual-machine and root-patching guidance; model-aware AppleALC layouts.
 
 ### Installer USB
 - The macOS recovery image is now written to the USB drive
@@ -75,10 +83,13 @@ EFI, the installer USB and every screen are derived from that plan.
   and the flash progress steps.
 
 ### Build, CI and packaging
-- New CI workflow for pushes to `main` and pull requests: type check, unit
+- New CI workflow for pushes to `main`, `overhaul` and pull requests: type check, unit
   tests and production build of the frontend; `cargo clippy -D warnings` and
   `cargo test` on Linux, Windows and macOS; a check that the generated
   TypeScript bindings are committed.
+- Windows/Linux host smoke tests scan the real runner, verify system-disk
+  protection, dump Windows DSDT and build four EFI configurations from real
+  downloads. Every EFI passes ocvalidate; scans and builds are saved as artifacts.
 - Release workflow: Node 22 and current actions, a universal macOS `.dmg`
   next to the AppImage, `.deb` and NSIS installer, `SHA256SUMS.txt`, build
   provenance attestation, release notes taken from this file, safe re-runs,

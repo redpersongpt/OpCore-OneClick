@@ -1,7 +1,7 @@
 {
   "name": "opcore-oneclick",
   "private": true,
-  "version": "5.0.0",
+  "version": "6.0.0",
   "description": "Hackintosh EFI generator — build OpenCore configurations from detected hardware",
   "author": "redpersongpt",
   "type": "module",
