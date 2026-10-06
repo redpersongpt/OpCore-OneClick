@@ -3,4 +3,4 @@
 /**
  * Scalar plist value used for quirk / setting overrides.
  */
-export type PlistScalar = { "type": "bool", "value": boolean } | { "type": "int", "value": bigint } | { "type": "str", "value": string } | { "type": "data", "value": string };
+export type PlistScalar = { "type": "bool", "value": boolean } | { "type": "int", "value": number } | { "type": "str", "value": string } | { "type": "data", "value": string };

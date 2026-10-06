@@ -3,7 +3,6 @@ import type { ReactElement } from 'react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { buildResult, option, plan, profile, report } from './fixtures';
 import type { DiskInfo } from '../bridge/types';
-import { asU64 } from '../lib/num';
 
 const api = vi.hoisted(() => ({
   scanHardware: vi.fn(),
@@ -258,7 +257,7 @@ describe('Deploy page', () => {
     model: 'Ultra',
     vendor: 'SanDisk',
     serialNumber: null,
-    sizeBytes: asU64(32_000_000_000),
+    sizeBytes: 32_000_000_000,
     sizeDisplay: '32.0 GB',
     transport: 'usb',
     removable: true,
@@ -274,7 +273,7 @@ describe('Deploy page', () => {
     useBuild.setState({ result: buildResult('15') });
     api.checkPrivileges.mockResolvedValue({ elevated: true, canElevate: true, detail: '' });
     api.listUsbDevices.mockResolvedValue([
-      disk({ devicePath: '/dev/sda', model: 'System SSD', vendor: null, isSystemDisk: true, sizeDisplay: '512.1 GB', sizeBytes: asU64(512_110_190_592) }),
+      disk({ devicePath: '/dev/sda', model: 'System SSD', vendor: null, isSystemDisk: true, sizeDisplay: '512.1 GB', sizeBytes: 512_110_190_592 }),
       disk({}),
     ]);
     api.getCachedRecoveryInfo.mockResolvedValue(
@@ -297,7 +296,7 @@ describe('Deploy page', () => {
     api.flashPrepareConfirmation.mockResolvedValue({
       token: 'tok',
       device: '/dev/sdb',
-      expiresAt: asU64(Date.now() + 300_000),
+      expiresAt: Date.now() + 300_000,
       diskDisplay: '/dev/sdb (SanDisk Ultra)',
       efiHash: 'h',
       recovery: '15',
@@ -330,7 +329,7 @@ describe('Deploy page', () => {
     api.flashPrepareConfirmation.mockResolvedValue({
       token: 'tok',
       device: '/dev/sdc',
-      expiresAt: asU64(Date.now() + 300_000),
+      expiresAt: Date.now() + 300_000,
       diskDisplay: '/dev/sdc (SanDisk Cruzer)',
       efiHash: 'h',
       recovery: '15',
@@ -355,7 +354,7 @@ describe('Deploy page', () => {
     fireEvent.click(await screen.findByRole('radio', { name: /SanDisk Ultra/ }));
     act(() => {
       useDeploy.setState({
-        confirmation: { token: 'tok', device: '/dev/sdz', expiresAt: asU64(Date.now() + 300_000), diskDisplay: 'x', efiHash: 'h', recovery: '15' },
+        confirmation: { token: 'tok', device: '/dev/sdz', expiresAt: Date.now() + 300_000, diskDisplay: 'x', efiHash: 'h', recovery: '15' },
       });
     });
     expect(screen.queryByRole('button', { name: 'Erase and write' })).toBeNull();

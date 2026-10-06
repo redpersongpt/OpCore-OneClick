@@ -4,4 +4,4 @@ export type StorageDevice = { name: string,
 /**
  * "nvme" | "sata" | "raid" | "emmc" | "usb" | "other"
  */
-kind: string, controllerVendorId: string | null, controllerDeviceId: string | null, sizeBytes: bigint | null, };
+kind: string, controllerVendorId: string | null, controllerDeviceId: string | null, sizeBytes: number | null, };

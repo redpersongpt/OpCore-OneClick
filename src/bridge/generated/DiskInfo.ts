@@ -5,7 +5,7 @@ export type DiskInfo = {
 /**
  * "\\\\.\\PhysicalDrive2" | "/dev/sdb" | "/dev/disk4"
  */
-devicePath: string, model: string | null, vendor: string | null, serialNumber: string | null, sizeBytes: bigint, sizeDisplay: string, 
+devicePath: string, model: string | null, vendor: string | null, serialNumber: string | null, sizeBytes: number, sizeDisplay: string, 
 /**
  * "usb" | "sata" | "nvme" | "sd" | ...
  */

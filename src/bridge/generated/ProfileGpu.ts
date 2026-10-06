@@ -18,7 +18,7 @@ pciPath: string | null,
 /**
  * ACPI path, e.g. "\\_SB.PCI0.PEG0.PEGP".
  */
-acpiPath: string | null, vramMb: bigint | null, 
+acpiPath: string | null, vramMb: number | null, 
 /**
  * User or planner decided this GPU must be disabled for macOS.
  */

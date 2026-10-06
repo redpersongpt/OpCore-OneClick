@@ -6,7 +6,6 @@ import { checkState, probeFor } from '../lib/firmware';
 import { formatBytes, formatCodecId, formatPercent, formatVram, maskSecret, normalizePciId, parseCodecId, parseCount } from '../lib/format';
 import { buildIssueUrl, MAX_DIAGNOSTICS, redact } from '../lib/issue';
 import { compareMacos, macosLabel } from '../lib/macos';
-import { asU64 } from '../lib/num';
 import { stableStringify } from '../lib/stable';
 import { validationVerdict } from '../lib/verdict';
 import { option, report } from './fixtures';
@@ -90,7 +89,7 @@ describe('disks', () => {
     model: 'Ultra',
     vendor: 'SanDisk',
     serialNumber: null,
-    sizeBytes: asU64(32_000_000_000),
+    sizeBytes: 32_000_000_000,
     sizeDisplay: '32.0 GB',
     transport: 'usb',
     removable: true,
@@ -105,7 +104,7 @@ describe('disks', () => {
     expect(diskBlock(disk({}), MIN_BYTES_WITH_RECOVERY)).toBeNull();
     expect(diskBlock(disk({ isSystemDisk: true }), 0)).toEqual({ kind: 'system' });
     expect(diskBlock(disk({ blockedReason: 'Holds the page file' }), 0)).toEqual({ kind: 'backend', reason: 'Holds the page file' });
-    expect(diskBlock(disk({ sizeBytes: asU64(2_000_000_000) }), MIN_BYTES_WITH_RECOVERY)?.kind).toBe('too_small');
+    expect(diskBlock(disk({ sizeBytes: 2_000_000_000 }), MIN_BYTES_WITH_RECOVERY)?.kind).toBe('too_small');
   });
 
   it('accepts a 4 GB stick for recovery but grows with a large recovery image', () => {

@@ -1,5 +1,4 @@
 import { listen } from '@tauri-apps/api/event';
-import { asU64 } from '../lib/num';
 import type { FlashProgress, MacOsVersion, RecoveryProgress, TaskStatus, TaskUpdate } from './types';
 
 export const EVENTS = {
@@ -75,8 +74,8 @@ export function normalizeRecoveryProgress(raw: unknown): RecoveryProgress | null
     taskId,
     version,
     phase,
-    downloaded: asU64(downloaded),
-    total: total === null ? null : asU64(total),
+    downloaded: downloaded,
+    total: total === null ? null : total,
     progress,
     error: str(raw.error),
   };

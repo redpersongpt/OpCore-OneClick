@@ -3,4 +3,4 @@ import type { HardwareProfile } from "./HardwareProfile";
 import type { MacOsVersion } from "./MacOsVersion";
 import type { PlatformIdentity } from "./PlatformIdentity";
 
-export type PersistedState = { currentStep: string | null, profile: HardwareProfile | null, target: MacOsVersion | null, identity: PlatformIdentity | null, efiPath: string | null, timestamp: bigint | null, };
+export type PersistedState = { currentStep: string | null, profile: HardwareProfile | null, target: MacOsVersion | null, identity: PlatformIdentity | null, efiPath: string | null, timestamp: number | null, };

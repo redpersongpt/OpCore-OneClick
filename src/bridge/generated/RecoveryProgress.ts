@@ -8,7 +8,7 @@ export type RecoveryProgress = { taskId: string, version: MacOsVersion,
 /**
  * "resolving" | "downloading" | "verifying" | "complete" | "failed"
  */
-phase: string, downloaded: bigint, total: bigint | null, 
+phase: string, downloaded: number, total: number | null, 
 /**
  * 0.0..1.0 when total is known.
  */

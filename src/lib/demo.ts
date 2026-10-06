@@ -1,5 +1,4 @@
 import type { ScanResult } from '../bridge/types';
-import { asU64 } from './num';
 
 /**
  * A typical Coffee Lake desktop used by the explicit "demo" mode. The profile
@@ -40,7 +39,7 @@ export function demoScanResult(): ScanResult {
           subsystemVendorId: '1da2',
           subsystemDeviceId: 'e366',
           revision: 'e7',
-          vramMb: asU64(8192),
+          vramMb: 8192,
           location: { pciPath: 'PciRoot(0x0)/Pci(0x1,0x0)/Pci(0x0,0x0)', acpiPath: '\\_SB.PCI0.PEG0.PEGP' },
         },
       ],
@@ -74,7 +73,7 @@ export function demoScanResult(): ScanResult {
         { name: 'HID Keyboard Device', kind: 'keyboard', bus: 'usb', hardwareId: null, vendor: null },
         { name: 'HID-compliant mouse', kind: 'mouse', bus: 'usb', hardwareId: null, vendor: null },
       ],
-      memory: { totalMb: asU64(32768) },
+      memory: { totalMb: 32768 },
       motherboard: {
         manufacturer: 'Gigabyte Technology Co., Ltd.',
         product: 'Z390 AORUS PRO',
@@ -90,7 +89,7 @@ export function demoScanResult(): ScanResult {
           kind: 'nvme',
           controllerVendorId: '144d',
           controllerDeviceId: 'a808',
-          sizeBytes: asU64(1_000_204_886_016),
+          sizeBytes: 1_000_204_886_016,
         },
       ],
       usbControllers: [],
@@ -142,7 +141,7 @@ export function demoScanResult(): ScanResult {
           isIgpu: false,
           pciPath: 'PciRoot(0x0)/Pci(0x1,0x0)/Pci(0x0,0x0)',
           acpiPath: '\\_SB.PCI0.PEG0.PEGP',
-          vramMb: asU64(8192),
+          vramMb: 8192,
           disabled: false,
         },
       ],
@@ -174,7 +173,7 @@ export function demoScanResult(): ScanResult {
           kind: 'nvme',
           vendorId: '144d',
           deviceId: 'a808',
-          sizeBytes: asU64(1_000_204_886_016),
+          sizeBytes: 1_000_204_886_016,
         },
       ],
       motherboardVendor: 'Gigabyte',

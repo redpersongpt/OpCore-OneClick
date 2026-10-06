@@ -5,7 +5,7 @@ export type FlashConfirmation = { token: string, device: string,
 /**
  * Unix milliseconds.
  */
-expiresAt: bigint, diskDisplay: string, efiHash: string, 
+expiresAt: number, diskDisplay: string, efiHash: string, 
 /**
  * Recovery image that will be written next to the EFI, if any.
  */

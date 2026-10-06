@@ -120,7 +120,7 @@ describe('event routing', () => {
 
     let resolve: () => void = () => undefined;
     api.flashUsb.mockReturnValue(new Promise<void>((r) => (resolve = r)));
-    useDeploy.setState({ confirmation: { token: 'tok', device: '/dev/sdb', expiresAt: 0 as unknown as bigint, diskDisplay: 'USB', efiHash: 'h', recovery: '15' } });
+    useDeploy.setState({ confirmation: { token: 'tok', device: '/dev/sdb', expiresAt: 0, diskDisplay: 'USB', efiHash: 'h', recovery: '15' } });
     const flashing = useDeploy.getState().flash('/efi');
     expect(useWizard.getState().locks).toContain('flash');
     routeFlashProgress({ taskId: 'f1', phase: 'partition', progress: 0.2, message: 'p' });
@@ -137,7 +137,7 @@ describe('event routing', () => {
 
   it('a rejected flash ends in the failed state with the backend error', async () => {
     api.flashUsb.mockRejectedValue({ code: 'DISK_BUSY', message: 'Volume in use', suggestion: 'Close Explorer windows' });
-    useDeploy.setState({ confirmation: { token: 'tok', device: '/dev/sdb', expiresAt: 0 as unknown as bigint, diskDisplay: 'USB', efiHash: 'h', recovery: null } });
+    useDeploy.setState({ confirmation: { token: 'tok', device: '/dev/sdb', expiresAt: 0, diskDisplay: 'USB', efiHash: 'h', recovery: null } });
     expect(await useDeploy.getState().flash('/efi')).toBe(false);
     expect(useDeploy.getState().flashStatus).toBe('failed');
     expect(useDeploy.getState().flashError?.suggestion).toBe('Close Explorer windows');
@@ -147,7 +147,7 @@ describe('event routing', () => {
 
   it('writes the recovery the token was issued for and forgets an older successful write', async () => {
     api.flashUsb.mockResolvedValueOnce(undefined).mockRejectedValueOnce({ code: 'IO_ERROR', message: 'write failed' });
-    const confirmation = { token: 'tok', device: '/dev/sdb', expiresAt: 0 as unknown as bigint, diskDisplay: 'USB', efiHash: 'h', recovery: '14' as const };
+    const confirmation = { token: 'tok', device: '/dev/sdb', expiresAt: 0, diskDisplay: 'USB', efiHash: 'h', recovery: '14' as const };
     useDeploy.setState({ confirmation, flashed: false });
     expect(await useDeploy.getState().flash('/efi')).toBe(true);
     expect(api.flashUsb).toHaveBeenLastCalledWith('/dev/sdb', '/efi', 'tok', '14');
