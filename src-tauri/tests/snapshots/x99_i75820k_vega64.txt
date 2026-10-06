@@ -1,0 +1,129 @@
+fixture: x99_i75820k_vega64
+cpu: Intel(R) Core(TM) i7-5820K CPU @ 3.30GHz | HaswellE (Haswell-E) | 6C/12T | avx2 true
+machine: Desktop | ASUSTeK COMPUTER INC. X99-A | chipset X99 | uefi true
+gpu: Radeon RX Vega 64 [1002:687f AmdVega10]
+audio: Realtek ALC1150 [10ec0900]
+net: Intel(R) Ethernet Connection (2) I218-V [8086:15a1 Pci]
+assessment: Supported, recommended 15
+summary: macOS Sequoia 15 is fully supported. This machine can run macOS High Sierra 10.13 to macOS Tahoe 26. It is the recommended release.
+releases:
+  10.13 supported   | ok iMacPro1,1 sbm=Default csr=00000000 gpu=WhateverGreen kexts=12 ssdts=2
+  10.14 supported   | ok iMacPro1,1 sbm=Default csr=00000000 gpu=WhateverGreen kexts=14 ssdts=2
+  10.15 supported   | ok iMacPro1,1 sbm=Default csr=00000000 gpu=WhateverGreen kexts=15 ssdts=2
+  11    supported   | ok iMacPro1,1 sbm=Default csr=00000000 gpu=WhateverGreen kexts=15 ssdts=4
+  12    supported   | ok iMacPro1,1 sbm=Default csr=00000000 gpu=WhateverGreen kexts=15 ssdts=4
+  13    supported   | ok iMacPro1,1 sbm=Default csr=00000000 gpu=WhateverGreen kexts=15 ssdts=4
+  14    supported   | ok iMacPro1,1 sbm=Disabled csr=00000000 gpu=WhateverGreen kexts=15 ssdts=4
+  15    supported   | ok iMacPro1,1 sbm=Disabled csr=00000000 gpu=WhateverGreen kexts=15 ssdts=4
+  26    supported   root-patch | ok MacPro7,1 sbm=Disabled csr=00000000 gpu=WhateverGreen kexts=15 ssdts=4
+report-notes:
+  [warning] platform: BitLocker and dual boot
+
+== plan for macOS Sequoia 15 (recommended) ==
+smbios: iMacPro1,1 | alternatives: MacPro7,1
+secure-boot-model: Disabled
+csr-active-config: 00000000
+boot-args: revpatch=cpuname,sbvmm revcpu=1 -v keepsyms=1 debug=0x100
+kexts:
+  + Lilu.kext (Lilu) required
+  + VirtualSMC.kext (VirtualSMC) required
+  + WhateverGreen.kext (WhateverGreen) required
+  + SMCRadeonSensors.kext (SMCRadeonSensors)
+  + SMCProcessor.kext (VirtualSMC)
+  + SMCSuperIO.kext (VirtualSMC)
+  + AppleALC.kext (AppleALC) required
+  + CpuTscSync.kext (CpuTscSync)
+  + AppleMCEReporterDisabler.kext (AppleMCEReporterDisabler) [19.0.0..] required
+  + IntelMausi.kext (IntelMausi) required
+  + USBToolBox.kext (USBToolBox) required
+  + UTBDefault.kext (USBToolBox) required
+  + XHCI-unsupported.kext (XHCI-unsupported) required
+  + NVMeFix.kext (NVMeFix) [18.0.0..]
+  + RestrictEvents.kext (RestrictEvents)
+ssdts:
+  SSDT-PLUG.aml <- machine (130 bytes)
+  SSDT-EC-USBX.aml <- machine (353 bytes)
+  SSDT-RTC0-RANGE.aml <- machine (301 bytes)
+  SSDT-UNC.aml <- machine (100 bytes)
+device-properties:
+  PciRoot(0x0)/Pci(0x1b,0x0)
+    layout-id = <01000000>
+  PciRoot(0x0)/Pci(0x19,0x0)
+    built-in = <01>
+acpi-quirks:
+  on: ResetLogoStatus
+  off: FadtEnableReset NormalizeHeaders RebaseRegions ResetHwSig SyncTableIds
+booter-quirks:
+  on: AvoidRuntimeDefrag EnableSafeModeSlide EnableWriteUnprotector FixupAppleEfiImages ProvideCustomSlide SetupVirtualMap
+  off: DevirtualiseMmio ProtectMemoryRegions ProtectUefiServices RebuildAppleMemoryMap SyncRuntimePermissions
+  set: ResizeAppleGpuBars=-1
+kernel-quirks:
+  on: AppleXcpmCfgLock AppleXcpmExtraMsrs DisableIoMapper DisableLinkeditJettison PanicNoKextDump PowerTimeoutKernelPanic
+  off: AppleCpuPmCfgLock AppleXcpmForceBoost CustomSMBIOSGuid DisableIoMapperMapping DisableRtcChecksum ExtendBTFeatureFlags ForceAquantiaEthernet ForceSecureBootScheme IncreasePciBarSize LapicKernelPanic ProvideCurrentCpuInfo ThirdPartyDrives XhciPortLimit
+  set: SetApfsTrimTimeout=0
+kernel-emulate:
+  off: DummyPowerManagement
+  set: Cpuid1Data=<C3060300000000000000000000000000> Cpuid1Mask=<FFFFFFFF000000000000000000000000>
+misc-boot:
+  on: ShowPicker
+  off: HideAuxiliary PickerAudioAssist PollAppleHotKeys
+  set: ConsoleAttributes=0 HibernateMode="None" LauncherOption="Disabled" LauncherPath="Default" PickerAttributes=17 PickerMode="External" PickerVariant="Acidanthera\GoldenGate" TakeoffDelay=0 Timeout=5
+misc-security:
+  on: AllowSetDefault BlacklistAppleUpdate
+  off: AuthRestart EnablePassword
+  set: ApECID=0 DmgLoading="Signed" ExposeSensitiveData=6 ScanPolicy=0 SecureBootModel="Disabled" Vault="Optional"
+tools: OpenShell.efi ControlMsrE2.efi
+nvram:
+  on: LegacyOverwrite
+  off: WriteFlash
+platform-info:
+  on: Automatic UpdateDataHub UpdateNVRAM UpdateSMBIOS
+  off: CustomMemory UseRawUuidEncoding
+  set: UpdateSMBIOSMode="Create"
+drivers: OpenRuntime.efi HfsPlus.efi OpenCanopy.efi ResetNvramEntry.efi
+uefi-quirks:
+  on: EnableVectorAcceleration IgnoreInvalidFlexRatio RequestBootVarRouting
+  off: DisableSecurityPolicy ForceOcWriteFlash ReleaseUsbOwnership UnblockFsConnect
+  set: ResizeGpuBars=-1
+uefi-apfs:
+  on: EnableJumpstart HideVerbose
+  off: GlobalConnect JumpstartHotPlug
+  set: MinDate=0 MinVersion=0
+uefi-output:
+  on: ProvideConsoleGop
+  off: DirectGopRendering ForceResolution ReconnectOnResChange
+  set: GopPassThrough="Disabled" Resolution="Max" TextRenderer="BuiltinGraphics" UIScale=0
+uefi-input:
+  on: KeySupport
+  off: KeyFiltering KeySwap PointerSupport
+  set: KeyForgetThreshold=5 KeySupportMode="Auto" TimerResolution=50000
+bios: CSM (Compatibility Support Module) = disable (required)
+bios: Secure Boot = disable (required)
+bios: Fast Boot = disable (required)
+bios: OS Type = Windows 8.1/10 UEFI Mode (or Other OS)
+bios: SATA Mode = AHCI (required)
+bios: EHCI/XHCI Hand-off = enable (required)
+bios: Above 4G Decoding = enable
+bios: CFG Lock (MSR 0xE2 write protection) = disable
+bios: VT-d (Intel Virtualization for Directed I/O) = disable
+bios: VT-x (Intel Virtualization Technology) = enable
+bios: Execute Disable Bit = enable (required)
+bios: Hyper-Threading = enable
+bios: Serial / Parallel port = disable
+bios: MMIOH Base / MMIO High Base = 12T or lower
+notes:
+  [info] smbios: iMacPro1,1 stops at macOS 15.8.1
+  [info] gpu: Display: Radeon RX Vega 64
+  [info] storage: Samsung SSD 970 EVO Plus 1TB
+  [info] cpu: CFG Lock
+  [info] storage: Boot-time TRIM off for Samsung NVMe
+  [info] boot: Verbose boot is on
+post-install:
+  [info] boot: Copy the EFI to the internal drive
+  [info] usb: Map the USB ports
+  [info] bootloader: Boot picker after install
+  [info] nvram: Install the emulated NVRAM script
+  [info] audio: Try other layout-ids if a jack or the microphone is silent
+  [info] smbios: Check the serial number before using iServices
+  [info] boot: Turn off verbose boot
+  [warning] platform: Dual boot with Windows

@@ -1,0 +1,134 @@
+{
+  "cpu": {
+    "name": "Intel(R) Core(TM) i7-4790K CPU @ 4.00GHz",
+    "vendor": "intel",
+    "platform": "haswell",
+    "codename": "Haswell",
+    "family": 6,
+    "model": 60,
+    "stepping": 3,
+    "cores": 4,
+    "threads": 8,
+    "isMobile": false,
+    "hasAvx2": true,
+    "hasSse42": true,
+    "isHybrid": false
+  },
+  "formFactor": "desktop",
+  "vm": null,
+  "gpus": [
+    {
+      "name": "Intel(R) HD Graphics 4600",
+      "vendor": "intel",
+      "family": "intel_haswell",
+      "vendorId": "8086",
+      "deviceId": "0412",
+      "subsystemId": "84301043",
+      "isIgpu": true,
+      "pciPath": "PciRoot(0x0)/Pci(0x2,0x0)",
+      "acpiPath": "\\_SB.PCI0.GFX0",
+      "vramMb": null,
+      "disabled": false
+    },
+    {
+      "name": "Radeon RX 580 Series",
+      "vendor": "amd",
+      "family": "amd_polaris",
+      "vendorId": "1002",
+      "deviceId": "67df",
+      "subsystemId": "e3661da2",
+      "isIgpu": false,
+      "pciPath": "PciRoot(0x0)/Pci(0x1,0x0)/Pci(0x0,0x0)",
+      "acpiPath": "\\_SB.PCI0.PEG0.PEGP",
+      "vramMb": 8192,
+      "disabled": false
+    }
+  ],
+  "audio": {
+    "codecName": "Realtek ALC892",
+    "codecId": 283904146,
+    "controllerVendorId": "8086",
+    "controllerDeviceId": "8ca0",
+    "controllerPciPath": "PciRoot(0x0)/Pci(0x1b,0x0)",
+    "layoutId": null
+  },
+  "ethernet": [
+    {
+      "name": "Intel(R) Ethernet Connection (2) I218-V",
+      "bus": "pci",
+      "vendorId": "8086",
+      "deviceId": "15a1",
+      "subsystemId": "85c41043",
+      "pciPath": "PciRoot(0x0)/Pci(0x19,0x0)",
+      "macAddress": "BC:EE:7B:01:02:03"
+    }
+  ],
+  "wifi": null,
+  "bluetooth": null,
+  "input": {
+    "keyboardBus": "usb",
+    "touchpadBus": null,
+    "touchpadVendor": null,
+    "touchpadHid": null,
+    "hasTouchscreen": false
+  },
+  "storage": [
+    {
+      "name": "WDC WDS500G3X0C-00SJG0 (SN750)",
+      "kind": "nvme",
+      "vendorId": "15b7",
+      "deviceId": "5006",
+      "sizeBytes": 500000000000
+    },
+    {
+      "name": "ST1000DM003-1SB102",
+      "kind": "sata",
+      "vendorId": null,
+      "deviceId": null,
+      "sizeBytes": 1000000000000
+    }
+  ],
+  "motherboardVendor": "ASUSTeK COMPUTER INC.",
+  "motherboardModel": "Z97-A",
+  "chipset": "Z97",
+  "ramGb": 16,
+  "hasBattery": false,
+  "firmwareUefi": true,
+  "acpi": {
+    "pciRoot": "\\_SB.PCI0",
+    "lpcBridge": "\\_SB.PCI0.LPCB",
+    "ecPath": null,
+    "ecHasSta": false,
+    "cpuPaths": [
+      "\\_PR.CPU0",
+      "\\_PR.CPU1",
+      "\\_PR.CPU2",
+      "\\_PR.CPU3",
+      "\\_PR.CPU4",
+      "\\_PR.CPU5",
+      "\\_PR.CPU6",
+      "\\_PR.CPU7"
+    ],
+    "cpuUsesAcpi0007": false,
+    "awacPath": null,
+    "awacHasStas": false,
+    "rtcPath": "\\_SB.PCI0.LPCB.RTC",
+    "hpetPath": "\\_SB.PCI0.LPCB.HPET",
+    "igpuPath": "\\_SB.PCI0.GFX0",
+    "xhciPaths": [
+      "\\_SB.PCI0.XHC"
+    ],
+    "rhubPaths": [
+      "\\_SB.PCI0.XHC.RHUB"
+    ],
+    "gpioPath": null,
+    "smbusPath": "\\_SB.PCI0.SBUS",
+    "pnlfExists": false,
+    "hasOsiWindows": true,
+    "dsdtOemTableId": "A M I   ",
+    "dsdtLength": 212000
+  },
+  "acpiTablesDir": null,
+  "source": "scan",
+  "scanConfidence": 0.92
+}

@@ -218,6 +218,7 @@ fn coffee_lake_plan() -> BuildPlan {
         oem_table_id: None,
         count: 0,
         enabled: true,
+        ..Default::default()
     }];
     plan.booter_quirks = settings(&[
         ("DevirtualiseMmio", PlistScalar::Bool(true)),
@@ -574,6 +575,7 @@ async fn kaby_lake_laptop_with_text_picker_and_ps2_plugins() {
         oem_table_id: None,
         count: 0,
         enabled: true,
+        ..Default::default()
     }];
     plan.kernel_quirks.insert("AppleXcpmCfgLock".into(), PlistScalar::Bool(true));
     plan.kernel_quirks.insert("DisableIoMapper".into(), PlistScalar::Bool(true));

@@ -1,0 +1,88 @@
+{
+  "cpu": {
+    "name": "Intel(R) Core(TM)2 Quad CPU    Q9550  @ 2.83GHz",
+    "vendor": "intel",
+    "platform": "penryn",
+    "codename": "Yorkfield",
+    "family": 6,
+    "model": 23,
+    "stepping": 10,
+    "cores": 4,
+    "threads": 4,
+    "isMobile": false,
+    "hasAvx2": false,
+    "hasSse42": false,
+    "isHybrid": false
+  },
+  "formFactor": "desktop",
+  "vm": null,
+  "gpus": [
+    {
+      "name": "ATI Radeon HD 4670",
+      "vendor": "amd",
+      "family": "amd_tera_scale",
+      "vendorId": "1002",
+      "deviceId": "9490",
+      "subsystemId": "e015174b",
+      "isIgpu": false,
+      "pciPath": "PciRoot(0x0)/Pci(0x1,0x0)/Pci(0x0,0x0)",
+      "acpiPath": "\\_SB.PCI0.P0P2.PEGP",
+      "vramMb": 1024,
+      "disabled": false
+    }
+  ],
+  "audio": {
+    "codecName": "Realtek ALC889A",
+    "codecId": 283904133,
+    "controllerVendorId": "8086",
+    "controllerDeviceId": "3a3e",
+    "controllerPciPath": "PciRoot(0x0)/Pci(0x1b,0x0)",
+    "layoutId": null
+  },
+  "ethernet": [
+    {
+      "name": "Realtek PCIe GBE Family Controller (RTL8111C)",
+      "bus": "pci",
+      "vendorId": "10ec",
+      "deviceId": "8168",
+      "subsystemId": "e0001458",
+      "pciPath": "PciRoot(0x0)/Pci(0x1c,0x4)/Pci(0x0,0x0)",
+      "macAddress": "00:1F:D0:A1:B2:C3"
+    }
+  ],
+  "wifi": null,
+  "bluetooth": null,
+  "input": {
+    "keyboardBus": "usb",
+    "touchpadBus": null,
+    "touchpadVendor": null,
+    "touchpadHid": null,
+    "hasTouchscreen": false
+  },
+  "storage": [
+    {
+      "name": "Samsung SSD 860 EVO 500GB",
+      "kind": "sata",
+      "vendorId": null,
+      "deviceId": null,
+      "sizeBytes": 500000000000
+    },
+    {
+      "name": "ST1000DM003-1SB102",
+      "kind": "sata",
+      "vendorId": null,
+      "deviceId": null,
+      "sizeBytes": 1000000000000
+    }
+  ],
+  "motherboardVendor": "Gigabyte Technology Co., Ltd.",
+  "motherboardModel": "EP45-UD3P",
+  "chipset": "ICH10",
+  "ramGb": 8,
+  "hasBattery": false,
+  "firmwareUefi": false,
+  "acpi": null,
+  "acpiTablesDir": null,
+  "source": "scan",
+  "scanConfidence": 0.92
+}

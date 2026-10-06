@@ -1,0 +1,29 @@
+fixture: apple_m2pro_macmini
+cpu: Apple M2 Pro | AppleSilicon (Apple M2 Pro) | 10C/10T | avx2 false
+machine: Desktop | Apple Inc. Mac14,12 | chipset - | uefi true
+assessment: Unsupported, recommended none
+summary: This Mac already runs macOS natively; OpenCore EFIs are for Intel and AMD PCs.
+releases:
+  10.13 unsupported | err APPLE_SILICON
+  10.14 unsupported | err APPLE_SILICON
+  10.15 unsupported | err APPLE_SILICON
+  11    unsupported | err APPLE_SILICON
+  12    unsupported | err APPLE_SILICON
+  13    unsupported | err APPLE_SILICON
+  14    unsupported | err APPLE_SILICON
+  15    unsupported | err APPLE_SILICON
+  26    unsupported | err APPLE_SILICON
+report-notes:
+  [blocking] cpu: Not supported on macOS Sequoia 15
+  [warning] network: No network in macOS Recovery
+
+== no recommended release ==
+10.13: [APPLE_SILICON] This Mac already runs macOS natively; OpenCore EFIs are for Intel/AMD PCs.
+10.14: [APPLE_SILICON] This Mac already runs macOS natively; OpenCore EFIs are for Intel/AMD PCs.
+10.15: [APPLE_SILICON] This Mac already runs macOS natively; OpenCore EFIs are for Intel/AMD PCs.
+11: [APPLE_SILICON] This Mac already runs macOS natively; OpenCore EFIs are for Intel/AMD PCs.
+12: [APPLE_SILICON] This Mac already runs macOS natively; OpenCore EFIs are for Intel/AMD PCs.
+13: [APPLE_SILICON] This Mac already runs macOS natively; OpenCore EFIs are for Intel/AMD PCs.
+14: [APPLE_SILICON] This Mac already runs macOS natively; OpenCore EFIs are for Intel/AMD PCs.
+15: [APPLE_SILICON] This Mac already runs macOS natively; OpenCore EFIs are for Intel/AMD PCs.
+26: [APPLE_SILICON] This Mac already runs macOS natively; OpenCore EFIs are for Intel/AMD PCs.

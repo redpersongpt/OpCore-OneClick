@@ -1,0 +1,88 @@
+{
+  "cpu": {
+    "name": "Intel(R) Xeon(R) CPU           X5670  @ 2.93GHz",
+    "vendor": "intel",
+    "platform": "nehalem_hedt",
+    "codename": "Westmere-EP",
+    "family": 6,
+    "model": 44,
+    "stepping": 2,
+    "cores": 6,
+    "threads": 12,
+    "isMobile": false,
+    "hasAvx2": false,
+    "hasSse42": true,
+    "isHybrid": false
+  },
+  "formFactor": "desktop",
+  "vm": null,
+  "gpus": [
+    {
+      "name": "Radeon RX 580 Series",
+      "vendor": "amd",
+      "family": "amd_polaris",
+      "vendorId": "1002",
+      "deviceId": "67df",
+      "subsystemId": "e3661da2",
+      "isIgpu": false,
+      "pciPath": "PciRoot(0x0)/Pci(0x3,0x0)/Pci(0x0,0x0)",
+      "acpiPath": "\\_SB.PCI0.NPE3.GFX0",
+      "vramMb": 8192,
+      "disabled": false
+    }
+  ],
+  "audio": {
+    "codecName": "Realtek ALC889",
+    "codecId": 283904137,
+    "controllerVendorId": "8086",
+    "controllerDeviceId": "3a3e",
+    "controllerPciPath": "PciRoot(0x0)/Pci(0x1b,0x0)",
+    "layoutId": null
+  },
+  "ethernet": [
+    {
+      "name": "Marvell Yukon 88E8056 PCI-E Gigabit Ethernet Controller",
+      "bus": "pci",
+      "vendorId": "11ab",
+      "deviceId": "4364",
+      "subsystemId": "81f81043",
+      "pciPath": "PciRoot(0x0)/Pci(0x1c,0x4)/Pci(0x0,0x0)",
+      "macAddress": "E0:CB:4E:12:34:56"
+    }
+  ],
+  "wifi": null,
+  "bluetooth": null,
+  "input": {
+    "keyboardBus": "usb",
+    "touchpadBus": null,
+    "touchpadVendor": null,
+    "touchpadHid": null,
+    "hasTouchscreen": false
+  },
+  "storage": [
+    {
+      "name": "Samsung SSD 860 EVO 500GB",
+      "kind": "sata",
+      "vendorId": null,
+      "deviceId": null,
+      "sizeBytes": 500000000000
+    },
+    {
+      "name": "ST1000DM003-1SB102",
+      "kind": "sata",
+      "vendorId": null,
+      "deviceId": null,
+      "sizeBytes": 1000000000000
+    }
+  ],
+  "motherboardVendor": "ASUSTeK Computer INC.",
+  "motherboardModel": "P6X58D-E",
+  "chipset": "ICH10",
+  "ramGb": 24,
+  "hasBattery": false,
+  "firmwareUefi": false,
+  "acpi": null,
+  "acpiTablesDir": null,
+  "source": "scan",
+  "scanConfidence": 0.92
+}

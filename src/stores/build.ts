@@ -11,6 +11,13 @@ import type {
   TaskUpdate,
   ValidationResult,
 } from '../bridge/types';
+import {
+  parseBuildDetail,
+  recordItem,
+  type BuildDetail,
+  type BuildItems,
+  type BuildPhase,
+} from '../lib/buildProgress';
 import { stableStringify } from '../lib/stable';
 import { TASK_KINDS, useTasks } from './tasks';
 import { useWizard } from './wizard';
@@ -26,6 +33,8 @@ export interface OptionsDraft {
   useLatestReleases: boolean;
   disableUnsupportedGpus: boolean;
   pickerTimeout: number | null;
+  /** macOS 26: prepare for restoring analog audio after install (lowers SIP). */
+  prepareAudioPatch: boolean;
   /** Reuse serial/MLB/UUID/ROM from the previous build (keeps iServices stable). */
   keepIdentity: boolean;
 }
@@ -41,7 +50,32 @@ export const DEFAULT_DRAFT: OptionsDraft = {
   disableUnsupportedGpus: true,
   pickerTimeout: null,
   keepIdentity: true,
+  prepareAudioPatch: false,
 };
+
+const LATEST_KEY = 'oneclick.useLatestReleases';
+
+/** The "use latest releases" choice is a preference: it survives restarts and "start over". */
+export function storedUseLatest(): boolean {
+  try {
+    return window.localStorage.getItem(LATEST_KEY) === 'true';
+  } catch {
+    return false;
+  }
+}
+
+function storeUseLatest(value: boolean): void {
+  try {
+    if (value) window.localStorage.setItem(LATEST_KEY, 'true');
+    else window.localStorage.removeItem(LATEST_KEY);
+  } catch {
+    // Not persisted; the choice still applies to this session.
+  }
+}
+
+function initialDraft(): OptionsDraft {
+  return { ...DEFAULT_DRAFT, useLatestReleases: storedUseLatest() };
+}
 
 /**
  * True when the previous serial/MLB/UUID/ROM can be reused: they are only
@@ -78,6 +112,7 @@ export function toBuildOptions(
     identity: keep ? identity : null,
     disableUnsupportedGpus: draft.disableUnsupportedGpus,
     pickerTimeout: draft.pickerTimeout,
+    prepareAudioPatch: target === '26' && draft.prepareAudioPatch,
   };
 }
 
@@ -89,8 +124,6 @@ export function toBuildOptions(
 export function buildKey(profile: HardwareProfile | null, options: BuildOptions): string {
   return stableStringify({ profile, options: { ...options, identity: null } });
 }
-
-const MAX_LOG = 8;
 
 interface BuildState {
   draft: OptionsDraft;
@@ -111,9 +144,15 @@ interface BuildState {
   taskId: string | null;
   progress: number | null;
   message: string | null;
-  log: string[];
+  /** Latest structured progress of the running (or last) build. */
+  detail: BuildDetail | null;
+  /** Phases reported so far, in order. */
+  phasesSeen: BuildPhase[];
+  items: BuildItems;
   error: AppError | null;
   cancelled: boolean;
+  /** The backend refused the cancel (the build was already being saved). */
+  cancelRefused: boolean;
 
   validation: ValidationResult | null;
   validating: boolean;
@@ -141,9 +180,12 @@ const resultInitial = {
   taskId: null,
   progress: null,
   message: null,
-  log: [],
+  detail: null,
+  phasesSeen: [],
+  items: {},
   error: null,
   cancelled: false,
+  cancelRefused: false,
   validation: null,
   validating: false,
   validateError: null,
@@ -158,13 +200,16 @@ const planInitial = {
 };
 
 export const useBuild = create<BuildState>((set, get) => ({
-  draft: { ...DEFAULT_DRAFT },
+  draft: initialDraft(),
   identity: null,
   previousEfiPath: null,
   ...planInitial,
   ...resultInitial,
 
-  setDraft: (patch) => set((s) => ({ draft: { ...s.draft, ...patch } })),
+  setDraft: (patch) => {
+    if (patch.useLatestReleases !== undefined) storeUseLatest(patch.useLatestReleases);
+    set((s) => ({ draft: { ...s.draft, ...patch } }));
+  },
   setIdentity: (identity) => set({ identity }),
   setPreviousEfiPath: (path) => set({ previousEfiPath: path }),
 
@@ -208,18 +253,21 @@ export const useBuild = create<BuildState>((set, get) => ({
   },
 
   cancel: async () => {
-    const { building, cancelled } = get();
-    if (!building || cancelled) return;
+    const { building, cancelled, cancelRefused } = get();
+    if (!building || cancelled || cancelRefused) return;
     // The first task:update may not have arrived yet; fall back to the task list.
-    const running = useTasks.getState().latest(TASK_KINDS.build);
-    const taskId = get().taskId ?? (running?.status === 'running' ? running.taskId : null);
+    const taskId = get().taskId ?? useTasks.getState().running(TASK_KINDS.build)?.taskId ?? null;
     if (!taskId) return;
-    set({ cancelled: true, taskId });
-    try {
-      await api.taskCancel(taskId);
-    } catch {
-      // The build may have finished in the meantime.
+    // The task bar may have sent the cancel already; follow its outcome instead of asking twice.
+    const earlier = useTasks.getState().cancels[taskId];
+    if (earlier) {
+      set({ taskId, cancelled: earlier === 'requested', cancelRefused: earlier === 'refused' });
+      return;
     }
+    set({ cancelled: true, taskId });
+    const accepted = await useTasks.getState().cancel(taskId);
+    // Refused: the build is being saved and finishes on its own.
+    if (!accepted && get().building) set({ cancelled: false, cancelRefused: true });
   },
 
   onTask: (update) => {
@@ -228,13 +276,14 @@ export const useBuild = create<BuildState>((set, get) => ({
     if (!state.building) return;
     if (state.taskId && state.taskId !== update.taskId) return;
     const message = update.message?.trim() || null;
-    const log =
-      message && state.log[state.log.length - 1] !== message ? [...state.log, message].slice(-MAX_LOG) : state.log;
+    const detail = parseBuildDetail(update.detail);
     set({
       taskId: update.taskId,
       progress: update.progress ?? state.progress,
       message: message ?? state.message,
-      log,
+      detail: detail ?? state.detail,
+      phasesSeen: detail && !state.phasesSeen.includes(detail.phase) ? [...state.phasesSeen, detail.phase] : state.phasesSeen,
+      items: detail ? recordItem(state.items, detail) : state.items,
       cancelled: state.cancelled || update.status === 'cancelled',
     });
   },
@@ -263,6 +312,6 @@ export const useBuild = create<BuildState>((set, get) => ({
 
   clear: () => {
     planSequence += 1;
-    set({ draft: { ...DEFAULT_DRAFT }, identity: null, previousEfiPath: null, ...planInitial, ...resultInitial });
+    set({ draft: initialDraft(), identity: null, previousEfiPath: null, ...planInitial, ...resultInitial });
   },
 }));

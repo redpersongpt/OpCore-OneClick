@@ -36,4 +36,10 @@ disableUnsupportedGpus: boolean,
 /**
  * Picker timeout in seconds (0 = wait forever).
  */
-pickerTimeout: number | null, };
+pickerTimeout: number | null, 
+/**
+ * macOS 26: prepare the EFI for restoring analog audio after install
+ * (AppleHDA root patch or VoodooHDA), which partly disables SIP. Off by
+ * default so SIP stays fully enabled unless the user asks for it.
+ */
+prepareAudioPatch: boolean, };

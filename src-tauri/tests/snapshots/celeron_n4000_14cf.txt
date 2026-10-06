@@ -1,0 +1,36 @@
+fixture: celeron_n4000_14cf
+cpu: Intel(R) Celeron(R) N4000 CPU @ 1.10GHz | IntelAtom (Gemini Lake) | 2C/2T | avx2 false
+machine: Laptop | HP 85F4 | chipset Gemini Lake SoC | uefi true
+gpu: Intel(R) UHD Graphics 600 [8086:3185 IntelLowPower igpu]
+audio: Realtek ALC236 [10ec0236]
+net: Intel(R) Wireless-AC 9560 [8086:31dc Pci]
+net: Intel Wireless Bluetooth 9560 [8087:0aaa Usb]
+touchpad: I2c Some(Synaptics) SYNA3297
+assessment: Unsupported, recommended none
+summary: No macOS release runs natively on this machine. Atom-class (Celeron/Pentium N/J, N100) CPUs cannot run macOS. Atom, Celeron/Pentium N/J/Silver and N100-class CPUs are not supported by macOS.
+releases:
+  10.13 unsupported | err CPU_UNSUPPORTED
+  10.14 unsupported | err CPU_UNSUPPORTED
+  10.15 unsupported | err CPU_UNSUPPORTED
+  11    unsupported | err CPU_UNSUPPORTED
+  12    unsupported | err CPU_UNSUPPORTED
+  13    unsupported | err CPU_UNSUPPORTED
+  14    unsupported | err CPU_UNSUPPORTED
+  15    unsupported | err CPU_UNSUPPORTED
+  26    unsupported | err CPU_UNSUPPORTED
+report-notes:
+  [blocking] cpu: Not supported on macOS Sequoia 15
+  [warning] network: No network in macOS Recovery
+  [warning] storage: SanDisk DA4064 eMMC 64GB cannot be used
+  [warning] platform: BitLocker and dual boot
+
+== no recommended release ==
+10.13: [CPU_UNSUPPORTED] Atom-class (Celeron/Pentium N/J, N100) CPUs cannot run macOS through OpenCore.
+10.14: [CPU_UNSUPPORTED] Atom-class (Celeron/Pentium N/J, N100) CPUs cannot run macOS through OpenCore.
+10.15: [CPU_UNSUPPORTED] Atom-class (Celeron/Pentium N/J, N100) CPUs cannot run macOS through OpenCore.
+11: [CPU_UNSUPPORTED] Atom-class (Celeron/Pentium N/J, N100) CPUs cannot run macOS through OpenCore.
+12: [CPU_UNSUPPORTED] Atom-class (Celeron/Pentium N/J, N100) CPUs cannot run macOS through OpenCore.
+13: [CPU_UNSUPPORTED] Atom-class (Celeron/Pentium N/J, N100) CPUs cannot run macOS through OpenCore.
+14: [CPU_UNSUPPORTED] Atom-class (Celeron/Pentium N/J, N100) CPUs cannot run macOS through OpenCore.
+15: [CPU_UNSUPPORTED] Atom-class (Celeron/Pentium N/J, N100) CPUs cannot run macOS through OpenCore.
+26: [CPU_UNSUPPORTED] Atom-class (Celeron/Pentium N/J, N100) CPUs cannot run macOS through OpenCore.

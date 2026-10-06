@@ -1,0 +1,120 @@
+{
+  "cpu": {
+    "name": "Intel(R) Core(TM) i7-1065G7 CPU @ 1.30GHz",
+    "vendor": "intel",
+    "platform": "ice_lake",
+    "codename": "Ice Lake-U",
+    "family": 6,
+    "model": 126,
+    "stepping": 5,
+    "cores": 4,
+    "threads": 8,
+    "isMobile": true,
+    "hasAvx2": true,
+    "hasSse42": true,
+    "isHybrid": false
+  },
+  "formFactor": "laptop",
+  "vm": null,
+  "gpus": [
+    {
+      "name": "Intel(R) Iris(R) Plus Graphics",
+      "vendor": "intel",
+      "family": "intel_ice_lake",
+      "vendorId": "8086",
+      "deviceId": "8a52",
+      "subsystemId": "08b01028",
+      "isIgpu": true,
+      "pciPath": "PciRoot(0x0)/Pci(0x2,0x0)",
+      "acpiPath": "\\_SB.PC00.GFX0",
+      "vramMb": null,
+      "disabled": false
+    }
+  ],
+  "audio": {
+    "codecName": "Realtek ALC289",
+    "codecId": 283902601,
+    "controllerVendorId": "8086",
+    "controllerDeviceId": "34c8",
+    "controllerPciPath": "PciRoot(0x0)/Pci(0x1f,0x3)",
+    "layoutId": null
+  },
+  "ethernet": [],
+  "wifi": {
+    "name": "Killer(R) Wi-Fi 6 AX1650s 160MHz (Intel AX201)",
+    "bus": "pci",
+    "vendorId": "8086",
+    "deviceId": "34f0",
+    "subsystemId": "16511a56",
+    "pciPath": "PciRoot(0x0)/Pci(0x14,0x3)",
+    "macAddress": "C8:58:C0:11:22:33"
+  },
+  "bluetooth": {
+    "name": "Intel Wireless Bluetooth AX201",
+    "bus": "usb",
+    "vendorId": "8087",
+    "deviceId": "0026",
+    "subsystemId": null,
+    "pciPath": null,
+    "macAddress": null
+  },
+  "input": {
+    "keyboardBus": "ps2",
+    "touchpadBus": "i2c",
+    "touchpadVendor": "synaptics",
+    "touchpadHid": "SYNA2393",
+    "hasTouchscreen": true
+  },
+  "storage": [
+    {
+      "name": "Toshiba KXG60ZNV512G",
+      "kind": "nvme",
+      "vendorId": "1179",
+      "deviceId": "011a",
+      "sizeBytes": 512000000000
+    }
+  ],
+  "motherboardVendor": "Dell Inc.",
+  "motherboardModel": "06CDVY",
+  "chipset": "Ice Lake PCH-LP",
+  "ramGb": 16,
+  "hasBattery": true,
+  "firmwareUefi": true,
+  "acpi": {
+    "pciRoot": "\\_SB.PC00",
+    "lpcBridge": "\\_SB.PC00.LPCB",
+    "ecPath": "\\_SB.PC00.LPCB.ECDV",
+    "ecHasSta": false,
+    "cpuPaths": [
+      "\\_SB.PR00",
+      "\\_SB.PR01",
+      "\\_SB.PR02",
+      "\\_SB.PR03",
+      "\\_SB.PR04",
+      "\\_SB.PR05",
+      "\\_SB.PR06",
+      "\\_SB.PR07"
+    ],
+    "cpuUsesAcpi0007": false,
+    "awacPath": "\\_SB.AWAC",
+    "awacHasStas": true,
+    "rtcPath": "\\_SB.PC00.LPCB.RTC",
+    "hpetPath": "\\_SB.PC00.LPCB.HPET",
+    "igpuPath": "\\_SB.PC00.GFX0",
+    "xhciPaths": [
+      "\\_SB.PC00.XHCI"
+    ],
+    "rhubPaths": [
+      "\\_SB.PC00.XHCI.RHUB"
+    ],
+    "gpioPath": "\\_SB.PC00.GPI0",
+    "smbusPath": "\\_SB.PC00.SBUS",
+    "pnlfExists": false,
+    "hasOsiWindows": true,
+    "dsdtOemTableId": "ICL     ",
+    "dsdtLength": null
+  },
+  "acpiTablesDir": null,
+  "source": "scan",
+  "scanConfidence": 0.92
+}

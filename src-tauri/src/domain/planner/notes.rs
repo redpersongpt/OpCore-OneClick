@@ -7,13 +7,15 @@
 //! and merges repeats of (component, title).
 
 use crate::contracts::note;
-use crate::domain::compatibility::{self, GpuStatus, ModernStandby};
+use crate::domain::compatibility::{self, ModernStandby};
 use crate::domain::model::{
     BuildPlan, CpuPlatform, GpuFamily, MacOsVersion, NoteLevel, PlanNote, PlistScalar,
 };
 use crate::domain::{codec_db, device_db};
 
-use super::{DisplayPlan, PlanContext};
+use super::{
+    root_patching_planned, DisplayPlan, PlanContext, ROOT_PATCH_COMPONENT, VOODOOHDA_COMPONENT,
+};
 
 const COPY_EFI: &str = "Copy the EFI to the internal drive";
 const USB_MAP: &str = "Map the USB ports";
@@ -32,10 +34,6 @@ const VERBOSE: &str = "Turn off verbose boot";
 const FILEVAULT: &str = "Leave FileVault off";
 const AMD_APPS: &str = "Apps that expect an Intel CPU";
 const DUAL_BOOT: &str = "Dual boot with Windows";
-
-/// Component of a note that marks a planned OCLP root patch (shared
-/// convention with the other stages).
-const ROOT_PATCH_COMPONENT: &str = "root-patch";
 
 /// Sentence added to a USB map step for macOS 26 (critic-gaps §3).
 const USB_TAHOE: &str =
@@ -59,6 +57,7 @@ fn step_order(n: &PlanNote) -> u8 {
     } else if component == "usb" {
         10
     } else if component == ROOT_PATCH_COMPONENT
+        || component == VOODOOHDA_COMPONENT
         || has(&["root patch", "legacy patcher"])
         || (component == "audio" && t.contains("applehda"))
     {
@@ -149,19 +148,9 @@ fn has_boot_arg(plan: &BuildPlan, arg: &str) -> bool {
 }
 
 /// OCLP's modern-wireless kext set (research-opencore-macos §3.5) or the
-/// IOSkywalkFamily block that goes with it.
-fn legacy_wireless(plan: &BuildPlan) -> bool {
-    [
-        "IOSkywalkFamily",
-        "IO80211FamilyLegacy",
-        "AirPortBrcmNIC-Tahoe",
-    ]
-    .iter()
-    .any(|id| has_kext(plan, id))
-        || plan
-            .kernel_blocks
-            .iter()
-            .any(|b| b.enabled && b.identifier == "com.apple.iokit.IOSkywalkFamily")
+/// IOSkywalkFamily block that goes with it, as the root-patch decision sees it.
+fn legacy_wireless(ctx: &PlanContext, plan: &BuildPlan) -> bool {
+    root_patching_planned(ctx, &ctx.display.clone().unwrap_or_default(), plan).wireless
 }
 
 /// Add the plan-wide notes and the post-install steps no earlier stage
@@ -170,16 +159,6 @@ fn legacy_wireless(plan: &BuildPlan) -> bool {
 pub fn apply(ctx: &PlanContext, display: &DisplayPlan, plan: &mut BuildPlan) {
     add_plan_notes(ctx, plan);
     let steps = post_install_steps(ctx, display, plan);
-    if ctx.target == MacOsVersion::Tahoe && has_kext(plan, "USBToolBox") {
-        for step in plan
-            .post_install
-            .iter_mut()
-            .filter(|n| n.component.eq_ignore_ascii_case("usb"))
-            .filter(|n| n.title.to_ascii_lowercase().contains("map") && !n.detail.contains("1.2.0"))
-        {
-            step.detail = format!("{} {USB_TAHOE}", step.detail.trim_end());
-        }
-    }
     plan.post_install.extend(steps);
 
     let mut notes = dedupe(std::mem::take(&mut plan.notes));
@@ -187,6 +166,16 @@ pub fn apply(ctx: &PlanContext, display: &DisplayPlan, plan: &mut BuildPlan) {
     plan.notes = notes;
 
     let mut steps = dedupe(std::mem::take(&mut plan.post_install));
+    // After merging, so a step written by two stages gets the sentence once.
+    if ctx.target == MacOsVersion::Tahoe && has_kext(plan, "USBToolBox") {
+        for step in steps
+            .iter_mut()
+            .filter(|n| n.component.eq_ignore_ascii_case("usb"))
+            .filter(|n| n.title.to_ascii_lowercase().contains("map") && !n.detail.contains("1.2.0"))
+        {
+            step.detail = format!("{} {USB_TAHOE}", step.detail.trim_end());
+        }
+    }
     steps.sort_by_key(step_order);
     plan.post_install = steps;
 }
@@ -204,7 +193,7 @@ fn wifi_in_recovery(ctx: &PlanContext, plan: &BuildPlan) -> bool {
         .iter()
         .any(|k| k.enabled && k.catalog_id.starts_with("AirportItlwm"));
     match device_db::wifi_driver(nic) {
-        device_db::WifiDriver::IntelItlwm => airport_itlwm && !legacy_wireless(plan),
+        device_db::WifiDriver::IntelItlwm => airport_itlwm && !legacy_wireless(ctx, plan),
         device_db::WifiDriver::Broadcom { native_max, .. } => ctx.target <= native_max,
         device_db::WifiDriver::AtherosLegacy => ctx.target <= MacOsVersion::BigSur,
         _ => false,
@@ -225,7 +214,7 @@ fn add_plan_notes(ctx: &PlanContext, plan: &mut BuildPlan) {
     if !ethernet_ok && !wifi_in_recovery(ctx, plan) {
         let why = if has_kext(plan, "itlwm") {
             "itlwm needs the HeliPort app, which is not available in macOS Recovery."
-        } else if legacy_wireless(plan) {
+        } else if legacy_wireless(ctx, plan) {
             "The Wi-Fi card only works after the post-install root patch."
         } else if profile.wifi.is_some() {
             "The Wi-Fi card has no driver in this build."
@@ -305,10 +294,11 @@ fn post_install_steps(ctx: &PlanContext, display: &DisplayPlan, plan: &BuildPlan
         add(NoteLevel::Info, "usb", USB_MAP, &detail);
     }
 
+    let root_patch = root_patching_planned(ctx, display, plan);
     if let Some(gpu) = display.primary.and_then(|i| profile.gpus.get(i)) {
-        // The same verdict as the compatibility report, which includes
-        // Polaris/Vega on CPUs without AVX2 (research-gpu §8).
-        if compatibility::gpu_status(profile, gpu, target) == GpuStatus::RootPatch
+        // The graphics stage's verdict, which includes Polaris/Vega on CPUs
+        // without AVX2 (research-gpu §8).
+        if root_patch.graphics
             && !covered(existing, Some("gpu"), &["root patch", "legacy patcher"])
             && !covered(
                 existing,
@@ -345,7 +335,7 @@ fn post_install_steps(ctx: &PlanContext, display: &DisplayPlan, plan: &BuildPlan
         }
     }
 
-    if legacy_wireless(plan) && !covered(existing, Some("wifi"), &["root patch", "legacy patcher"])
+    if root_patch.wireless && !covered(existing, Some("wifi"), &["root patch", "legacy patcher"])
     {
         add(
             NoteLevel::Warning,
@@ -360,7 +350,7 @@ fn post_install_steps(ctx: &PlanContext, display: &DisplayPlan, plan: &BuildPlan
 
     if target == MacOsVersion::Tahoe
         && compatibility::has_analog_audio(profile)
-        && !covered(existing, Some("audio"), &["applehda", "voodoohda"])
+        && !covered(existing, None, &["applehda", "voodoohda"])
     {
         // research-opencore-macos §3.5: VoodooHDA with SIP 03000000, or
         // AppleHDA put back with SIP 03080000 and SecureBootModel Disabled.

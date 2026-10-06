@@ -64,6 +64,8 @@ describe('toAppError', () => {
     expect(describeError(toAppError({ code: 'A', message: 'b', suggestion: 'c' }))).toBe('[A] b (c)');
     expect(isCancellation(toAppError({ code: 'TASK_CANCELLED', message: 'x' }))).toBe(true);
     expect(isCancellation(toAppError({ code: 'IO_ERROR', message: 'x' }))).toBe(false);
+    // A dismissed password prompt is a failure the user must see, not a cancel.
+    expect(isCancellation(toAppError({ code: 'ELEVATION_CANCELLED', message: 'x' }))).toBe(false);
   });
 });
 

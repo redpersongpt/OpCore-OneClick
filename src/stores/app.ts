@@ -48,6 +48,8 @@ interface AppState {
 
   settingsOpen: boolean;
   troubleshootOpen: boolean;
+  /** "Close while an operation runs?" dialog. */
+  closeConfirmOpen: boolean;
 
   initialized: boolean;
   init: () => Promise<void>;
@@ -56,6 +58,7 @@ interface AppState {
   dismissPersisted: () => void;
   openSettings: (open: boolean) => void;
   openTroubleshoot: (open: boolean) => void;
+  openCloseConfirm: (open: boolean) => void;
 }
 
 export const useApp = create<AppState>((set, get) => ({
@@ -69,6 +72,7 @@ export const useApp = create<AppState>((set, get) => ({
   persisted: null,
   settingsOpen: false,
   troubleshootOpen: false,
+  closeConfirmOpen: false,
   initialized: false,
 
   init: async () => {
@@ -118,4 +122,5 @@ export const useApp = create<AppState>((set, get) => ({
   dismissPersisted: () => set({ persisted: null }),
   openSettings: (open) => set({ settingsOpen: open }),
   openTroubleshoot: (open) => set({ troubleshootOpen: open }),
+  openCloseConfirm: (open) => set({ closeConfirmOpen: open }),
 }));

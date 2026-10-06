@@ -4,6 +4,7 @@ import { sortedVersions } from '../../lib/compat';
 import { parseCount } from '../../lib/format';
 import { macosLabel } from '../../lib/macos';
 import { useApp } from '../../stores/app';
+import { useCompat } from '../../stores/compat';
 import type { OptionsDraft } from '../../stores/build';
 import { Field, ParsedInput, Select, TextInput, Toggle, type SelectOption } from '../ui/Field';
 
@@ -38,11 +39,14 @@ export function BuildOptionsForm({
 }) {
   const t = useT();
   const catalog = useApp((s) => s.catalog);
+  const reach = useCompat((s) => s.reach);
 
   const targetOptions: SelectOption<MacOsVersion>[] = report
     ? sortedVersions(report).map((v) => ({
         value: v.version,
-        label: v.supported ? macosLabel(v.version) : `${macosLabel(v.version)} — ${t('compat.notSupported')}`,
+        label: v.supported
+          ? macosLabel(v.version)
+          : `${macosLabel(v.version)} — ${reach[v.version] === 'expert' ? t('compat.expertOption') : t('compat.notSupported')}`,
       }))
     : [{ value: target, label: macosLabel(target) }];
 
@@ -151,6 +155,15 @@ export function BuildOptionsForm({
           description={t('build.disableGpusHint')}
           disabled={disabled}
         />
+        {target === '26' && (
+          <Toggle
+            checked={draft.prepareAudioPatch}
+            onChange={(prepareAudioPatch) => onChange({ prepareAudioPatch })}
+            label={t('build.audioPatch')}
+            description={t('build.audioPatchHint')}
+            disabled={disabled}
+          />
+        )}
         <Toggle
           checked={draft.useLatestReleases}
           onChange={(useLatestReleases) => onChange({ useLatestReleases })}

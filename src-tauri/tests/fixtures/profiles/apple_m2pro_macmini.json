@@ -1,0 +1,50 @@
+{
+  "cpu": {
+    "name": "Apple M2 Pro",
+    "vendor": "apple",
+    "platform": "apple_silicon",
+    "codename": "Apple M2 Pro",
+    "family": null,
+    "model": null,
+    "stepping": null,
+    "cores": 10,
+    "threads": 10,
+    "isMobile": false,
+    "hasAvx2": false,
+    "hasSse42": false,
+    "isHybrid": false
+  },
+  "formFactor": "desktop",
+  "vm": null,
+  "gpus": [],
+  "audio": null,
+  "ethernet": [],
+  "wifi": null,
+  "bluetooth": null,
+  "input": {
+    "keyboardBus": "usb",
+    "touchpadBus": null,
+    "touchpadVendor": null,
+    "touchpadHid": null,
+    "hasTouchscreen": false
+  },
+  "storage": [
+    {
+      "name": "APPLE SSD AP0512Z",
+      "kind": "nvme",
+      "vendorId": null,
+      "deviceId": null,
+      "sizeBytes": 512000000000
+    }
+  ],
+  "motherboardVendor": "Apple Inc.",
+  "motherboardModel": "Mac14,12",
+  "chipset": null,
+  "ramGb": 16,
+  "hasBattery": false,
+  "firmwareUefi": true,
+  "acpi": null,
+  "acpiTablesDir": null,
+  "source": "scan",
+  "scanConfidence": 0.6
+}

@@ -1,0 +1,87 @@
+{
+  "cpu": {
+    "name": "Intel(R) Core(TM) Ultra 7 155H",
+    "vendor": "intel",
+    "platform": "meteor_lake",
+    "codename": "Meteor Lake-H",
+    "family": 6,
+    "model": 170,
+    "stepping": 4,
+    "cores": 16,
+    "threads": 22,
+    "isMobile": true,
+    "hasAvx2": true,
+    "hasSse42": true,
+    "isHybrid": true
+  },
+  "formFactor": "laptop",
+  "vm": null,
+  "gpus": [
+    {
+      "name": "Intel(R) Arc(TM) Graphics",
+      "vendor": "intel",
+      "family": "intel_xe",
+      "vendorId": "8086",
+      "deviceId": "7d55",
+      "subsystemId": "1e241043",
+      "isIgpu": true,
+      "pciPath": "PciRoot(0x0)/Pci(0x2,0x0)",
+      "acpiPath": "\\_SB.PC00.GFX0",
+      "vramMb": null,
+      "disabled": false
+    }
+  ],
+  "audio": {
+    "codecName": "Realtek ALC294",
+    "codecId": 283902612,
+    "controllerVendorId": "8086",
+    "controllerDeviceId": "7e28",
+    "controllerPciPath": "PciRoot(0x0)/Pci(0x1f,0x3)",
+    "layoutId": null
+  },
+  "ethernet": [],
+  "wifi": {
+    "name": "Intel(R) Wi-Fi 6E AX211 160MHz",
+    "bus": "pci",
+    "vendorId": "8086",
+    "deviceId": "7e40",
+    "subsystemId": "00948086",
+    "pciPath": "PciRoot(0x0)/Pci(0x14,0x3)",
+    "macAddress": "BC:09:1B:11:22:33"
+  },
+  "bluetooth": {
+    "name": "Intel Wireless Bluetooth AX211",
+    "bus": "usb",
+    "vendorId": "8087",
+    "deviceId": "0033",
+    "subsystemId": null,
+    "pciPath": null,
+    "macAddress": null
+  },
+  "input": {
+    "keyboardBus": "ps2",
+    "touchpadBus": "i2c",
+    "touchpadVendor": "other",
+    "touchpadHid": "ASUE1407",
+    "hasTouchscreen": false
+  },
+  "storage": [
+    {
+      "name": "Micron 2400 MTFDKBA1T0QFM",
+      "kind": "nvme",
+      "vendorId": "1344",
+      "deviceId": "5413",
+      "sizeBytes": 1000000000000
+    }
+  ],
+  "motherboardVendor": "ASUSTeK COMPUTER INC.",
+  "motherboardModel": "UX3405MA",
+  "chipset": "Meteor Lake SoC",
+  "ramGb": 32,
+  "hasBattery": true,
+  "firmwareUefi": true,
+  "acpi": null,
+  "acpiTablesDir": null,
+  "source": "scan",
+  "scanConfidence": 0.92
+}

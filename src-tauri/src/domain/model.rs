@@ -600,6 +600,11 @@ pub struct BuildOptions {
     pub disable_unsupported_gpus: bool,
     /// Picker timeout in seconds (0 = wait forever).
     pub picker_timeout: Option<u32>,
+    /// macOS 26: prepare the EFI for restoring analog audio after install
+    /// (AppleHDA root patch or VoodooHDA), which partly disables SIP. Off by
+    /// default so SIP stays fully enabled unless the user asks for it.
+    #[serde(default)]
+    pub prepare_audio_patch: bool,
 }
 
 impl Default for BuildOptions {
@@ -616,6 +621,7 @@ impl Default for BuildOptions {
             identity: None,
             disable_unsupported_gpus: true,
             picker_timeout: None,
+            prepare_audio_patch: false,
         }
     }
 }
@@ -747,7 +753,9 @@ pub struct SsdtPlan {
     pub reason: String,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, TS)]
+/// ACPI->Patch entry. Byte fields are hex strings; the fields after
+/// `enabled` default to OpenCore's "unused" values (empty / 0).
+#[derive(Debug, Clone, Default, Serialize, Deserialize, TS)]
 #[serde(rename_all = "camelCase")]
 #[ts(export)]
 pub struct AcpiPatch {
@@ -759,6 +767,27 @@ pub struct AcpiPatch {
     pub oem_table_id: Option<String>,
     pub count: u32,
     pub enabled: bool,
+    /// ACPI path of the object the patch starts at (`\_SB.VMOD`).
+    #[serde(default)]
+    pub base: String,
+    /// Occurrences of `base` to skip.
+    #[serde(default)]
+    pub base_skip: u32,
+    /// Hex bit mask applied to `find` (empty = all bits).
+    #[serde(default)]
+    pub mask: String,
+    /// Hex bit mask applied to `replace` (empty = all bits).
+    #[serde(default)]
+    pub replace_mask: String,
+    /// Bytes to search, 0 = the whole table.
+    #[serde(default)]
+    pub limit: u32,
+    /// Occurrences of `find` to skip.
+    #[serde(default)]
+    pub skip: u32,
+    /// Only tables of this length, 0 = any.
+    #[serde(default)]
+    pub table_length: u32,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]

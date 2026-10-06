@@ -1,0 +1,113 @@
+{
+  "cpu": {
+    "name": "AMD Ryzen Threadripper 3970X 32-Core Processor",
+    "vendor": "amd",
+    "platform": "amd_zen2",
+    "codename": "Castle Peak",
+    "family": 23,
+    "model": 49,
+    "stepping": 0,
+    "cores": 32,
+    "threads": 64,
+    "isMobile": false,
+    "hasAvx2": true,
+    "hasSse42": true,
+    "isHybrid": false
+  },
+  "formFactor": "desktop",
+  "vm": null,
+  "gpus": [
+    {
+      "name": "AMD Radeon RX 6900 XT",
+      "vendor": "amd",
+      "family": "amd_navi21",
+      "vendorId": "1002",
+      "deviceId": "73bf",
+      "subsystemId": "e4391da2",
+      "isIgpu": false,
+      "pciPath": "PciRoot(0x2)/Pci(0x1,0x1)/Pci(0x0,0x0)/Pci(0x0,0x0)/Pci(0x0,0x0)",
+      "acpiPath": "\\_SB.S0D2.D1A.BYUP.BYD8.D0A0",
+      "vramMb": 16384,
+      "disabled": false
+    }
+  ],
+  "audio": {
+    "codecName": "Realtek S1220A",
+    "codecId": 283906408,
+    "controllerVendorId": "1022",
+    "controllerDeviceId": "1487",
+    "controllerPciPath": "PciRoot(0x0)/Pci(0x8,0x1)/Pci(0x0,0x4)",
+    "layoutId": null
+  },
+  "ethernet": [
+    {
+      "name": "Aquantia AQC107 NBase-T/IEEE 802.3bz Ethernet Controller",
+      "bus": "pci",
+      "vendorId": "1d6a",
+      "deviceId": "07b1",
+      "subsystemId": "87561043",
+      "pciPath": "PciRoot(0x1)/Pci(0x1,0x2)/Pci(0x0,0x0)",
+      "macAddress": "04:D4:C4:12:34:56"
+    },
+    {
+      "name": "Intel(R) I211 Gigabit Network Connection",
+      "bus": "pci",
+      "vendorId": "8086",
+      "deviceId": "1539",
+      "subsystemId": "85f01043",
+      "pciPath": "PciRoot(0x1)/Pci(0x1,0x3)/Pci(0x0,0x0)",
+      "macAddress": "04:D4:C4:12:34:57"
+    }
+  ],
+  "wifi": {
+    "name": "Intel Wi-Fi 6 AX200 160MHz",
+    "bus": "pci",
+    "vendorId": "8086",
+    "deviceId": "2723",
+    "subsystemId": "00848086",
+    "pciPath": "PciRoot(0x0)/Pci(0x1,0x2)/Pci(0x0,0x2)/Pci(0x4,0x0)/Pci(0x0,0x0)",
+    "macAddress": "50:E0:85:7A:11:02"
+  },
+  "bluetooth": {
+    "name": "Intel Wireless Bluetooth AX200",
+    "bus": "usb",
+    "vendorId": "8087",
+    "deviceId": "0029",
+    "subsystemId": null,
+    "pciPath": null,
+    "macAddress": null
+  },
+  "input": {
+    "keyboardBus": "usb",
+    "touchpadBus": null,
+    "touchpadVendor": null,
+    "touchpadHid": null,
+    "hasTouchscreen": false
+  },
+  "storage": [
+    {
+      "name": "Samsung SSD 980 PRO 2TB",
+      "kind": "nvme",
+      "vendorId": "144d",
+      "deviceId": "a80a",
+      "sizeBytes": 2000000000000
+    },
+    {
+      "name": "Samsung SSD 970 EVO Plus 1TB",
+      "kind": "nvme",
+      "vendorId": "144d",
+      "deviceId": "a808",
+      "sizeBytes": 1000000000000
+    }
+  ],
+  "motherboardVendor": "ASUSTeK COMPUTER INC.",
+  "motherboardModel": "ROG ZENITH II EXTREME ALPHA",
+  "chipset": "TRX40",
+  "ramGb": 128,
+  "hasBattery": false,
+  "firmwareUefi": true,
+  "acpi": null,
+  "acpiTablesDir": null,
+  "source": "scan",
+  "scanConfidence": 0.92
+}

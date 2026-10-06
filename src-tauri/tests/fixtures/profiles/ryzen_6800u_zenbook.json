@@ -1,0 +1,87 @@
+{
+  "cpu": {
+    "name": "AMD Ryzen 7 6800U with Radeon Graphics",
+    "vendor": "amd",
+    "platform": "amd_zen3",
+    "codename": "Rembrandt",
+    "family": 25,
+    "model": 68,
+    "stepping": 1,
+    "cores": 8,
+    "threads": 16,
+    "isMobile": true,
+    "hasAvx2": true,
+    "hasSse42": true,
+    "isHybrid": false
+  },
+  "formFactor": "laptop",
+  "vm": null,
+  "gpus": [
+    {
+      "name": "AMD Radeon(TM) Graphics (680M)",
+      "vendor": "amd",
+      "family": "amd_apu_rdna",
+      "vendorId": "1002",
+      "deviceId": "1681",
+      "subsystemId": "1e121043",
+      "isIgpu": true,
+      "pciPath": "PciRoot(0x0)/Pci(0x8,0x1)/Pci(0x0,0x0)",
+      "acpiPath": "\\_SB.PCI0.GP17.VGA",
+      "vramMb": 512,
+      "disabled": false
+    }
+  ],
+  "audio": {
+    "codecName": "Realtek ALC294",
+    "codecId": 283902612,
+    "controllerVendorId": "1022",
+    "controllerDeviceId": "15e3",
+    "controllerPciPath": "PciRoot(0x0)/Pci(0x8,0x1)/Pci(0x0,0x6)",
+    "layoutId": null
+  },
+  "ethernet": [],
+  "wifi": {
+    "name": "MediaTek Wi-Fi 6E MT7922 160MHz",
+    "bus": "pci",
+    "vendorId": "14c3",
+    "deviceId": "0616",
+    "subsystemId": "e0d613d3",
+    "pciPath": "PciRoot(0x0)/Pci(0x2,0x2)/Pci(0x0,0x0)",
+    "macAddress": "E8:9C:25:AB:CD:05"
+  },
+  "bluetooth": {
+    "name": "MediaTek Bluetooth MT7922",
+    "bus": "usb",
+    "vendorId": "13d3",
+    "deviceId": "3568",
+    "subsystemId": null,
+    "pciPath": null,
+    "macAddress": null
+  },
+  "input": {
+    "keyboardBus": "ps2",
+    "touchpadBus": "i2c",
+    "touchpadVendor": "other",
+    "touchpadHid": "ASUE1209",
+    "hasTouchscreen": false
+  },
+  "storage": [
+    {
+      "name": "Samsung PM9B1 512GB",
+      "kind": "nvme",
+      "vendorId": "144d",
+      "deviceId": "a80c",
+      "sizeBytes": 512000000000
+    }
+  ],
+  "motherboardVendor": "ASUSTeK COMPUTER INC.",
+  "motherboardModel": "UM5302TA",
+  "chipset": null,
+  "ramGb": 16,
+  "hasBattery": true,
+  "firmwareUefi": true,
+  "acpi": null,
+  "acpiTablesDir": null,
+  "source": "scan",
+  "scanConfidence": 0.92
+}

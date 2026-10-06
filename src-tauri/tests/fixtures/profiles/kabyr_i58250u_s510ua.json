@@ -1,0 +1,127 @@
+{
+  "cpu": {
+    "name": "Intel(R) Core(TM) i5-8250U CPU @ 1.60GHz",
+    "vendor": "intel",
+    "platform": "kaby_lake",
+    "codename": "Kaby Lake-R",
+    "family": 6,
+    "model": 142,
+    "stepping": 10,
+    "cores": 4,
+    "threads": 8,
+    "isMobile": true,
+    "hasAvx2": true,
+    "hasSse42": true,
+    "isHybrid": false
+  },
+  "formFactor": "laptop",
+  "vm": null,
+  "gpus": [
+    {
+      "name": "Intel(R) UHD Graphics 620",
+      "vendor": "intel",
+      "family": "intel_kaby_lake",
+      "vendorId": "8086",
+      "deviceId": "5917",
+      "subsystemId": "15e01043",
+      "isIgpu": true,
+      "pciPath": "PciRoot(0x0)/Pci(0x2,0x0)",
+      "acpiPath": "\\_SB.PCI0.GFX0",
+      "vramMb": null,
+      "disabled": false
+    }
+  ],
+  "audio": {
+    "codecName": "Realtek ALC256",
+    "codecId": 283902550,
+    "controllerVendorId": "8086",
+    "controllerDeviceId": "9d71",
+    "controllerPciPath": "PciRoot(0x0)/Pci(0x1f,0x3)",
+    "layoutId": null
+  },
+  "ethernet": [],
+  "wifi": {
+    "name": "Intel Dual Band Wireless-AC 8265",
+    "bus": "pci",
+    "vendorId": "8086",
+    "deviceId": "24fd",
+    "subsystemId": "80108086",
+    "pciPath": "PciRoot(0x0)/Pci(0x1c,0x0)/Pci(0x0,0x0)",
+    "macAddress": "34:F3:9A:12:5C:01"
+  },
+  "bluetooth": {
+    "name": "Intel Wireless Bluetooth 8265",
+    "bus": "usb",
+    "vendorId": "8087",
+    "deviceId": "0a2b",
+    "subsystemId": null,
+    "pciPath": null,
+    "macAddress": null
+  },
+  "input": {
+    "keyboardBus": "ps2",
+    "touchpadBus": "i2c",
+    "touchpadVendor": "elan",
+    "touchpadHid": "ELAN1200",
+    "hasTouchscreen": false
+  },
+  "storage": [
+    {
+      "name": "Micron 1100 SATA 256GB",
+      "kind": "sata",
+      "vendorId": null,
+      "deviceId": null,
+      "sizeBytes": 256000000000
+    },
+    {
+      "name": "ST1000DM003-1SB102",
+      "kind": "sata",
+      "vendorId": null,
+      "deviceId": null,
+      "sizeBytes": 1000000000000
+    }
+  ],
+  "motherboardVendor": "ASUSTeK COMPUTER INC.",
+  "motherboardModel": "X510UAR",
+  "chipset": "Sunrise Point-LP",
+  "ramGb": 8,
+  "hasBattery": true,
+  "firmwareUefi": true,
+  "acpi": {
+    "pciRoot": "\\_SB.PCI0",
+    "lpcBridge": "\\_SB.PCI0.LPCB",
+    "ecPath": "\\_SB.PCI0.LPCB.EC0",
+    "ecHasSta": false,
+    "cpuPaths": [
+      "\\_PR.CPU0",
+      "\\_PR.CPU1",
+      "\\_PR.CPU2",
+      "\\_PR.CPU3",
+      "\\_PR.CPU4",
+      "\\_PR.CPU5",
+      "\\_PR.CPU6",
+      "\\_PR.CPU7"
+    ],
+    "cpuUsesAcpi0007": false,
+    "awacPath": null,
+    "awacHasStas": false,
+    "rtcPath": "\\_SB.PCI0.LPCB.RTC",
+    "hpetPath": "\\_SB.PCI0.LPCB.HPET",
+    "igpuPath": "\\_SB.PCI0.GFX0",
+    "xhciPaths": [
+      "\\_SB.PCI0.XHC"
+    ],
+    "rhubPaths": [
+      "\\_SB.PCI0.XHC.RHUB"
+    ],
+    "gpioPath": "\\_SB.PCI0.GPI0",
+    "smbusPath": "\\_SB.PCI0.SBUS",
+    "pnlfExists": false,
+    "hasOsiWindows": true,
+    "dsdtOemTableId": "_ASUS_  ",
+    "dsdtLength": 180000
+  },
+  "acpiTablesDir": null,
+  "source": "scan",
+  "scanConfidence": 0.92
+}

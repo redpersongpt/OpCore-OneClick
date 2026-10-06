@@ -16,6 +16,9 @@ export interface AppError {
 
 const SEVERITIES: readonly ErrorSeverity[] = ['error', 'warning', 'info'];
 
+/** Message of a rejection that carried nothing readable (the UI shows a translated text instead). */
+export const UNKNOWN_MESSAGE = 'Unknown error';
+
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
@@ -75,7 +78,7 @@ export function toAppError(err: unknown, fallbackCode = 'UNKNOWN_ERROR'): AppErr
     }
     return {
       code: fallbackCode,
-      message: err.trim() || 'Unknown error',
+      message: err.trim() || UNKNOWN_MESSAGE,
       severity: 'error',
       recoverable: false,
       suggestion: null,
@@ -83,7 +86,7 @@ export function toAppError(err: unknown, fallbackCode = 'UNKNOWN_ERROR'): AppErr
     };
   }
 
-  let message = 'Unknown error';
+  let message = UNKNOWN_MESSAGE;
   if (err !== undefined && err !== null) {
     try {
       message = JSON.stringify(err);
@@ -94,9 +97,16 @@ export function toAppError(err: unknown, fallbackCode = 'UNKNOWN_ERROR'): AppErr
   return { code: fallbackCode, message, severity: 'error', recoverable: false, suggestion: null, context: null };
 }
 
-/** True when the error says the user (or a task_cancel call) stopped the operation. */
+/** Code of every operation stopped through `task_cancel` (`CancellationToken::check`). */
+export const CANCELLED_CODE = 'TASK_CANCELLED';
+
+/**
+ * True when the user (through `task_cancel`) stopped the operation. Other
+ * codes that merely mention a cancel, like ELEVATION_CANCELLED (the password
+ * prompt was dismissed), are real failures the user has to see.
+ */
 export function isCancellation(err: AppError): boolean {
-  return /CANCEL/i.test(err.code);
+  return err.code === CANCELLED_CODE;
 }
 
 /** One-line text for logs and bug reports. */

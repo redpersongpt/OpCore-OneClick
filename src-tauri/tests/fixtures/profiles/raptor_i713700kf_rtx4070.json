@@ -1,0 +1,81 @@
+{
+  "cpu": {
+    "name": "13th Gen Intel(R) Core(TM) i7-13700KF",
+    "vendor": "intel",
+    "platform": "raptor_lake",
+    "codename": "Raptor Lake-S",
+    "family": 6,
+    "model": 183,
+    "stepping": 1,
+    "cores": 16,
+    "threads": 24,
+    "isMobile": false,
+    "hasAvx2": true,
+    "hasSse42": true,
+    "isHybrid": true
+  },
+  "formFactor": "desktop",
+  "vm": null,
+  "gpus": [
+    {
+      "name": "NVIDIA GeForce RTX 4070",
+      "vendor": "nvidia",
+      "family": "nvidia_modern",
+      "vendorId": "10de",
+      "deviceId": "2786",
+      "subsystemId": "40ed1462",
+      "isIgpu": false,
+      "pciPath": "PciRoot(0x0)/Pci(0x1,0x0)/Pci(0x0,0x0)",
+      "acpiPath": "\\_SB.PC00.PEG1.PEGP",
+      "vramMb": 12288,
+      "disabled": false
+    }
+  ],
+  "audio": {
+    "codecName": "Realtek ALC897",
+    "codecId": 283904151,
+    "controllerVendorId": "8086",
+    "controllerDeviceId": "7a50",
+    "controllerPciPath": "PciRoot(0x0)/Pci(0x1f,0x3)",
+    "layoutId": null
+  },
+  "ethernet": [
+    {
+      "name": "Realtek Gaming 2.5GbE Family Controller (RTL8125B)",
+      "bus": "pci",
+      "vendorId": "10ec",
+      "deviceId": "8125",
+      "subsystemId": "7e061462",
+      "pciPath": "PciRoot(0x0)/Pci(0x1c,0x2)/Pci(0x0,0x0)",
+      "macAddress": "D8:BB:C1:12:34:56"
+    }
+  ],
+  "wifi": null,
+  "bluetooth": null,
+  "input": {
+    "keyboardBus": "usb",
+    "touchpadBus": null,
+    "touchpadVendor": null,
+    "touchpadHid": null,
+    "hasTouchscreen": false
+  },
+  "storage": [
+    {
+      "name": "WD_BLACK SN770 1TB",
+      "kind": "nvme",
+      "vendorId": "15b7",
+      "deviceId": "5017",
+      "sizeBytes": 1000000000000
+    }
+  ],
+  "motherboardVendor": "Micro-Star International Co., Ltd.",
+  "motherboardModel": "MAG B760 TOMAHAWK WIFI DDR4 (MS-7E26)",
+  "chipset": "B760",
+  "ramGb": 32,
+  "hasBattery": false,
+  "firmwareUefi": true,
+  "acpi": null,
+  "acpiTablesDir": null,
+  "source": "scan",
+  "scanConfidence": 0.92
+}

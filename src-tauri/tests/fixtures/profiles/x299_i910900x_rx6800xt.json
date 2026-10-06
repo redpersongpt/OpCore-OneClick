@@ -1,0 +1,88 @@
+{
+  "cpu": {
+    "name": "Intel(R) Core(TM) i9-10900X CPU @ 3.70GHz",
+    "vendor": "intel",
+    "platform": "cascade_lake_x",
+    "codename": "Cascade Lake-X",
+    "family": 6,
+    "model": 85,
+    "stepping": 7,
+    "cores": 10,
+    "threads": 20,
+    "isMobile": false,
+    "hasAvx2": true,
+    "hasSse42": true,
+    "isHybrid": false
+  },
+  "formFactor": "desktop",
+  "vm": null,
+  "gpus": [
+    {
+      "name": "AMD Radeon RX 6800 XT",
+      "vendor": "amd",
+      "family": "amd_navi21",
+      "vendorId": "1002",
+      "deviceId": "73bf",
+      "subsystemId": "e4381da2",
+      "isIgpu": false,
+      "pciPath": "PciRoot(0x0)/Pci(0x0,0x0)/Pci(0x0,0x0)/Pci(0x0,0x0)/Pci(0x0,0x0)",
+      "acpiPath": "\\_SB.PC01.BR1A.PEGP",
+      "vramMb": 16384,
+      "disabled": false
+    }
+  ],
+  "audio": {
+    "codecName": "Realtek S1220A",
+    "codecId": 283906408,
+    "controllerVendorId": "8086",
+    "controllerDeviceId": "a2f0",
+    "controllerPciPath": "PciRoot(0x0)/Pci(0x1f,0x3)",
+    "layoutId": null
+  },
+  "ethernet": [
+    {
+      "name": "Intel(R) Ethernet Connection (2) I219-V",
+      "bus": "pci",
+      "vendorId": "8086",
+      "deviceId": "15b8",
+      "subsystemId": "86721043",
+      "pciPath": "PciRoot(0x0)/Pci(0x1f,0x6)",
+      "macAddress": "04:D9:F5:12:34:56"
+    }
+  ],
+  "wifi": null,
+  "bluetooth": null,
+  "input": {
+    "keyboardBus": "usb",
+    "touchpadBus": null,
+    "touchpadVendor": null,
+    "touchpadHid": null,
+    "hasTouchscreen": false
+  },
+  "storage": [
+    {
+      "name": "Samsung SSD 970 EVO Plus 1TB",
+      "kind": "nvme",
+      "vendorId": "144d",
+      "deviceId": "a808",
+      "sizeBytes": 1000000000000
+    },
+    {
+      "name": "WDC WDS500G3X0C-00SJG0 (SN750)",
+      "kind": "nvme",
+      "vendorId": "15b7",
+      "deviceId": "5006",
+      "sizeBytes": 500000000000
+    }
+  ],
+  "motherboardVendor": "ASUSTeK COMPUTER INC.",
+  "motherboardModel": "PRIME X299-A II",
+  "chipset": "X299",
+  "ramGb": 64,
+  "hasBattery": false,
+  "firmwareUefi": true,
+  "acpi": null,
+  "acpiTablesDir": null,
+  "source": "scan",
+  "scanConfidence": 0.92
+}

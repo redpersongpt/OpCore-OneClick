@@ -1,7 +1,8 @@
 import { create } from 'zustand';
 import { api } from '../bridge/api';
-import { toAppError, type AppError } from '../bridge/errors';
+import { isCancellation, toAppError, type AppError } from '../bridge/errors';
 import type { DetectedHardware, HardwareProfile } from '../bridge/types';
+import { TASK_KINDS, useTasks } from './tasks';
 import { useWizard } from './wizard';
 
 interface HardwareState {
@@ -13,6 +14,8 @@ interface HardwareState {
 
   scanning: boolean;
   scanError: AppError | null;
+  /** The last scan was stopped by the user. */
+  scanCancelled: boolean;
   /** A scan was started at least once in this session (prevents auto-scan loops). */
   scanAttempted: boolean;
 
@@ -22,6 +25,8 @@ interface HardwareState {
 
   /** Run `scan_hardware`. Resolves to true on success. Concurrent calls are ignored. */
   scan: () => Promise<boolean>;
+  /** Stop the running scan (task_cancel). */
+  cancelScan: () => Promise<void>;
   setProfile: (profile: HardwareProfile, detected: DetectedHardware | null, isDemo?: boolean) => void;
   editProfile: (update: (profile: HardwareProfile) => HardwareProfile) => void;
   /** Re-interpret the edited profile. Resolves to the new profile or null on failure. */
@@ -38,6 +43,7 @@ const initial = {
   isDemo: false,
   scanning: false,
   scanError: null,
+  scanCancelled: false,
   scanAttempted: false,
   refreshing: false,
   refreshError: null,
@@ -49,18 +55,26 @@ export const useHardware = create<HardwareState>((set, get) => ({
 
   scan: async () => {
     if (get().scanning) return false;
-    set({ scanning: true, scanError: null, scanAttempted: true });
+    set({ scanning: true, scanError: null, scanCancelled: false, scanAttempted: true });
     useWizard.getState().lock('scan');
     try {
       const result = await api.scanHardware();
       set({ detected: result.detected, profile: result.profile, dirty: false, isDemo: false, scanning: false });
       return true;
     } catch (err) {
-      set({ scanError: toAppError(err), scanning: false });
+      const error = toAppError(err);
+      if (isCancellation(error)) set({ scanCancelled: true, scanning: false });
+      else set({ scanError: error, scanning: false });
       return false;
     } finally {
       useWizard.getState().unlock('scan');
     }
+  },
+
+  cancelScan: async () => {
+    if (!get().scanning) return;
+    const task = useTasks.getState().running(TASK_KINDS.scan);
+    if (task) await useTasks.getState().cancel(task.taskId);
   },
 
   setProfile: (profile, detected, isDemo = false) =>

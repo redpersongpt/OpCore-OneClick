@@ -1,0 +1,81 @@
+{
+  "cpu": {
+    "name": "Intel(R) Core(TM) i5-9400F CPU @ 2.90GHz",
+    "vendor": "intel",
+    "platform": "coffee_lake",
+    "codename": "Coffee Lake-S",
+    "family": 6,
+    "model": 158,
+    "stepping": 10,
+    "cores": 6,
+    "threads": 6,
+    "isMobile": false,
+    "hasAvx2": true,
+    "hasSse42": true,
+    "isHybrid": false
+  },
+  "formFactor": "desktop",
+  "vm": null,
+  "gpus": [
+    {
+      "name": "AMD Radeon RX 6600 XT",
+      "vendor": "amd",
+      "family": "amd_navi23",
+      "vendorId": "1002",
+      "deviceId": "73ff",
+      "subsystemId": "e4471da2",
+      "isIgpu": false,
+      "pciPath": "PciRoot(0x0)/Pci(0x1,0x0)/Pci(0x0,0x0)/Pci(0x0,0x0)/Pci(0x0,0x0)",
+      "acpiPath": "\\_SB.PCI0.PEG0.PEGP",
+      "vramMb": 8192,
+      "disabled": false
+    }
+  ],
+  "audio": {
+    "codecName": "Realtek ALC887",
+    "codecId": 283904135,
+    "controllerVendorId": "8086",
+    "controllerDeviceId": "a2f0",
+    "controllerPciPath": "PciRoot(0x0)/Pci(0x1f,0x3)",
+    "layoutId": null
+  },
+  "ethernet": [
+    {
+      "name": "Realtek PCIe GbE Family Controller (RTL8111H)",
+      "bus": "pci",
+      "vendorId": "10ec",
+      "deviceId": "8168",
+      "subsystemId": "7c831462",
+      "pciPath": "PciRoot(0x0)/Pci(0x1c,0x5)/Pci(0x0,0x0)",
+      "macAddress": "00:D8:61:12:34:56"
+    }
+  ],
+  "wifi": null,
+  "bluetooth": null,
+  "input": {
+    "keyboardBus": "usb",
+    "touchpadBus": null,
+    "touchpadVendor": null,
+    "touchpadHid": null,
+    "hasTouchscreen": false
+  },
+  "storage": [
+    {
+      "name": "WD_BLACK SN770 1TB",
+      "kind": "nvme",
+      "vendorId": "15b7",
+      "deviceId": "5017",
+      "sizeBytes": 1000000000000
+    }
+  ],
+  "motherboardVendor": "Micro-Star International Co., Ltd.",
+  "motherboardModel": "B365M PRO-VDH (MS-7C31)",
+  "chipset": "B365",
+  "ramGb": 16,
+  "hasBattery": false,
+  "firmwareUefi": true,
+  "acpi": null,
+  "acpiTablesDir": null,
+  "source": "scan",
+  "scanConfidence": 0.92
+}

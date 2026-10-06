@@ -1,0 +1,122 @@
+{
+  "cpu": {
+    "name": "AMD Ryzen 7 4700U with Radeon Graphics",
+    "vendor": "amd",
+    "platform": "amd_zen2",
+    "codename": "Renoir",
+    "family": 23,
+    "model": 96,
+    "stepping": 1,
+    "cores": 8,
+    "threads": 8,
+    "isMobile": true,
+    "hasAvx2": true,
+    "hasSse42": true,
+    "isHybrid": false
+  },
+  "formFactor": "laptop",
+  "vm": null,
+  "gpus": [
+    {
+      "name": "AMD Radeon(TM) Graphics",
+      "vendor": "amd",
+      "family": "amd_apu_vega",
+      "vendorId": "1002",
+      "deviceId": "1636",
+      "subsystemId": "381b17aa",
+      "isIgpu": true,
+      "pciPath": "PciRoot(0x0)/Pci(0x8,0x1)/Pci(0x0,0x0)",
+      "acpiPath": "\\_SB.PCI0.GP17.VGA",
+      "vramMb": 512,
+      "disabled": false
+    }
+  ],
+  "audio": {
+    "codecName": "Realtek ALC257",
+    "codecId": 283902551,
+    "controllerVendorId": "1022",
+    "controllerDeviceId": "15e3",
+    "controllerPciPath": "PciRoot(0x0)/Pci(0x8,0x1)/Pci(0x0,0x6)",
+    "layoutId": null
+  },
+  "ethernet": [],
+  "wifi": {
+    "name": "Intel Wi-Fi 6 AX200 160MHz",
+    "bus": "pci",
+    "vendorId": "8086",
+    "deviceId": "2723",
+    "subsystemId": "00848086",
+    "pciPath": "PciRoot(0x0)/Pci(0x1,0x2)/Pci(0x0,0x2)/Pci(0x4,0x0)/Pci(0x0,0x0)",
+    "macAddress": "50:E0:85:7A:11:02"
+  },
+  "bluetooth": {
+    "name": "Intel Wireless Bluetooth AX200",
+    "bus": "usb",
+    "vendorId": "8087",
+    "deviceId": "0029",
+    "subsystemId": null,
+    "pciPath": null,
+    "macAddress": null
+  },
+  "input": {
+    "keyboardBus": "ps2",
+    "touchpadBus": "i2c",
+    "touchpadVendor": "elan",
+    "touchpadHid": "ELAN0634",
+    "hasTouchscreen": false
+  },
+  "storage": [
+    {
+      "name": "SAMSUNG MZALQ512HALU-000L2 (PM991)",
+      "kind": "nvme",
+      "vendorId": "144d",
+      "deviceId": "a809",
+      "sizeBytes": 512000000000
+    }
+  ],
+  "motherboardVendor": "LENOVO",
+  "motherboardModel": "LNVNB161216",
+  "chipset": null,
+  "ramGb": 16,
+  "hasBattery": true,
+  "firmwareUefi": true,
+  "acpi": {
+    "pciRoot": "\\_SB.PCI0",
+    "lpcBridge": "\\_SB.PCI0.LPC0",
+    "ecPath": "\\_SB.PCI0.LPC0.EC0",
+    "ecHasSta": false,
+    "cpuPaths": [
+      "\\_PR.C000",
+      "\\_PR.C001",
+      "\\_PR.C002",
+      "\\_PR.C003",
+      "\\_PR.C004",
+      "\\_PR.C005",
+      "\\_PR.C006",
+      "\\_PR.C007"
+    ],
+    "cpuUsesAcpi0007": false,
+    "awacPath": null,
+    "awacHasStas": false,
+    "rtcPath": "\\_SB.PCI0.LPC0.RTC",
+    "hpetPath": "\\_SB.PCI0.LPC0.HPET",
+    "igpuPath": "\\_SB.PCI0.GP17.VGA",
+    "xhciPaths": [
+      "\\_SB.PCI0.GP17.XHC0",
+      "\\_SB.PCI0.GP17.XHC1"
+    ],
+    "rhubPaths": [
+      "\\_SB.PCI0.GP17.XHC0.RHUB",
+      "\\_SB.PCI0.GP17.XHC1.RHUB"
+    ],
+    "gpioPath": "\\_SB.GPIO",
+    "smbusPath": null,
+    "pnlfExists": false,
+    "hasOsiWindows": true,
+    "dsdtOemTableId": "LENOVO  ",
+    "dsdtLength": null
+  },
+  "acpiTablesDir": null,
+  "source": "scan",
+  "scanConfidence": 0.92
+}

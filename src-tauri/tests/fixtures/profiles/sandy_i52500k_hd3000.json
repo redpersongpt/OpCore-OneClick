@@ -1,0 +1,88 @@
+{
+  "cpu": {
+    "name": "Intel(R) Core(TM) i5-2500K CPU @ 3.30GHz",
+    "vendor": "intel",
+    "platform": "sandy_bridge",
+    "codename": "Sandy Bridge",
+    "family": 6,
+    "model": 42,
+    "stepping": 7,
+    "cores": 4,
+    "threads": 4,
+    "isMobile": false,
+    "hasAvx2": false,
+    "hasSse42": true,
+    "isHybrid": false
+  },
+  "formFactor": "desktop",
+  "vm": null,
+  "gpus": [
+    {
+      "name": "Intel(R) HD Graphics 3000",
+      "vendor": "intel",
+      "family": "intel_sandy_bridge",
+      "vendorId": "8086",
+      "deviceId": "0112",
+      "subsystemId": "844d1043",
+      "isIgpu": true,
+      "pciPath": "PciRoot(0x0)/Pci(0x2,0x0)",
+      "acpiPath": "\\_SB.PCI0.GFX0",
+      "vramMb": null,
+      "disabled": false
+    }
+  ],
+  "audio": {
+    "codecName": "Realtek ALC892",
+    "codecId": 283904146,
+    "controllerVendorId": "8086",
+    "controllerDeviceId": "1c20",
+    "controllerPciPath": "PciRoot(0x0)/Pci(0x1b,0x0)",
+    "layoutId": null
+  },
+  "ethernet": [
+    {
+      "name": "Intel(R) 82579V Gigabit Network Connection",
+      "bus": "pci",
+      "vendorId": "8086",
+      "deviceId": "1503",
+      "subsystemId": "849c1043",
+      "pciPath": "PciRoot(0x0)/Pci(0x19,0x0)",
+      "macAddress": "BC:AE:C5:12:34:56"
+    }
+  ],
+  "wifi": null,
+  "bluetooth": null,
+  "input": {
+    "keyboardBus": "usb",
+    "touchpadBus": null,
+    "touchpadVendor": null,
+    "touchpadHid": null,
+    "hasTouchscreen": false
+  },
+  "storage": [
+    {
+      "name": "Samsung SSD 860 EVO 500GB",
+      "kind": "sata",
+      "vendorId": null,
+      "deviceId": null,
+      "sizeBytes": 500000000000
+    },
+    {
+      "name": "ST1000DM003-1SB102",
+      "kind": "sata",
+      "vendorId": null,
+      "deviceId": null,
+      "sizeBytes": 1000000000000
+    }
+  ],
+  "motherboardVendor": "ASUSTeK Computer INC.",
+  "motherboardModel": "P8Z68-V",
+  "chipset": "Z68",
+  "ramGb": 16,
+  "hasBattery": false,
+  "firmwareUefi": true,
+  "acpi": null,
+  "acpiTablesDir": null,
+  "source": "scan",
+  "scanConfidence": 0.92
+}

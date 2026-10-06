@@ -19,7 +19,7 @@ use crate::domain::model::{
 };
 use crate::error::AppError;
 
-use super::PlanContext;
+use super::{graphics, DisplayPlan, PlanContext};
 
 const COMPONENT: &str = "acpi";
 
@@ -34,7 +34,7 @@ const QUIRKS: [(&str, bool); 6] = [
     ("SyncTableIds", false),
 ];
 
-pub fn apply(ctx: &PlanContext, plan: &mut BuildPlan) {
+pub fn apply(ctx: &PlanContext, display: &DisplayPlan, plan: &mut BuildPlan) {
     let tables = match load_tables(ctx) {
         Ok(t) => t,
         Err(e) => {
@@ -60,7 +60,7 @@ pub fn apply(ctx: &PlanContext, plan: &mut BuildPlan) {
         (None, None) => Source::Unknown,
     };
 
-    let selection = select(ctx, plan, facts.as_ref(), tables.is_some());
+    let selection = select(ctx, display, plan, facts.as_ref(), tables.is_some());
     let mut built = Built::default();
     for request in selection.requests {
         built.build(request, &source);
@@ -69,6 +69,12 @@ pub fn apply(ctx: &PlanContext, plan: &mut BuildPlan) {
     plan.ssdts.extend(built.ssdts);
     for patch in built.patches {
         add_patch(&mut plan.acpi_patches, patch);
+    }
+    if ctx.profile.vm == Some(VmKind::HyperV) {
+        hyper_v(plan);
+    }
+    if intel_800_series(ctx) {
+        add_patch(&mut plan.acpi_patches, remove_conditional_scope());
     }
     for delete in deletes(ctx) {
         if !plan.acpi_deletes.iter().any(|d| {
@@ -104,20 +110,33 @@ pub fn apply(ctx: &PlanContext, plan: &mut BuildPlan) {
     plan.post_install.extend(post_install(ctx));
 }
 
-/// `device-id` (little endian) for the `PciRoot(0x0)/Pci(0x16,0x0)` IMEI
-/// device that goes with SSDT-IMEI: a Sandy Bridge CPU on a 7-series board
-/// needs the 6-series id 0x1C3A, an Ivy Bridge CPU on a 6-series board the
-/// 7-series id 0x1E3A (Dortania sandy-bridge.md / ivy-bridge.md).
-pub fn imei_device_id(ctx: &PlanContext) -> Option<[u8; 4]> {
-    if !ctx.is_intel() {
+/// Backlight objects for an internal panel driven by a supported iGPU:
+/// SSDT-PNLF with this `_UID`, plus SSDT-ALS0 from macOS 10.15 on (Dortania
+/// backlight.md; OpenCorePkg SSDT-ALS0.dsl: "Starting with macOS 10.15
+/// Ambient Light Sensor presence is required for backlight functioning").
+/// The kexts stage adds SMCLightSensor exactly when `als0` is set (Dortania
+/// ktext.md: only where an ambient light sensor exists).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct PanelBacklight {
+    pub pnlf_uid: u32,
+    pub als0: bool,
+}
+
+/// The backlight decision for this plan; None without an internal panel, in
+/// VMs, and when the panel is not on a usable iGPU (a dGPU drives it, the
+/// iGPU is headless, disabled or turned off by the graphics stage).
+pub fn panel_backlight(
+    ctx: &PlanContext,
+    display: &DisplayPlan,
+    plan: &BuildPlan,
+) -> Option<PanelBacklight> {
+    if !ctx.has_panel || ctx.is_vm {
         return None;
     }
-    let series = ctx.chipset.as_ref()?.series;
-    match (ctx.platform(), series) {
-        (CpuPlatform::SandyBridge, 7) => Some([0x3A, 0x1C, 0x00, 0x00]),
-        (CpuPlatform::IvyBridge, 6) => Some([0x3A, 0x1E, 0x00, 0x00]),
-        _ => None,
-    }
+    Some(PanelBacklight {
+        pnlf_uid: panel_pnlf_uid(ctx, display, plan)?,
+        als0: ctx.target >= MacOsVersion::Catalina,
+    })
 }
 
 /// SSDT-PNLF `_UID` for an iGPU generation, the WhateverGreen backlight
@@ -231,13 +250,14 @@ impl Selection {
 
 fn select(
     ctx: &PlanContext,
+    display: &DisplayPlan,
     plan: &BuildPlan,
     facts: Option<&AcpiFacts>,
     have_tables: bool,
 ) -> Selection {
     let mut s = Selection::default();
     if ctx.is_vm {
-        select_vm(ctx, &mut s);
+        select_vm(&mut s);
         return s;
     }
     cpu(ctx, facts, &mut s);
@@ -246,32 +266,129 @@ fn select(
     nvram(ctx, &mut s);
     uncore(ctx, &mut s);
     usb_reset(ctx, facts, &mut s);
-    imei(ctx, &mut s);
+    imei(ctx, display, plan, &mut s);
     laptop_input(ctx, have_tables, &mut s);
-    backlight(ctx, plan, &mut s);
+    backlight(ctx, display, plan, &mut s);
     s
 }
 
 /// VMs get only what macOS cannot boot without: an EC device for Catalina
-/// and newer (the generator skips it when the VM already has one).
-fn select_vm(ctx: &PlanContext, s: &mut Selection) {
+/// and newer (the generator skips it when the VM already has one). Hyper-V
+/// adds OpenCore's samples on top ([`hyper_v`]).
+fn select_vm(s: &mut Selection) {
     s.push(Request::new(
         SsdtKind::EcUsbx { laptop: false },
         true,
         "Fake EC device (macOS Catalina and newer look for one) and USBX USB power properties.",
     ));
-    if ctx.profile.vm == Some(VmKind::HyperV) {
-        // The renames these samples need are scoped with `Base`, which the
-        // plan's ACPI patches cannot express (MacHyperVSupport README).
-        s.notes.push(note(
-            NoteLevel::Warning,
-            "Hyper-V needs its own ACPI tables",
-            "Add OpenCore's SSDT-HV-VMBUS, SSDT-HV-DEV and SSDT-HV-PLUG samples in this order, \
-             with the Base-scoped _HID/_STA renames listed in their sources (MacHyperVSupport \
-             documentation). SSDT-HV-DEV is needed on Windows 10 / Server 2019 and newer hosts, \
-             which declare the CPUs as ACPI0007 devices; SSDT-HV-PLUG loads VMPlatformPlugin \
-             on macOS 11 and newer.",
-        ));
+}
+
+const HID: &str = "5F484944";
+const XHID: &str = "58484944";
+const STA: &str = "5F535441";
+const XSTA: &str = "58535441";
+
+/// A `Base`-scoped DSDT rename: (base, comment, find, replace).
+type ScopedRename = (&'static str, &'static str, &'static str, &'static str);
+
+/// OpenCore's Hyper-V samples in the order MacHyperVSupport's README asks
+/// for, each with the renames its source lists (OpenCorePkg 1.0.8
+/// Docs/AcpiSamples/Source/SSDT-HV-*.dsl): (file, reason, renames).
+const HYPER_V_TABLES: &[(&str, &str, &[ScopedRename])] = &[
+    (
+        "SSDT-HV-VMBUS.aml",
+        "Standard _HID values for the Hyper-V VMBus, which AppleACPIPlatform needs for EFI device paths \
+         (Startup Disk).",
+        &[
+            ("\\_SB.VMOD", "_HID to XHID rename (Hyper-V VMOD)", HID, XHID),
+            ("\\_SB.VMOD.VMBS", "_HID to XHID rename (Hyper-V VMBus)", HID, XHID),
+        ],
+    ),
+    (
+        "SSDT-HV-DEV.aml",
+        "Processor objects macOS can use and _STA methods that hide the virtual devices it cannot handle \
+         (Windows 10 / Server 2019 and newer hosts).",
+        &[
+            ("\\_SB.VMOD.TPM2", "_STA to XSTA rename (Hyper-V TPM)", STA, XSTA),
+            ("\\_SB.NVDR", "_STA to XSTA rename (Hyper-V NVDIMM)", STA, XSTA),
+            ("\\_SB.EPC", "_STA to XSTA rename (Hyper-V EPC)", STA, XSTA),
+            ("\\_SB.VMOD.BAT1", "_STA to XSTA rename (Hyper-V battery)", STA, XSTA),
+        ],
+    ),
+    (
+        "SSDT-HV-PLUG.aml",
+        "Loads VMPlatformPlugin on the first CPU (macOS 11 and newer); it must follow SSDT-HV-DEV.",
+        &[],
+    ),
+];
+
+/// The Hyper-V tables and their renames (MacHyperVSupport README, "OpenCore
+/// configuration").
+fn hyper_v(plan: &mut BuildPlan) {
+    for (file, reason, renames) in HYPER_V_TABLES {
+        plan.ssdts.push(SsdtPlan {
+            file_name: file.to_string(),
+            source: SsdtSource::OcSample {
+                file: file.to_string(),
+            },
+            required: false,
+            reason: reason.to_string(),
+        });
+        for (base, comment, find, replace) in *renames {
+            let mut comment = comment.to_string();
+            acpi::name_required_table(&mut comment, file);
+            add_patch(
+                &mut plan.acpi_patches,
+                AcpiPatch {
+                    comment,
+                    find: find.to_string(),
+                    replace: replace.to_string(),
+                    table_signature: Some("DSDT".to_string()),
+                    oem_table_id: None,
+                    count: 1,
+                    enabled: true,
+                    base: base.to_string(),
+                    ..AcpiPatch::default()
+                },
+            );
+        }
+    }
+    plan.notes.push(note(
+        NoteLevel::Info,
+        "Hyper-V ACPI tables",
+        "OpenCore's SSDT-HV-VMBUS, SSDT-HV-DEV and SSDT-HV-PLUG are included with the renames their sources \
+         list. On a Windows 8.1 / Server 2012 R2 host, disable SSDT-HV-DEV and the four renames that name it.",
+    ));
+}
+
+/// Intel 800-series board (Arrow Lake desktops), by chipset or, when it is
+/// unknown, by a desktop Arrow Lake CPU.
+fn intel_800_series(ctx: &PlanContext) -> bool {
+    if !ctx.is_intel() || ctx.is_vm {
+        return false;
+    }
+    match ctx.chipset.as_ref() {
+        Some(c) => c.vendor == CpuVendor::Intel && c.series == 800,
+        None => ctx.platform() == CpuPlatform::ArrowLake && !ctx.is_laptop,
+    }
+}
+
+/// OpCore-Simplify's DSDT patch for Intel 800-series boards
+/// (lzhoang2801/OpCore-Simplify 52766d2, Scripts/acpi_guru.py
+/// `remove_conditional_scope`): the header of `If (PCHA != Zero)` (IfOp, a
+/// masked 3-byte PkgLength, LNot LEqual PCHA Zero) becomes NoOps, so the
+/// scope it guards is declared unconditionally.
+fn remove_conditional_scope() -> AcpiPatch {
+    AcpiPatch {
+        comment: "Remove conditional ACPI scope declaration (Intel 800-series)".to_string(),
+        find: "A000000092935043484100".to_string(),
+        replace: "A3A3A3A3A3A3A3A3A3A3A3".to_string(),
+        mask: "FF000000FFFFFFFFFFFFFF".to_string(),
+        table_signature: Some("DSDT".to_string()),
+        oem_table_id: None,
+        count: 1,
+        enabled: true,
+        ..AcpiPatch::default()
     }
 }
 
@@ -538,9 +655,11 @@ fn usb_reset(ctx: &PlanContext, facts: Option<&AcpiFacts>, s: &mut Selection) {
 }
 
 /// SSDT-IMEI: Sandy Bridge CPU on a 7-series board or Ivy Bridge CPU on a
-/// 6-series board, "needed" per Dortania sandy-bridge.md / ivy-bridge.md.
-fn imei(ctx: &PlanContext, s: &mut Selection) {
-    if imei_device_id(ctx).is_none() {
+/// 6-series board, "needed" per Dortania sandy-bridge.md / ivy-bridge.md;
+/// planned together with the IMEI `device-id` of the graphics stage
+/// ([`graphics::imei_device_id`]).
+fn imei(ctx: &PlanContext, display: &DisplayPlan, plan: &BuildPlan, s: &mut Selection) {
+    if graphics::imei_device_id(ctx, display, plan).is_none() {
         return;
     }
     s.push(Request::new(
@@ -605,20 +724,18 @@ fn laptop_input(ctx: &PlanContext, have_tables: bool, s: &mut Selection) {
 }
 
 /// PNLF (+ ALS0 on Catalina and newer) for an internal panel driven by a
-/// supported iGPU (Dortania backlight.md, OpenCore SSDT-ALS0.dsl).
-fn backlight(ctx: &PlanContext, plan: &BuildPlan, s: &mut Selection) {
-    if !ctx.has_panel {
-        return;
-    }
-    let Some(uid) = panel_pnlf_uid(ctx, plan) else {
+/// supported iGPU ([`panel_backlight`]).
+fn backlight(ctx: &PlanContext, display: &DisplayPlan, plan: &BuildPlan, s: &mut Selection) {
+    let Some(panel) = panel_backlight(ctx, display, plan) else {
         return;
     };
+    let uid = panel.pnlf_uid;
     s.push(Request::new(
         SsdtKind::Pnlf { uid },
         false,
         format!("Backlight device for the internal panel (WhateverGreen profile {uid})."),
     ));
-    if ctx.target >= MacOsVersion::Catalina {
+    if panel.als0 {
         s.push(Request::new(
             SsdtKind::Als0,
             false,
@@ -628,10 +745,18 @@ fn backlight(ctx: &PlanContext, plan: &BuildPlan, s: &mut Selection) {
     }
 }
 
-fn panel_pnlf_uid(ctx: &PlanContext, plan: &BuildPlan) -> Option<u32> {
+/// `_UID` of the panel's iGPU: the display decision must drive the displays
+/// from the iGPU itself (an all-in-one whose panel hangs off a dGPU, with the
+/// iGPU headless, gets none), and neither the profile, the display decision
+/// nor the graphics stage may have disabled it.
+fn panel_pnlf_uid(ctx: &PlanContext, display: &DisplayPlan, plan: &BuildPlan) -> Option<u32> {
     let gpus = &ctx.profile.gpus;
-    if let Some(igpu) = gpus.iter().find(|g| g.is_igpu) {
-        let usable = !igpu.disabled
+    if let Some(i) = gpus.iter().position(|g| g.is_igpu) {
+        let igpu = &gpus[i];
+        let drives_panel = display.primary == Some(i) && !display.igpu_headless;
+        let usable = drives_panel
+            && !igpu.disabled
+            && !display.disabled.contains(&i)
             && !igpu_disabled_in_plan(igpu, plan)
             && gpu_db::support(igpu).display_capable;
         return if usable { pnlf_uid(igpu.family) } else { None };
@@ -787,6 +912,10 @@ impl Built {
     }
 
     fn push_generated(&mut self, request: Request, g: GeneratedSsdt) {
+        for mut patch in g.patches {
+            acpi::name_required_table(&mut patch.comment, &g.file_name);
+            add_patch(&mut self.patches, patch);
+        }
         self.ssdts.push(SsdtPlan {
             file_name: g.file_name,
             source: SsdtSource::Generated {
@@ -796,9 +925,6 @@ impl Built {
             required: request.required,
             reason: request.reason,
         });
-        for patch in g.patches {
-            add_patch(&mut self.patches, patch);
-        }
         self.planned.push(request.kind);
     }
 
@@ -835,7 +961,8 @@ impl Built {
             required: request.required,
             reason: format!("{} Generic prebuilt table.", request.reason),
         });
-        for patch in acpi::fallback_patches(&request.kind) {
+        for mut patch in acpi::fallback_patches(&request.kind) {
+            acpi::name_required_table(&mut patch.comment, &file);
             add_patch(&mut self.patches, patch);
         }
         self.prebuilt.push(file);
@@ -862,17 +989,26 @@ fn missing_note(name: &str, why: &str, err: &AppError, source: &Source) -> PlanN
 /// Append unless the same rename (find, replace and scope) is already listed;
 /// order is kept because table-specific renames depend on the ones before.
 /// A rename one table needs stays enabled even if another listed it as
-/// optional (disabled).
+/// optional (disabled), and its comment names every table that needs it
+/// (the build disables it only when all of them are missing).
 fn add_patch(list: &mut Vec<AcpiPatch>, patch: AcpiPatch) {
     let duplicate = list.iter_mut().find(|p| {
         p.find.eq_ignore_ascii_case(&patch.find)
             && p.replace.eq_ignore_ascii_case(&patch.replace)
+            && p.mask.eq_ignore_ascii_case(&patch.mask)
+            && p.base == patch.base
             && p.table_signature == patch.table_signature
             && p.oem_table_id == patch.oem_table_id
             && p.count == patch.count
     });
     match duplicate {
-        Some(existing) => existing.enabled |= patch.enabled,
+        Some(_) if !patch.enabled => {}
+        Some(existing) if !existing.enabled => *existing = patch,
+        Some(existing) => {
+            for table in acpi::tables_named_in(&patch.comment) {
+                acpi::name_required_table(&mut existing.comment, table);
+            }
+        }
         None => list.push(patch),
     }
 }
@@ -1046,6 +1182,9 @@ mod tests {
         "SSDT-EC-USBX.aml",
         "SSDT-EC.aml",
         "SSDT-EHCx-DISABLE.aml",
+        "SSDT-HV-DEV.aml",
+        "SSDT-HV-PLUG.aml",
+        "SSDT-HV-VMBUS.aml",
         "SSDT-IMEI.aml",
         "SSDT-PLUG-ALT.aml",
         "SSDT-PLUG.aml",
@@ -1083,8 +1222,19 @@ mod tests {
         let ctx = PlanContext::new(profile, &options);
         let mut plan = empty_plan(target);
         plan.smbios.model = smbios.to_string();
-        apply(&ctx, &mut plan);
+        apply(&ctx, &display_for(&ctx), &mut plan);
         plan
+    }
+
+    /// The graphics stage's display decision, or none for profiles without
+    /// a GPU (manual profiles).
+    fn display_for(ctx: &PlanContext) -> DisplayPlan {
+        graphics::choose_display(ctx).unwrap_or(DisplayPlan {
+            primary: None,
+            igpu: None,
+            igpu_headless: false,
+            disabled: vec![],
+        })
     }
 
     fn names(plan: &BuildPlan) -> Vec<&str> {
@@ -1435,10 +1585,11 @@ mod tests {
 
     #[test]
     fn sandy_bridge_on_7_series_needs_imei_and_cpupm_drops() {
-        let p = with_chipset(
+        let mut p = with_chipset(
             machine(CpuPlatform::SandyBridge, FormFactor::Desktop),
             "Z77",
         );
+        p.gpus = vec![igpu(GpuFamily::IntelSandyBridge, "0122")];
         let plan = plan_for(&p, MacOsVersion::HighSierra, "iMac12,2");
         assert_eq!(names(&plan), ["SSDT-EC-DESKTOP.aml", "SSDT-IMEI.aml"]);
         dortania(&plan, "SSDT-IMEI.aml");
@@ -1457,21 +1608,43 @@ mod tests {
             .iter()
             .any(|n| n.title.contains("SSDT-PM")));
 
-        let options = BuildOptions::default();
+        let options = BuildOptions {
+            target: MacOsVersion::HighSierra,
+            ..BuildOptions::default()
+        };
         let ctx = PlanContext::new(&p, &options);
-        assert_eq!(imei_device_id(&ctx), Some([0x3A, 0x1C, 0x00, 0x00]));
+        let display = display_for(&ctx);
+        assert_eq!(
+            graphics::imei_device_id(&ctx, &display, &plan),
+            Some([0x3A, 0x1C, 0x00, 0x00])
+        );
     }
 
     #[test]
     fn imei_only_for_mismatched_generations() {
-        let options = BuildOptions::default();
-        let ivy_on_6 = with_chipset(machine(CpuPlatform::IvyBridge, FormFactor::Desktop), "H61");
-        let ctx = PlanContext::new(&ivy_on_6, &options);
-        assert_eq!(imei_device_id(&ctx), Some([0x3A, 0x1E, 0x00, 0x00]));
-        let ivy_on_7 = with_chipset(machine(CpuPlatform::IvyBridge, FormFactor::Desktop), "Z77");
-        assert_eq!(imei_device_id(&PlanContext::new(&ivy_on_7, &options)), None);
-        let unknown = machine(CpuPlatform::SandyBridge, FormFactor::Desktop);
-        assert_eq!(imei_device_id(&PlanContext::new(&unknown, &options)), None);
+        let options = BuildOptions {
+            target: MacOsVersion::Catalina,
+            ..BuildOptions::default()
+        };
+        let imei = |p: &HardwareProfile| {
+            let ctx = PlanContext::new(p, &options);
+            graphics::imei_device_id(&ctx, &display_for(&ctx), &empty_plan(options.target))
+        };
+        let mut ivy_on_6 = with_chipset(machine(CpuPlatform::IvyBridge, FormFactor::Desktop), "H61");
+        ivy_on_6.gpus = vec![igpu(GpuFamily::IntelIvyBridge, "0162")];
+        assert_eq!(imei(&ivy_on_6), Some([0x3A, 0x1E, 0x00, 0x00]));
+        let plan = plan_for(&ivy_on_6, MacOsVersion::Catalina, "iMac13,2");
+        assert!(names(&plan).contains(&"SSDT-IMEI.aml"));
+        // No iGPU in use: neither the IMEI id nor SSDT-IMEI.
+        let mut headless = ivy_on_6.clone();
+        headless.gpus[0].disabled = true;
+        assert_eq!(imei(&headless), None);
+        let mut ivy_on_7 = with_chipset(machine(CpuPlatform::IvyBridge, FormFactor::Desktop), "Z77");
+        ivy_on_7.gpus = vec![igpu(GpuFamily::IntelIvyBridge, "0162")];
+        assert_eq!(imei(&ivy_on_7), None);
+        let mut unknown = machine(CpuPlatform::SandyBridge, FormFactor::Desktop);
+        unknown.gpus = vec![igpu(GpuFamily::IntelSandyBridge, "0122")];
+        assert_eq!(imei(&unknown), None);
         let plan = plan_for(&ivy_on_7, MacOsVersion::Catalina, "iMac13,2");
         assert_eq!(names(&plan), ["SSDT-EC-DESKTOP.aml"]);
         assert_eq!(plan.acpi_deletes.len(), 2);
@@ -1720,7 +1893,7 @@ mod tests {
             patch_comments(&plan),
             [
                 "_OSI to XOSI rename - requires SSDT-XOSI.aml",
-                "PNLF to XNLF rename"
+                "PNLF to XNLF rename (SSDT-PNLF.aml)"
             ]
         );
         assert_eq!(plan.acpi_deletes.len(), 2);
@@ -2053,7 +2226,7 @@ mod tests {
             }],
             reason: String::new(),
         });
-        apply(&ctx, &mut plan);
+        apply(&ctx, &display_for(&ctx), &mut plan);
         assert!(!names(&plan).contains(&"SSDT-PNLF.aml"));
 
         // The same all-in-one with its iGPU in use: desktop EC, panel tables.
@@ -2097,17 +2270,65 @@ mod tests {
 
         p.vm = Some(VmKind::HyperV);
         let plan = plan_for(&p, MacOsVersion::Sonoma, "iMacPro1,1");
-        let hv = plan
-            .notes
+        // MacHyperVSupport: VMBUS, DEV, PLUG in that order, from OpenCore.
+        assert_eq!(
+            names(&plan),
+            [
+                "SSDT-EC-USBX-DESKTOP.aml",
+                "SSDT-HV-VMBUS.aml",
+                "SSDT-HV-DEV.aml",
+                "SSDT-HV-PLUG.aml"
+            ]
+        );
+        for file in ["SSDT-HV-VMBUS.aml", "SSDT-HV-DEV.aml", "SSDT-HV-PLUG.aml"] {
+            let ssdt = plan.ssdts.iter().find(|s| s.file_name == file).unwrap();
+            assert!(matches!(&ssdt.source, SsdtSource::OcSample { file: f } if f == file));
+        }
+        let bases: Vec<(&str, &str)> = plan
+            .acpi_patches
             .iter()
-            .find(|n| n.title.contains("Hyper-V"))
-            .map(|n| n.detail.as_str())
-            .unwrap_or_default();
-        // MacHyperVSupport: VMBUS, DEV, PLUG in that order.
-        let at = |s: &str| hv.find(s).unwrap_or(usize::MAX);
-        assert!(at("SSDT-HV-VMBUS") < at("SSDT-HV-DEV"), "{hv}");
-        assert!(at("SSDT-HV-DEV") < at("SSDT-HV-PLUG"), "{hv}");
-        assert_eq!(names(&plan), ["SSDT-EC-USBX-DESKTOP.aml"]);
+            .map(|p| (p.base.as_str(), p.find.as_str()))
+            .collect();
+        assert_eq!(
+            bases,
+            [
+                ("\\_SB.VMOD", "5F484944"),
+                ("\\_SB.VMOD.VMBS", "5F484944"),
+                ("\\_SB.VMOD.TPM2", "5F535441"),
+                ("\\_SB.NVDR", "5F535441"),
+                ("\\_SB.EPC", "5F535441"),
+                ("\\_SB.VMOD.BAT1", "5F535441"),
+            ]
+        );
+        for p in &plan.acpi_patches {
+            assert_eq!((p.count, p.table_signature.as_deref()), (1, Some("DSDT")));
+            assert!(p.enabled && p.comment.contains("(SSDT-HV-"), "{}", p.comment);
+        }
+        assert!(has_note(&plan, "Hyper-V"));
+    }
+
+    #[test]
+    fn intel_800_series_gets_the_conditional_scope_patch() {
+        let rcsp = |plan: &BuildPlan| {
+            plan.acpi_patches
+                .iter()
+                .any(|p| p.comment.starts_with("Remove conditional ACPI scope"))
+        };
+        let z890 = with_chipset(machine(CpuPlatform::ArrowLake, FormFactor::Desktop), "Z890");
+        let plan = plan_for(&z890, MacOsVersion::Sequoia, "MacPro7,1");
+        let patch = plan
+            .acpi_patches
+            .iter()
+            .find(|p| p.comment.starts_with("Remove conditional ACPI scope"))
+            .expect("800-series patch");
+        assert_eq!(patch.find.len(), patch.mask.len());
+        assert_eq!(patch.find.len(), patch.replace.len());
+        assert_eq!(patch.table_signature.as_deref(), Some("DSDT"));
+        // Arrow Lake desktop without a known chipset: same board family.
+        let arrow_lake = machine(CpuPlatform::ArrowLake, FormFactor::Desktop);
+        assert!(rcsp(&plan_for(&arrow_lake, MacOsVersion::Sequoia, "MacPro7,1")));
+        let z790 = with_chipset(machine(CpuPlatform::RaptorLake, FormFactor::Desktop), "Z790");
+        assert!(!rcsp(&plan_for(&z790, MacOsVersion::Sequoia, "MacPro7,1")));
     }
 
     // ── Indexed tables ──────────────────────────────────────────────────────
@@ -2251,7 +2472,9 @@ mod tests {
         let comments = patch_comments(&plan);
         assert_eq!(comments.len(), 2, "{comments:?}");
         assert!(comments[0].starts_with("EC to EC0"));
-        assert_eq!(comments[1], "EC0 _STA to XSTA rename");
+        // Both name their table, so the build can drop them with it.
+        assert!(comments[0].ends_with("(SSDT-EC-USBX.aml)"), "{comments:?}");
+        assert_eq!(comments[1], "EC0 _STA to XSTA rename (SSDT-EC-USBX.aml)");
         assert_eq!(plan.acpi_patches[0].find, "45435F5F");
         assert_eq!(plan.acpi_patches[0].replace, "4543305F");
         assert_eq!(
@@ -2302,6 +2525,7 @@ mod tests {
             oem_table_id: None,
             count: 1,
             enabled: true,
+            ..Default::default()
         };
         let mut list = Vec::new();
         add_patch(&mut list, patch("5F535441"));
@@ -2319,6 +2543,26 @@ mod tests {
         assert!(list[0].enabled);
         add_patch(&mut list, optional);
         assert!(list[0].enabled);
+
+        // Every table that needs a shared rename is named in its comment.
+        let named = |file: &str, enabled: bool| {
+            let mut p = patch("5F535441");
+            p.comment = format!("_STA to XSTA rename ({file})");
+            p.enabled = enabled;
+            p
+        };
+        let mut list = vec![named("SSDT-A.aml", true)];
+        add_patch(&mut list, named("SSDT-B.aml", true));
+        add_patch(&mut list, named("SSDT-C.aml", false));
+        assert_eq!(list[0].comment, "_STA to XSTA rename (SSDT-A.aml, SSDT-B.aml)");
+        let mut list = vec![named("SSDT-C.aml", false)];
+        add_patch(&mut list, named("SSDT-B.aml", true));
+        assert_eq!(list[0].comment, "_STA to XSTA rename (SSDT-B.aml)");
+        // A Base-scoped rename is not the same patch as a table-wide one.
+        let mut scoped = patch("5F535441");
+        scoped.base = "\\_SB.NVDR".into();
+        add_patch(&mut list, scoped);
+        assert_eq!(list.len(), 2);
     }
 
     #[test]
@@ -2419,7 +2663,8 @@ mod tests {
         let laptop = profile.form_factor == FormFactor::Laptop;
         let panel = profile.form_factor.has_internal_panel();
         if profile.vm.is_some() {
-            assert_eq!(all.len(), 1, "{label}: {all:?}");
+            let expected = if profile.vm == Some(VmKind::HyperV) { 4 } else { 1 };
+            assert_eq!(all.len(), expected, "{label}: {all:?}");
         } else {
             if profile.cpu.vendor == CpuVendor::Amd {
                 assert!(!all.contains(&"SSDT-PLUG.aml"), "{label}: PLUG on AMD");

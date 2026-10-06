@@ -1,0 +1,81 @@
+{
+  "cpu": {
+    "name": "Intel(R) Pentium(R) CPU G4560 @ 3.50GHz",
+    "vendor": "intel",
+    "platform": "kaby_lake",
+    "codename": "Kaby Lake-S",
+    "family": 6,
+    "model": 158,
+    "stepping": 9,
+    "cores": 2,
+    "threads": 4,
+    "isMobile": false,
+    "hasAvx2": false,
+    "hasSse42": true,
+    "isHybrid": false
+  },
+  "formFactor": "desktop",
+  "vm": null,
+  "gpus": [
+    {
+      "name": "Intel(R) HD Graphics 610",
+      "vendor": "intel",
+      "family": "intel_kaby_lake",
+      "vendorId": "8086",
+      "deviceId": "5902",
+      "subsystemId": "59021849",
+      "isIgpu": true,
+      "pciPath": "PciRoot(0x0)/Pci(0x2,0x0)",
+      "acpiPath": "\\_SB.PCI0.GFX0",
+      "vramMb": null,
+      "disabled": false
+    }
+  ],
+  "audio": {
+    "codecName": "Realtek ALC887",
+    "codecId": 283904135,
+    "controllerVendorId": "8086",
+    "controllerDeviceId": "a170",
+    "controllerPciPath": "PciRoot(0x0)/Pci(0x1f,0x3)",
+    "layoutId": null
+  },
+  "ethernet": [
+    {
+      "name": "Realtek PCIe GbE Family Controller (RTL8111G)",
+      "bus": "pci",
+      "vendorId": "10ec",
+      "deviceId": "8168",
+      "subsystemId": "81681849",
+      "pciPath": "PciRoot(0x0)/Pci(0x1c,0x5)/Pci(0x0,0x0)",
+      "macAddress": "70:85:C2:12:34:56"
+    }
+  ],
+  "wifi": null,
+  "bluetooth": null,
+  "input": {
+    "keyboardBus": "usb",
+    "touchpadBus": null,
+    "touchpadVendor": null,
+    "touchpadHid": null,
+    "hasTouchscreen": false
+  },
+  "storage": [
+    {
+      "name": "Samsung SSD 860 EVO 500GB",
+      "kind": "sata",
+      "vendorId": null,
+      "deviceId": null,
+      "sizeBytes": 500000000000
+    }
+  ],
+  "motherboardVendor": "ASRock",
+  "motherboardModel": "H110M-DGS R3.0",
+  "chipset": "H110",
+  "ramGb": 8,
+  "hasBattery": false,
+  "firmwareUefi": true,
+  "acpi": null,
+  "acpiTablesDir": null,
+  "source": "scan",
+  "scanConfidence": 0.92
+}

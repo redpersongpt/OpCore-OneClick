@@ -1,0 +1,97 @@
+{
+  "cpu": {
+    "name": "Intel(R) Core(TM) i5-8500 CPU @ 3.00GHz",
+    "vendor": "intel",
+    "platform": "coffee_lake",
+    "codename": "Coffee Lake-S",
+    "family": 6,
+    "model": 158,
+    "stepping": 10,
+    "cores": 6,
+    "threads": 6,
+    "isMobile": false,
+    "hasAvx2": true,
+    "hasSse42": true,
+    "isHybrid": false
+  },
+  "formFactor": "all_in_one",
+  "vm": null,
+  "gpus": [
+    {
+      "name": "Intel(R) UHD Graphics 630",
+      "vendor": "intel",
+      "family": "intel_coffee_lake",
+      "vendorId": "8086",
+      "deviceId": "3e92",
+      "subsystemId": "312b17aa",
+      "isIgpu": true,
+      "pciPath": "PciRoot(0x0)/Pci(0x2,0x0)",
+      "acpiPath": "\\_SB.PCI0.GFX0",
+      "vramMb": null,
+      "disabled": false
+    }
+  ],
+  "audio": {
+    "codecName": "Realtek ALC662",
+    "codecId": 283903586,
+    "controllerVendorId": "8086",
+    "controllerDeviceId": "a348",
+    "controllerPciPath": "PciRoot(0x0)/Pci(0x1f,0x3)",
+    "layoutId": null
+  },
+  "ethernet": [
+    {
+      "name": "Intel(R) Ethernet Connection (7) I219-LM",
+      "bus": "pci",
+      "vendorId": "8086",
+      "deviceId": "15bb",
+      "subsystemId": "312b17aa",
+      "pciPath": "PciRoot(0x0)/Pci(0x1f,0x6)",
+      "macAddress": "E8:6A:64:12:34:56"
+    }
+  ],
+  "wifi": {
+    "name": "Intel(R) Wireless-AC 9560 160MHz",
+    "bus": "pci",
+    "vendorId": "8086",
+    "deviceId": "a370",
+    "subsystemId": "00348086",
+    "pciPath": "PciRoot(0x0)/Pci(0x14,0x3)",
+    "macAddress": "D8:F2:CA:11:22:33"
+  },
+  "bluetooth": {
+    "name": "Intel Wireless Bluetooth 9560",
+    "bus": "usb",
+    "vendorId": "8087",
+    "deviceId": "0aaa",
+    "subsystemId": null,
+    "pciPath": null,
+    "macAddress": null
+  },
+  "input": {
+    "keyboardBus": "usb",
+    "touchpadBus": null,
+    "touchpadVendor": null,
+    "touchpadHid": null,
+    "hasTouchscreen": true
+  },
+  "storage": [
+    {
+      "name": "SAMSUNG MZVLB512HAJQ-000L7 (PM981)",
+      "kind": "nvme",
+      "vendorId": "144d",
+      "deviceId": "a808",
+      "sizeBytes": 512000000000
+    }
+  ],
+  "motherboardVendor": "LENOVO",
+  "motherboardModel": "3136",
+  "chipset": "Q370",
+  "ramGb": 16,
+  "hasBattery": false,
+  "firmwareUefi": true,
+  "acpi": null,
+  "acpiTablesDir": null,
+  "source": "scan",
+  "scanConfidence": 0.92
+}

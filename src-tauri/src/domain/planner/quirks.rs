@@ -13,7 +13,7 @@ use crate::domain::model::{
     SettingMap, StorageKind,
 };
 
-use super::{note, PlanContext};
+use super::{note, PlanContext, IOSKYWALK_ID};
 
 /// Booter quirk set, one per firmware family.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -388,7 +388,15 @@ fn kernel(ctx: &PlanContext, plan: &mut BuildPlan) {
     // Aquantia needs VT-d enabled and DisableIoMapper off (Configuration.tex
     // ForceAquantiaEthernet, 10.15.4+).
     let aquantia = ctx.has_aquantia() && target >= MacOsVersion::Catalina;
-    let keep_vtd = bare_intel && aquantia;
+    // The legacy wireless stack (IOSkywalkFamily blocked and re-injected)
+    // needs DisableIoMapper (research-kexts §3.7 option 2, §4.2); it wins
+    // over Aquantia's VT-d, whose driver then runs on CaseySJ's patches
+    // from macOS 12.3 (the kexts stage adds them).
+    let legacy_wireless = plan
+        .kernel_blocks
+        .iter()
+        .any(|b| b.enabled && b.identifier == IOSKYWALK_ID);
+    let keep_vtd = bare_intel && aquantia && !legacy_wireless;
     let dmar_replaced = plan
         .acpi_deletes
         .iter()
@@ -421,7 +429,7 @@ fn kernel(ctx: &PlanContext, plan: &mut BuildPlan) {
     flag(q, "AppleXcpmForceBoost", false);
     flag(q, "CustomSMBIOSGuid", ctx.needs_custom_smbios());
     // Dortania: DisableIoMapper YES on Intel; AMD-Vi is not supported by macOS.
-    flag(q, "DisableIoMapper", bare_intel && !keep_vtd);
+    flag(q, "DisableIoMapper", (bare_intel && !keep_vtd) || legacy_wireless);
     flag(q, "DisableIoMapperMapping", io_mapper_mapping);
     flag(q, "DisableLinkeditJettison", true);
     flag(q, "DisableRtcChecksum", false);
@@ -474,11 +482,20 @@ fn kernel(ctx: &PlanContext, plan: &mut BuildPlan) {
         ));
     }
     if aquantia {
-        let detail = if ctx.is_amd() {
-            "ForceAquantiaEthernet is on. macOS has no AMD-Vi support, so from macOS 12 the Aquantia driver \
-             also needs CaseySJ's Aquantia kernel patches; use another NIC for the install if the link stays \
-             down."
+        let no_vtd = ctx.is_amd() || (legacy_wireless && ctx.is_intel());
+        let detail = if no_vtd && target < MacOsVersion::Monterey {
+            "ForceAquantiaEthernet is on; before macOS 12 the Aquantia driver does not depend on VT-d."
                 .to_string()
+        } else if no_vtd {
+            format!(
+                "ForceAquantiaEthernet is on. {} so from macOS 12.3 the Aquantia driver runs with CaseySJ's \
+                 Aquantia kernel patches, which the build adds; macOS 12.0-12.2 cannot use the card.",
+                if ctx.is_amd() {
+                    "macOS has no AMD-Vi support,"
+                } else {
+                    "DisableIoMapper is on for the legacy wireless stack,"
+                }
+            )
         } else if vtd_heavy && !dmar_replaced {
             "ForceAquantiaEthernet is on and DisableIoMapper is off: enable VT-d in the BIOS. With more than \
              16 GB of RAM on macOS 13.3+, a link that drops needs a DMAR table without Reserved Memory Regions \
@@ -585,9 +602,14 @@ fn uefi(ctx: &PlanContext, plan: &mut BuildPlan) {
     let thinkpad_flash = ctx.is_lenovo && (model.contains("T430") || model.contains("T530"));
 
     let q = &mut plan.uefi_quirks;
-    // Disables firmware security features; only coreboot (MrChromebox)
-    // firmware is documented to need it, and it cannot be detected here.
-    flag(q, "DisableSecurityPolicy", false);
+    // Disables firmware security features. MacHyperVSupport's README
+    // requires it on Hyper-V (Windows 10 / Server 2019 hosts and newer);
+    // coreboot (MrChromebox) firmware needs it too but cannot be detected.
+    flag(
+        q,
+        "DisableSecurityPolicy",
+        ctx.profile.vm == Some(crate::domain::model::VmKind::HyperV),
+    );
     // "May cause issues on certain laptop firmwares, including Lenovo."
     flag(
         q,

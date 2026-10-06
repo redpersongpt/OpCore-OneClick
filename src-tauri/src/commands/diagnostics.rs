@@ -125,10 +125,10 @@ pub async fn save_support_log(
 
 #[tauri::command]
 pub async fn clear_app_cache(paths: tauri::State<'_, crate::paths::AppPaths>) -> Result<(), AppError> {
-    if crate::commands::recovery::download_in_progress() || crate::commands::disk::flash_in_progress() {
+    if let Some(task) = cache_in_use() {
         return Err(AppError::new(
             "BUSY",
-            "A recovery download or USB write is running. Wait for it to finish before clearing the cache.",
+            format!("{task} is running. Wait for it to finish before clearing the cache."),
         )
         .recoverable());
     }
@@ -144,6 +144,19 @@ pub async fn clear_app_cache(paths: tauri::State<'_, crate::paths::AppPaths>) ->
 
     info!("Application cache cleared");
     Ok(())
+}
+
+/// The task that is using the cache, build or recovery folders right now.
+fn cache_in_use() -> Option<&'static str> {
+    if crate::commands::efi::build_in_progress() {
+        Some("An EFI build")
+    } else if crate::commands::recovery::download_in_progress() {
+        Some("A recovery download")
+    } else if crate::commands::disk::flash_in_progress() {
+        Some("A USB write")
+    } else {
+        None
+    }
 }
 
 /// Find the most recent .log file in a directory.
@@ -185,5 +198,18 @@ fn read_tail_lines(path: &std::path::Path, n: usize) -> Result<String, AppError>
         Ok(content)
     } else {
         Ok(lines[lines.len() - n..].join("\n"))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn the_cache_stays_while_a_build_runs() {
+        let guard = crate::commands::efi::BuildGuard::acquire().expect("no other build in the tests");
+        assert_eq!(cache_in_use(), Some("An EFI build"));
+        drop(guard);
+        assert!(!crate::commands::efi::build_in_progress());
     }
 }

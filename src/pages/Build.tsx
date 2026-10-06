@@ -1,18 +1,17 @@
-import { useEffect, useMemo } from 'react';
+import { useEffect, useMemo, useRef } from 'react';
 import { Hammer, RefreshCw } from 'lucide-react';
 import { BuildOptionsForm } from '../components/efi/BuildOptionsForm';
+import { BuildProgressView } from '../components/efi/BuildProgressView';
 import { PlanPreview } from '../components/efi/PlanPreview';
 import { ErrorPanel } from '../components/feedback/ErrorPanel';
 import { ExportEfiButton } from '../components/review/ExportEfiButton';
 import { EmptyState, LoadingState } from '../components/feedback/States';
 import { Banner } from '../components/ui/Banner';
 import { Button } from '../components/ui/Button';
-import { Progress } from '../components/ui/Progress';
 import { PageHeader, Section, StepActions } from '../components/ui/Section';
 import { Spinner } from '../components/ui/Spinner';
 import { useT } from '../i18n';
 import { compatGate } from '../lib/compat';
-import { formatPercent } from '../lib/format';
 import { macosLabel } from '../lib/macos';
 import { hasIntelWifi } from '../lib/profile';
 import { buildKey, canReuseIdentity, toBuildOptions, useBuild } from '../stores/build';
@@ -20,7 +19,7 @@ import { compatKey, useCompat } from '../stores/compat';
 import { useDeploy } from '../stores/deploy';
 import { selectTarget, setOptions } from '../stores/flow';
 import { useHardware } from '../stores/hardware';
-import { TASK_KINDS, useTasks } from '../stores/tasks';
+import { isCancellable, TASK_KINDS, useTasks } from '../stores/tasks';
 import { useWizard } from '../stores/wizard';
 
 const PLAN_DELAY_MS = 350;
@@ -32,7 +31,12 @@ export default function Build() {
   const b = useBuild();
   const complete = useWizard((s) => s.complete);
   const goTo = useWizard((s) => s.goTo);
-  const buildTask = useTasks((s) => s.latest(TASK_KINDS.build));
+  const runningTask = useTasks((s) => s.running(TASK_KINDS.build));
+  const cancelState = useTasks((s) => {
+    const id = b.taskId ?? runningTask?.taskId;
+    return id ? s.cancels[id] : undefined;
+  });
+  const progressRef = useRef<HTMLDivElement>(null);
 
   const target = compat.target;
   // The identity never changes the key, so the plan can be looked up first and
@@ -64,6 +68,11 @@ export default function Build() {
     return () => window.clearTimeout(timer);
   }, [profile, options, key, b.building, b.planRequestKey, loadPlan]);
 
+  // The progress sits below the plan: bring it into view when a build starts.
+  useEffect(() => {
+    if (b.building) progressRef.current?.scrollIntoView?.({ block: 'nearest', behavior: 'smooth' });
+  }, [b.building]);
+
   if (!profile || !target || !options) {
     return (
       <EmptyState
@@ -77,9 +86,23 @@ export default function Build() {
   const gate = compatFresh ? compatGate(compat.report, target) : null;
   const gateOpen = gate === 'ok' || (gate === 'expert' && compat.expertFor === target);
   const resultFresh = b.result !== null && b.resultKey === key;
-  const percent = formatPercent(b.progress);
-  const runningTask = buildTask?.status === 'running' ? buildTask : null;
-  const canCancel = b.building && !b.cancelled && (b.taskId !== null || runningTask !== null);
+  // From the save phase on the backend refuses to cancel; do not offer it.
+  const task = runningTask && (b.taskId === null || runningTask.taskId === b.taskId) ? runningTask : null;
+  // A cancel sent from the task bar counts as well.
+  const cancelling = b.cancelled || cancelState === 'requested';
+  const cancelRefused = b.building && (b.cancelRefused || cancelState === 'refused');
+  const canCancel = b.building && !cancelling && !cancelRefused && task !== null && isCancellable(task);
+  const outcome = b.building ? 'running' : b.cancelled ? 'cancelled' : b.error ? 'failed' : 'done';
+  const progressView = (
+    <BuildProgressView
+      detail={b.detail}
+      seen={b.phasesSeen}
+      items={b.items}
+      progress={b.progress}
+      message={b.message}
+      outcome={outcome}
+    />
+  );
   // Building downloads everything, so the plan preview must have succeeded first.
   const canBuild = gateOpen && plan !== null && !b.building;
 
@@ -169,45 +192,38 @@ export default function Build() {
         </Section>
 
         {b.building && (
-          <Section title={t('build.running')}>
-            <div className="space-y-2">
-              <div className="flex items-center justify-between gap-3">
-                <p className="min-w-0 flex-1 truncate text-base text-fg">{b.message ?? t('build.starting')}</p>
-                {percent && <span className="text-sm tabular-nums text-fg-3">{percent}</span>}
-              </div>
-              <Progress value={b.progress} label={t('build.running')} />
-              {b.log.length > 1 && (
-                <ul className="space-y-0.5 pt-1 font-mono text-xs text-fg-3">
-                  {b.log.slice(0, -1).map((line, i) => (
-                    <li key={`${i}-${line}`} className="truncate">
-                      {line}
-                    </li>
-                  ))}
-                </ul>
-              )}
-              <div className="flex justify-end">
+          <div ref={progressRef}>
+            <Section
+              title={t('build.running')}
+              actions={
                 <Button size="sm" variant="ghost" onClick={() => void b.cancel()} disabled={!canCancel}>
-                  {b.cancelled ? t('build.cancelling') : t('common.cancel')}
+                  {cancelling ? t('build.cancelling') : t('common.cancel')}
                 </Button>
-              </div>
-            </div>
-          </Section>
+              }
+            >
+              {progressView}
+              {cancelRefused && <p className="mt-2 text-xs text-fg-3">{t('build.cancelRefused')}</p>}
+            </Section>
+          </div>
         )}
 
         {!b.building && b.error && (
-          b.cancelled ? (
-            <Banner tone="info">{t('build.cancelled')}</Banner>
-          ) : (
-            <ErrorPanel
-              error={b.error}
-              title={t('build.failed')}
-              actions={
-                <Button size="sm" variant="primary" onClick={() => void startBuild()} disabled={!canBuild}>
-                  {t('common.retry')}
-                </Button>
-              }
-            />
-          )
+          <>
+            {b.cancelled ? (
+              <Banner tone="info">{t('build.cancelled')}</Banner>
+            ) : (
+              <ErrorPanel
+                error={b.error}
+                title={t('build.failed')}
+                actions={
+                  <Button size="sm" variant="primary" onClick={() => void startBuild()} disabled={!canBuild}>
+                    {t('common.retry')}
+                  </Button>
+                }
+              />
+            )}
+            {b.detail && <Section title={t('build.lastRun')}>{progressView}</Section>}
+          </>
         )}
 
         {!b.building && resultFresh && (

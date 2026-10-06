@@ -15,7 +15,7 @@ use crate::domain::model::{
 use crate::domain::smbios_db::{self, SmbiosModel};
 use crate::error::AppError;
 
-use super::{note, DisplayPlan, MobileClass, PlanContext};
+use super::{graphics, note, DisplayPlan, MobileClass, PlanContext};
 
 /// How the displays are driven, as far as the SMBIOS choice is concerned.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -873,8 +873,12 @@ pub fn secure_boot_model(
     const DEFAULT: &str = "Default";
     const DISABLED: &str = "Disabled";
     let target = ctx.target;
-    let display_family = ctx.display_gpu(display).map(|g| g.family);
-    if board_id_skip || target >= MacOsVersion::Sonoma || ctx.display_needs_root_patch(display) {
+    // The graphics part of the root-patch decision is all that is known
+    // before the kexts stage; Wi-Fi and audio root patches only exist from
+    // macOS 14 on, where Secure Boot is off anyway.
+    let root_patch = graphics::needs_root_patch_graphics(ctx, display)
+        || graphics::uses_nvidia_web_driver(ctx, display);
+    if board_id_skip || target >= MacOsVersion::Sonoma || root_patch {
         return DISABLED;
     }
     if target >= MacOsVersion::BigSur {
@@ -884,17 +888,11 @@ pub fn secure_boot_model(
     if ctx.is_vm {
         return DISABLED;
     }
-    let web_driver = target == MacOsVersion::HighSierra
-        && matches!(
-            display_family,
-            Some(GpuFamily::NvidiaMaxwell | GpuFamily::NvidiaPascal)
-        );
     let installer_knows_model = recovery_release(target)
         .is_some_and(|installer| release_before(model.min_release, installer));
     if model.secure_boot_model.is_some()
         && smbios_db::supports(model.model, target)
         && installer_knows_model
-        && !web_driver
     {
         DEFAULT
     } else {

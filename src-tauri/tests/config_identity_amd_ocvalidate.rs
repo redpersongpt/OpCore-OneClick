@@ -286,6 +286,7 @@ fn intel_laptop() -> Case {
         oem_table_id: None,
         count: 0,
         enabled: true,
+        ..Default::default()
     }];
     plan.booter_quirks = settings(&[
         ("EnableWriteUnprotector", PlistScalar::Bool(false)),

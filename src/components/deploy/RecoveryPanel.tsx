@@ -2,6 +2,7 @@ import { Download } from 'lucide-react';
 import type { MacOsVersion } from '../../bridge/types';
 import { useT } from '../../i18n';
 import { formatBytes, formatPercent } from '../../lib/format';
+import { recoveryPhaseLabel } from '../../lib/labels';
 import { macosLabel } from '../../lib/macos';
 import { toNum } from '../../lib/num';
 import { useDeploy } from '../../stores/deploy';
@@ -21,8 +22,10 @@ export function RecoveryPanel({ target, disabled }: { target: MacOsVersion; disa
   const ready = info?.available === true && info.verified && info.version === target;
   const progress = d.recoveryProgress;
   const downloading = d.recoveryDownloading && d.recoveryFor === target;
-  const task = useTasks((s) => s.latest(TASK_KINDS.recovery));
-  const canCancel = downloading && (d.recoveryTaskId !== null || task?.status === 'running');
+  const task = useTasks((s) => s.running(TASK_KINDS.recovery));
+  const taskId = d.recoveryTaskId ?? task?.taskId ?? null;
+  const cancelState = useTasks((s) => (taskId ? s.cancels[taskId] : undefined));
+  const canCancel = downloading && taskId !== null && cancelState === undefined;
 
   return (
     <Section title={t('recovery.title', { version: macosLabel(target) })} description={t('recovery.hint')}>
@@ -40,7 +43,7 @@ export function RecoveryPanel({ target, disabled }: { target: MacOsVersion; disa
             {downloading ? (
               <div className="space-y-1.5">
                 <div className="flex items-center justify-between text-sm">
-                  <span className="text-fg-2">{t(`recovery.phase.${phaseKey(progress?.phase)}`)}</span>
+                  <span className="text-fg-2">{t(recoveryPhaseLabel(progress?.phase))}</span>
                   <span className="tabular-nums text-fg-3">
                     {progress
                       ? `${formatBytes(toNum(progress.downloaded))} / ${progress.total !== null ? formatBytes(toNum(progress.total)) : '?'}`
@@ -51,7 +54,7 @@ export function RecoveryPanel({ target, disabled }: { target: MacOsVersion; disa
                 <Progress value={progress?.progress ?? null} label={t('recovery.downloading')} />
                 <div className="flex justify-end">
                   <Button size="sm" variant="ghost" onClick={() => void d.cancelRecovery()} disabled={!canCancel}>
-                    {t('common.cancel')}
+                    {cancelState === 'requested' ? t('task.cancelling') : t('common.cancel')}
                   </Button>
                 </div>
               </div>
@@ -79,16 +82,4 @@ export function RecoveryPanel({ target, disabled }: { target: MacOsVersion; disa
       </div>
     </Section>
   );
-}
-
-function phaseKey(phase: string | undefined): 'resolving' | 'downloading' | 'verifying' | 'complete' | 'failed' {
-  switch (phase) {
-    case 'downloading':
-    case 'verifying':
-    case 'complete':
-    case 'failed':
-      return phase;
-    default:
-      return 'resolving';
-  }
 }

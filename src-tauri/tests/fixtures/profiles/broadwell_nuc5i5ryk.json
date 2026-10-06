@@ -1,0 +1,126 @@
+{
+  "cpu": {
+    "name": "Intel(R) Core(TM) i5-5250U CPU @ 1.60GHz",
+    "vendor": "intel",
+    "platform": "broadwell",
+    "codename": "Broadwell-U",
+    "family": 6,
+    "model": 61,
+    "stepping": 4,
+    "cores": 2,
+    "threads": 4,
+    "isMobile": true,
+    "hasAvx2": true,
+    "hasSse42": true,
+    "isHybrid": false
+  },
+  "formFactor": "mini_pc",
+  "vm": null,
+  "gpus": [
+    {
+      "name": "Intel(R) HD Graphics 6000",
+      "vendor": "intel",
+      "family": "intel_broadwell",
+      "vendorId": "8086",
+      "deviceId": "1626",
+      "subsystemId": "20688086",
+      "isIgpu": true,
+      "pciPath": "PciRoot(0x0)/Pci(0x2,0x0)",
+      "acpiPath": "\\_SB.PCI0.GFX0",
+      "vramMb": null,
+      "disabled": false
+    }
+  ],
+  "audio": {
+    "codecName": "Realtek ALC283",
+    "codecId": 283902595,
+    "controllerVendorId": "8086",
+    "controllerDeviceId": "9ca0",
+    "controllerPciPath": "PciRoot(0x0)/Pci(0x1b,0x0)",
+    "layoutId": null
+  },
+  "ethernet": [
+    {
+      "name": "Intel(R) Ethernet Connection (3) I218-V",
+      "bus": "pci",
+      "vendorId": "8086",
+      "deviceId": "15a3",
+      "subsystemId": "20688086",
+      "pciPath": "PciRoot(0x0)/Pci(0x19,0x0)",
+      "macAddress": "B8:AE:ED:7A:12:34"
+    }
+  ],
+  "wifi": {
+    "name": "Intel(R) Dual Band Wireless-AC 7265",
+    "bus": "pci",
+    "vendorId": "8086",
+    "deviceId": "095a",
+    "subsystemId": "50108086",
+    "pciPath": "PciRoot(0x0)/Pci(0x1c,0x3)/Pci(0x0,0x0)",
+    "macAddress": "A0:A8:CD:11:22:33"
+  },
+  "bluetooth": {
+    "name": "Intel Wireless Bluetooth 7265",
+    "bus": "usb",
+    "vendorId": "8087",
+    "deviceId": "0a2a",
+    "subsystemId": null,
+    "pciPath": null,
+    "macAddress": null
+  },
+  "input": {
+    "keyboardBus": "usb",
+    "touchpadBus": null,
+    "touchpadVendor": null,
+    "touchpadHid": null,
+    "hasTouchscreen": false
+  },
+  "storage": [
+    {
+      "name": "Crucial MX500 250GB (M.2 SATA)",
+      "kind": "sata",
+      "vendorId": null,
+      "deviceId": null,
+      "sizeBytes": 250000000000
+    }
+  ],
+  "motherboardVendor": "Intel Corporation",
+  "motherboardModel": "NUC5i5RYB",
+  "chipset": "Wildcat Point-LP",
+  "ramGb": 8,
+  "hasBattery": false,
+  "firmwareUefi": true,
+  "acpi": {
+    "pciRoot": "\\_SB.PCI0",
+    "lpcBridge": "\\_SB.PCI0.LPCB",
+    "ecPath": null,
+    "ecHasSta": false,
+    "cpuPaths": [
+      "\\_PR.CPU0",
+      "\\_PR.CPU1",
+      "\\_PR.CPU2",
+      "\\_PR.CPU3"
+    ],
+    "cpuUsesAcpi0007": false,
+    "awacPath": null,
+    "awacHasStas": false,
+    "rtcPath": "\\_SB.PCI0.LPCB.RTC",
+    "hpetPath": "\\_SB.PCI0.LPCB.HPET",
+    "igpuPath": "\\_SB.PCI0.GFX0",
+    "xhciPaths": [
+      "\\_SB.PCI0.XHC"
+    ],
+    "rhubPaths": [
+      "\\_SB.PCI0.XHC.RHUB"
+    ],
+    "gpioPath": null,
+    "smbusPath": "\\_SB.PCI0.SBUS",
+    "pnlfExists": false,
+    "hasOsiWindows": true,
+    "dsdtOemTableId": "BDW-ULT ",
+    "dsdtLength": 98000
+  },
+  "acpiTablesDir": null,
+  "source": "scan",
+  "scanConfidence": 0.92
+}

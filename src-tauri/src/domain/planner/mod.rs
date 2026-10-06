@@ -21,16 +21,14 @@ use std::collections::HashSet;
 use once_cell::sync::Lazy;
 use regex::Regex;
 
-use crate::domain::bios;
 use crate::domain::chipset_db::{self, ChipsetInfo};
 use crate::domain::cpu_db::{self, CpuIdentity, PlatformInfo};
 use crate::domain::device_db::{self, EthernetDriver};
-use crate::domain::gpu_db;
 use crate::domain::model::{
-    AcpiFacts, BuildOptions, BuildPlan, CpuPlatform, CpuVendor, FormFactor, GpuFamily,
-    HardwareProfile, MacOsVersion, NoteLevel, PlanNote, ProfileCpu, ProfileGpu, ProfileNic,
-    SettingMap, SmbiosPlan,
+    AcpiFacts, BuildOptions, BuildPlan, CpuPlatform, CpuVendor, FormFactor, HardwareProfile,
+    MacOsVersion, NoteLevel, PlanNote, ProfileCpu, ProfileGpu, ProfileNic, SettingMap, SmbiosPlan,
 };
+use crate::domain::{bios, compatibility, macos_db};
 use crate::error::AppError;
 
 /// Facts every stage needs, derived once from the profile and options.
@@ -52,7 +50,10 @@ pub struct PlanContext<'a> {
     pub acpi: Option<AcpiFacts>,
     /// HEDT / workstation platform (Intel X58..X299/W790, Threadripper).
     pub is_hedt: bool,
-    /// The firmware has no UEFI: OpenCore boots through OpenDuet.
+    /// The firmware has no UEFI: OpenCore boots through OpenDuet. Same rule
+    /// as the compatibility report and the BIOS checklist
+    /// ([`compatibility::legacy_boot_only`]): a CSM boot on a newer board
+    /// means "switch the firmware to UEFI", not OpenDuet.
     pub legacy_bios: bool,
     pub is_hp: bool,
     pub is_dell: bool,
@@ -97,7 +98,7 @@ impl<'a> PlanContext<'a> {
             options,
             target: options.target,
             cpu,
-            needs_cryptexfixup: cpu_db::needs_cryptexfixup(&identity, options.target),
+            needs_cryptexfixup: needs_cryptexfixup(profile, &identity, options.target),
             is_hedt: cpu_db::is_hedt(&identity) || chipset.as_ref().is_some_and(|c| c.is_hedt),
             identity,
             chipset,
@@ -105,7 +106,7 @@ impl<'a> PlanContext<'a> {
             is_laptop: profile.form_factor == FormFactor::Laptop,
             has_panel: profile.form_factor.has_internal_panel(),
             acpi,
-            legacy_bios: profile.firmware_uefi == Some(false) && profile.vm.is_none(),
+            legacy_bios: compatibility::legacy_boot_only(profile),
             is_hp: has(&["hp", "hpe", "hewlett"]),
             is_dell: has(&["dell", "alienware"]),
             is_lenovo: has(&["lenovo", "thinkpad", "ideapad", "thinkcentre", "legion"]),
@@ -133,6 +134,12 @@ impl<'a> PlanContext<'a> {
     /// CPU has AVX2 (profile flag, else what `cpu_db` expects for the part).
     pub fn has_avx2(&self) -> bool {
         self.identity.has_avx2
+    }
+
+    /// The target expects AVX2 (macOS 13+) and the CPU lacks it: the AMD
+    /// Metal drivers need it too (research-gpu §8).
+    pub fn lacks_avx2_for_target(&self) -> bool {
+        macos_db::requires_avx2(self.target) && !self.has_avx2()
     }
 
     /// Mobile CPU (laptop, NUC, mobile parts in all-in-ones).
@@ -188,27 +195,6 @@ impl<'a> PlanContext<'a> {
         display.primary.and_then(|i| self.profile.gpus.get(i))
     }
 
-    /// The display GPU only works on the target after an OCLP root patch
-    /// (legacy iGPUs, Kepler, GCN 1-3, or Polaris/Vega without AVX2).
-    pub fn display_needs_root_patch(&self, display: &DisplayPlan) -> bool {
-        let Some(gpu) = self.display_gpu(display) else {
-            return false;
-        };
-        if gpu_needs_root_patch(gpu, self.target) {
-            return true;
-        }
-        // CryptexFixup caveat: the AVX2-free dyld cache drops Polaris/Vega
-        // acceleration, which OCLP restores with a root patch (research-gpu §8).
-        self.needs_cryptexfixup
-            && matches!(
-                gpu.family,
-                GpuFamily::AmdPolaris
-                    | GpuFamily::AmdLexa
-                    | GpuFamily::AmdVega10
-                    | GpuFamily::AmdVega20
-            )
-    }
-
     /// Dell laptops need `UpdateSMBIOSMode = Custom` with the CustomSMBIOSGuid
     /// quirk (Dortania laptop guides).
     pub fn needs_custom_smbios(&self) -> bool {
@@ -216,8 +202,25 @@ impl<'a> PlanContext<'a> {
     }
 }
 
-/// `cpu_db`'s view of the profile CPU. Unknown AVX2 support falls back to the
-/// platform default, except for Haswell..Comet Lake Pentium/Celeron parts.
+/// CryptexFixup is needed: the target lies on the CPU's CryptexFixup path
+/// (`cpu_db`), or a VM guest whose CPU model macOS does not know (and so
+/// has no `cpu_db` path) lacks AVX2 on macOS 13+.
+pub fn needs_cryptexfixup(
+    profile: &HardwareProfile,
+    identity: &CpuIdentity,
+    target: MacOsVersion,
+) -> bool {
+    cpu_db::needs_cryptexfixup(identity, target)
+        || (profile.vm.is_some()
+            && !cpu_db::platform_info(identity.platform).supported
+            && macos_db::requires_avx2(target)
+            && !identity.has_avx2)
+}
+
+/// `cpu_db`'s view of the (possibly edited) profile CPU, shared with the
+/// compatibility report. Without a CPUID AVX2 flag the brand string decides
+/// when it names the same platform (Pentium/Celeron parts of AVX2 platforms
+/// lack AVX2), else the platform default.
 pub fn cpu_identity(cpu: &ProfileCpu) -> CpuIdentity {
     let info = cpu_db::platform_info(cpu.platform);
     let vendor = if cpu.vendor == CpuVendor::Unknown {
@@ -225,9 +228,19 @@ pub fn cpu_identity(cpu: &ProfileCpu) -> CpuIdentity {
     } else {
         cpu.vendor
     };
-    let has_avx2 = cpu
-        .has_avx2
-        .unwrap_or_else(|| info.has_avx2 && !low_end_intel(&cpu.name, cpu.platform));
+    let has_avx2 = cpu.has_avx2.unwrap_or_else(|| {
+        let vendor_id = match vendor {
+            CpuVendor::Intel => "GenuineIntel",
+            CpuVendor::Amd => "AuthenticAMD",
+            _ => "",
+        };
+        let guess = cpu_db::identify(&cpu.name, vendor_id, cpu.family, cpu.model, cpu.stepping);
+        if guess.platform == cpu.platform {
+            guess.has_avx2
+        } else {
+            info.has_avx2 && !low_end_intel(&cpu.name, cpu.platform)
+        }
+    });
     CpuIdentity {
         vendor,
         platform: cpu.platform,
@@ -425,46 +438,147 @@ pub fn mobile_class(cpu: &ProfileCpu) -> MobileClass {
     }
 }
 
-/// Native (unpatched) support of `gpu` ends before `target` but an OCLP root
-/// patch reaches it.
-pub fn gpu_needs_root_patch(gpu: &ProfileGpu, target: MacOsVersion) -> bool {
-    let s = gpu_db::support(gpu);
-    s.display_capable
-        && !gpu_db::natively_supported_on(gpu, target)
-        && !matches!(s.min_native, Some(min) if target < min)
-        && matches!(s.max_with_root_patch, Some(max) if max >= target)
-}
-
 /// Component of a `PlanNote` (in `notes` or `post_install`) that marks a
-/// planned OpenCore Legacy Patcher root patch. Any stage that plans one adds
-/// such a note; `settings` then lowers SIP and disables Apple Secure Boot.
+/// planned OpenCore Legacy Patcher style root patch that the display GPU and
+/// the kext set do not reveal (the macOS 26 AppleHDA restore). `settings`
+/// then lowers SIP and disables Apple Secure Boot.
 pub const ROOT_PATCH_COMPONENT: &str = "root-patch";
 
-/// Kexts that only make sense with OCLP root patches (catalog ids).
-const ROOT_PATCH_KEXTS: &[&str] = &[
-    "AMFIPass",
+/// Component of a `PlanNote` that marks VoodooHDA as the planned audio driver,
+/// installed to /Library/Extensions after the install (it cannot be injected
+/// on macOS 26, research-kexts §4.1). `settings` lowers SIP to `03000000`.
+pub const VOODOOHDA_COMPONENT: &str = "voodoohda";
+
+/// Kexts of OCLP's Modern Wireless / legacy wireless stack (catalog ids).
+const LEGACY_WIRELESS_KEXTS: &[&str] = &[
     "IOSkywalkFamily",
     "IO80211FamilyLegacy",
     "AirPortBrcmNIC-Tahoe",
 ];
 
-/// True when the plan relies on OCLP root patches after install. Signals, in
-/// order: an enabled OCLP kext (AMFIPass, the modern-wireless set), a note with
-/// component [`ROOT_PATCH_COMPONENT`], or a display GPU that needs a root patch
-/// on the target.
-pub fn root_patching_planned(ctx: &PlanContext, plan: &BuildPlan) -> bool {
-    plan.kexts
-        .iter()
-        .any(|k| k.enabled && ROOT_PATCH_KEXTS.contains(&k.catalog_id.as_str()))
-        || plan
-            .notes
+/// Bundle id whose Kernel->Block entry belongs to the legacy wireless stack.
+pub const IOSKYWALK_ID: &str = "com.apple.iokit.IOSkywalkFamily";
+
+/// csr-active-config for VoodooHDA in /Library/Extensions:
+/// CSR_ALLOW_UNTRUSTED_KEXTS | CSR_ALLOW_UNRESTRICTED_FS, NVRAM bytes
+/// `03000000` (Dortania tahoe.md; research-kexts §4.1).
+pub const SIP_VOODOOHDA: u32 = 0x0000_0003;
+/// csr-active-config for OCLP root patches: the VoodooHDA bits plus
+/// CSR_ALLOW_UNAUTHENTICATED_ROOT, NVRAM bytes `03080000`
+/// (research-opencore-macos §3.4, OCLP `security.py`).
+pub const SIP_ROOT_PATCH: u32 = 0x0000_0803;
+/// The same plus CSR_ALLOW_UNAPPROVED_KEXTS for the NVIDIA Web Driver patch
+/// set, NVRAM bytes `030A0000` (research-gpu §8).
+pub const SIP_ROOT_PATCH_NVIDIA: u32 = 0x0000_0A03;
+
+/// What the plan expects to change on the system volume after the install,
+/// by source. [`root_patching_planned`] is the only place that decides it:
+/// `kexts` (AMFIPass, `ipc_control_port_options=0`), `settings`
+/// (csr-active-config, SecureBootModel) and `notes` read it; `smbios`, which
+/// runs before the Wi-Fi and audio kexts are known, uses its graphics part
+/// (the same `graphics` functions) for SecureBootModel.
+///
+/// Precedence for csr-active-config: an NVIDIA Web Driver card with any
+/// system-volume patch (`030A0000`) over a system-volume patch from graphics,
+/// Wi-Fi or the AppleHDA restore (`03080000`) over VoodooHDA alone
+/// (`03000000`).
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub struct RootPatchPlan {
+    /// The display GPU's drivers come back only through an OCLP root patch
+    /// ([`graphics::needs_root_patch_graphics`]).
+    pub graphics: bool,
+    /// An active card runs on the NVIDIA Web Driver
+    /// ([`graphics::uses_nvidia_web_driver`]): natively on High Sierra, past
+    /// it through OCLP's web-driver patch set.
+    pub nvidia_web_driver: bool,
+    /// OCLP Modern Wireless: the legacy wireless kexts or the
+    /// IOSkywalkFamily block (Broadcom on 14+, AirportItlwm on 15+).
+    pub wireless: bool,
+    /// Another stage noted a root patch (component [`ROOT_PATCH_COMPONENT`]),
+    /// such as the AppleHDA restore on macOS 26.
+    pub noted: bool,
+    /// VoodooHDA goes to /Library/Extensions (component [`VOODOOHDA_COMPONENT`]).
+    pub voodoo_hda: bool,
+}
+
+impl RootPatchPlan {
+    /// The sealed system volume gets patched (OCLP or a compatible tool).
+    pub fn oclp(&self) -> bool {
+        self.graphics || self.wireless || self.noted
+    }
+
+    /// Anything lowers SIP.
+    pub fn any(&self) -> bool {
+        self.oclp() || self.voodoo_hda
+    }
+
+    /// csr-active-config, by precedence: OCLP with an NVIDIA Web Driver card
+    /// (`030A0000`) over OCLP (`03080000`) over VoodooHDA alone (`03000000`).
+    /// Each value contains every bit of the ones after it, so the strongest
+    /// source wins without dropping what a weaker one needs.
+    pub fn csr_active_config(&self) -> u32 {
+        if self.oclp() && self.nvidia_web_driver {
+            SIP_ROOT_PATCH_NVIDIA
+        } else if self.oclp() {
+            SIP_ROOT_PATCH
+        } else if self.voodoo_hda {
+            SIP_VOODOOHDA
+        } else {
+            0
+        }
+    }
+
+    /// Apple Secure Boot must be off: root patches break the sealed system
+    /// volume (OCLP `security.py`), and the NVIDIA Web Driver never works
+    /// with it (research-opencore-macos §5.4).
+    pub fn secure_boot_disabled(&self) -> bool {
+        self.oclp() || self.nvidia_web_driver
+    }
+
+    /// AMFIPass keeps AMFI on with patched graphics or wireless drivers
+    /// (research-gpu §8, research-kexts §3.7). The AppleHDA restore and
+    /// VoodooHDA do not need it.
+    pub fn needs_amfipass(&self) -> bool {
+        self.graphics || self.wireless
+    }
+
+    /// `ipc_control_port_options=0`: OCLP adds it whenever SIP is lowered,
+    /// for the macOS 12.3+ Electron/Firefox crashes (research-gpu §2).
+    pub fn needs_ipc_control_port_options(&self, target: MacOsVersion) -> bool {
+        self.any() && target >= MacOsVersion::Monterey
+    }
+}
+
+/// The root-patch decision for this plan. Graphics comes from the display
+/// decision; the other sources come from what the `kexts` stage planned, so
+/// the answer is final once `kexts` has run (`smbios`, which runs first, only
+/// sees the graphics part).
+pub fn root_patching_planned(
+    ctx: &PlanContext,
+    display: &DisplayPlan,
+    plan: &BuildPlan,
+) -> RootPatchPlan {
+    let noted = |component: &str| {
+        plan.notes
             .iter()
             .chain(&plan.post_install)
-            .any(|n| n.component == ROOT_PATCH_COMPONENT)
-        || ctx
-            .display
-            .as_ref()
-            .is_some_and(|d| ctx.display_needs_root_patch(d))
+            .any(|n| n.component == component)
+    };
+    let wireless_kext = plan
+        .kexts
+        .iter()
+        .any(|k| k.enabled && LEGACY_WIRELESS_KEXTS.contains(&k.catalog_id.as_str()));
+    RootPatchPlan {
+        graphics: graphics::needs_root_patch_graphics(ctx, display),
+        nvidia_web_driver: graphics::uses_nvidia_web_driver(ctx, display),
+        wireless: wireless_kext
+            || plan
+                .kernel_blocks
+                .iter()
+                .any(|b| b.enabled && b.identifier == IOSKYWALK_ID),
+        noted: noted(ROOT_PATCH_COMPONENT),
+        voodoo_hda: noted(VOODOOHDA_COMPONENT),
+    }
 }
 
 /// Shorthand for a `PlanNote`.
@@ -483,7 +597,7 @@ pub fn note(
 }
 
 /// Which GPU drives the displays, decided before anything else.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct DisplayPlan {
     /// Index into `profile.gpus` of the GPU that drives the displays
     /// (None only for VMs without a passed-through GPU).
@@ -508,7 +622,7 @@ pub fn plan(profile: &HardwareProfile, options: &BuildOptions) -> Result<BuildPl
     smbios::apply(&ctx, &display, &mut plan)?;
     graphics::apply(&ctx, &display, &mut plan);
     kexts::apply(&ctx, &display, &mut plan);
-    acpi::apply(&ctx, &mut plan);
+    acpi::apply(&ctx, &display, &mut plan);
     quirks::apply(&ctx, &mut plan);
     settings::apply(&ctx, &mut plan);
     notes::apply(&ctx, &display, &mut plan);
@@ -533,8 +647,9 @@ pub fn validate(profile: &HardwareProfile, options: &BuildOptions) -> Result<(),
     let is_vm = profile.vm.is_some();
     let info = cpu_db::platform_info(platform);
     // A guest sees whatever CPU model the hypervisor exposes; only a known,
-    // supported model is checked against its limits.
-    if is_vm && !info.supported {
+    // supported model is checked against its limits (the compatibility
+    // report applies the same rule).
+    if is_vm && !info.supported && cpu_db::usable_as_vm_guest(platform) {
         return Ok(());
     }
     if platform == CpuPlatform::Unknown {
@@ -724,7 +839,8 @@ pub(crate) mod test_support {
 
     use super::*;
     use crate::domain::model::{
-        DeviceBus, GpuVendor, PlistScalar, ProfileNic, ProfileStorage, StorageKind, VmKind,
+        DeviceBus, GpuFamily, GpuVendor, PlistScalar, ProfileNic, ProfileStorage, StorageKind,
+        VmKind,
     };
 
     pub const SAMPLE: &[u8] = include_bytes!("../../../tests/fixtures/Sample-1.0.8.plist");
@@ -928,10 +1044,13 @@ pub(crate) mod test_support {
 }
 
 #[cfg(test)]
+mod consistency_tests;
+
+#[cfg(test)]
 mod tests {
     use super::test_support::*;
     use super::*;
-    use crate::domain::model::VmKind;
+    use crate::domain::model::{GpuFamily, VmKind};
     use MacOsVersion::*;
 
     #[test]
@@ -1319,27 +1438,30 @@ mod tests {
                 gpu(GpuFamily::IntelHaswell, true),
             ],
         );
-        let o = options(Monterey);
-        let mut ctx = PlanContext::new(&p, &o);
         let d = display(Some(0), Some(1), true);
-        assert!(ctx.display_needs_root_patch(&d), "Kepler on Monterey");
-        ctx.display = Some(d);
-        let plan = empty_plan(Monterey);
-        assert!(root_patching_planned(&ctx, &plan));
+        let o = options(Monterey);
+        let ctx = PlanContext::new(&p, &o);
+        let rp = root_patching_planned(&ctx, &d, &empty_plan(Monterey));
+        assert!(rp.graphics && rp.oclp(), "Kepler on Monterey");
+        assert!(rp.needs_amfipass() && rp.secure_boot_disabled());
+        assert_eq!(rp.csr_active_config(), SIP_ROOT_PATCH);
+        assert!(rp.needs_ipc_control_port_options(Monterey));
 
         let o = options(BigSur);
         let ctx = PlanContext::new(&p, &o);
-        assert!(!ctx.display_needs_root_patch(&display(Some(0), Some(1), true)));
+        let rp = root_patching_planned(&ctx, &d, &empty_plan(BigSur));
+        assert_eq!(rp, RootPatchPlan::default());
+        assert_eq!(rp.csr_active_config(), 0);
 
         let o = options(Sonoma);
-        let mut ctx = PlanContext::new(&p, &o);
-        ctx.display = Some(display(Some(1), Some(1), false));
+        let ctx = PlanContext::new(&p, &o);
+        let igpu = display(Some(1), Some(1), false);
         assert!(
-            root_patching_planned(&ctx, &empty_plan(Sonoma)),
+            root_patching_planned(&ctx, &igpu, &empty_plan(Sonoma)).graphics,
             "Haswell iGPU on Sonoma"
         );
 
-        // Explicit signals from other stages.
+        // Signals from the kexts stage.
         let p = profile(
             cpu(
                 CpuPlatform::CometLake,
@@ -1350,14 +1472,85 @@ mod tests {
             FormFactor::Desktop,
             vec![gpu(GpuFamily::IntelCometLake, true)],
         );
+        let o = options(Tahoe);
+        let ctx = PlanContext::new(&p, &o);
+        let d = display(Some(0), Some(0), false);
+        let mut plan = empty_plan(Tahoe);
+        assert!(!root_patching_planned(&ctx, &d, &plan).any());
+
+        plan.post_install.push(note(
+            NoteLevel::Info,
+            VOODOOHDA_COMPONENT,
+            "VoodooHDA",
+            "",
+        ));
+        let rp = root_patching_planned(&ctx, &d, &plan);
+        assert!(rp.voodoo_hda && !rp.oclp() && !rp.secure_boot_disabled());
+        assert!(!rp.needs_amfipass());
+        assert_eq!(rp.csr_active_config().to_le_bytes(), [0x03, 0x00, 0x00, 0x00]);
+
+        plan.post_install.push(note(
+            NoteLevel::Info,
+            ROOT_PATCH_COMPONENT,
+            "AppleHDA",
+            "",
+        ));
+        let rp = root_patching_planned(&ctx, &d, &plan);
+        assert!(rp.noted && rp.oclp() && !rp.needs_amfipass());
+        assert_eq!(rp.csr_active_config(), SIP_ROOT_PATCH, "OCLP wins over VoodooHDA");
+
+        plan.kernel_blocks.push(crate::domain::model::KernelBlock {
+            comment: String::new(),
+            identifier: IOSKYWALK_ID.into(),
+            strategy: "Exclude".into(),
+            min_kernel: "23.0.0".into(),
+            max_kernel: String::new(),
+            enabled: true,
+        });
+        let rp = root_patching_planned(&ctx, &d, &plan);
+        assert!(rp.wireless && rp.needs_amfipass());
+
+        // The web-driver patch set needs CSR_ALLOW_UNAPPROVED_KEXTS on top.
+        let web = RootPatchPlan {
+            graphics: true,
+            nvidia_web_driver: true,
+            ..RootPatchPlan::default()
+        };
+        assert_eq!(web.csr_active_config(), SIP_ROOT_PATCH_NVIDIA);
+        // High Sierra's web driver alone: Secure Boot off, SIP untouched.
+        let hs = RootPatchPlan {
+            nvidia_web_driver: true,
+            ..RootPatchPlan::default()
+        };
+        assert!(hs.secure_boot_disabled() && hs.csr_active_config() == 0);
+        // Every stronger value keeps the bits of the weaker ones.
+        assert_eq!(SIP_ROOT_PATCH_NVIDIA & SIP_ROOT_PATCH, SIP_ROOT_PATCH);
+        assert_eq!(SIP_ROOT_PATCH & SIP_VOODOOHDA, SIP_VOODOOHDA);
+    }
+
+    #[test]
+    fn legacy_bios_follows_the_compatibility_rule() {
+        let mut p = profile(
+            cpu(
+                CpuPlatform::CoffeeLake,
+                "Intel(R) Core(TM) i7-8700",
+                "Coffee Lake-S",
+                6,
+            ),
+            FormFactor::Desktop,
+            vec![],
+        );
+        p.firmware_uefi = Some(false);
         let o = options(Sequoia);
-        let mut ctx = PlanContext::new(&p, &o);
-        ctx.display = Some(display(Some(0), Some(0), false));
-        let mut plan = empty_plan(Sequoia);
-        assert!(!root_patching_planned(&ctx, &plan));
-        plan.post_install
-            .push(note(NoteLevel::Info, ROOT_PATCH_COMPONENT, "Wi-Fi", "OCLP"));
-        assert!(root_patching_planned(&ctx, &plan));
+        assert!(
+            !PlanContext::new(&p, &o).legacy_bios,
+            "a CSM boot on a UEFI-era board is not OpenDuet"
+        );
+        p.cpu = cpu(CpuPlatform::Penryn, "Intel(R) Core(TM)2 Quad Q9550", "Penryn", 4);
+        let o = options(HighSierra);
+        assert!(PlanContext::new(&p, &o).legacy_bios);
+        p.vm = Some(VmKind::Kvm);
+        assert!(!PlanContext::new(&p, &o).legacy_bios);
     }
 
     #[test]

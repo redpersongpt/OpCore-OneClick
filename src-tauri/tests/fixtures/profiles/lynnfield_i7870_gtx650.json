@@ -1,0 +1,81 @@
+{
+  "cpu": {
+    "name": "Intel(R) Core(TM) i7 CPU         870  @ 2.93GHz",
+    "vendor": "intel",
+    "platform": "lynnfield",
+    "codename": "Lynnfield",
+    "family": 6,
+    "model": 30,
+    "stepping": 5,
+    "cores": 4,
+    "threads": 8,
+    "isMobile": false,
+    "hasAvx2": false,
+    "hasSse42": true,
+    "isHybrid": false
+  },
+  "formFactor": "desktop",
+  "vm": null,
+  "gpus": [
+    {
+      "name": "NVIDIA GeForce GTX 650",
+      "vendor": "nvidia",
+      "family": "nvidia_kepler",
+      "vendorId": "10de",
+      "deviceId": "0fc6",
+      "subsystemId": "84281043",
+      "isIgpu": false,
+      "pciPath": "PciRoot(0x0)/Pci(0x1,0x0)/Pci(0x0,0x0)",
+      "acpiPath": "\\_SB.PCI0.P0P1.PEGP",
+      "vramMb": 1024,
+      "disabled": false
+    }
+  ],
+  "audio": {
+    "codecName": "Realtek ALC889",
+    "codecId": 283904137,
+    "controllerVendorId": "8086",
+    "controllerDeviceId": "3b56",
+    "controllerPciPath": "PciRoot(0x0)/Pci(0x1b,0x0)",
+    "layoutId": null
+  },
+  "ethernet": [
+    {
+      "name": "Realtek PCIe GBE Family Controller (RTL8111D)",
+      "bus": "pci",
+      "vendorId": "10ec",
+      "deviceId": "8168",
+      "subsystemId": "83a31043",
+      "pciPath": "PciRoot(0x0)/Pci(0x1c,0x5)/Pci(0x0,0x0)",
+      "macAddress": "00:24:8C:5A:6B:7C"
+    }
+  ],
+  "wifi": null,
+  "bluetooth": null,
+  "input": {
+    "keyboardBus": "usb",
+    "touchpadBus": null,
+    "touchpadVendor": null,
+    "touchpadHid": null,
+    "hasTouchscreen": false
+  },
+  "storage": [
+    {
+      "name": "Samsung SSD 860 EVO 500GB",
+      "kind": "sata",
+      "vendorId": null,
+      "deviceId": null,
+      "sizeBytes": 500000000000
+    }
+  ],
+  "motherboardVendor": "ASUSTeK Computer INC.",
+  "motherboardModel": "P7P55D",
+  "chipset": "P55",
+  "ramGb": 8,
+  "hasBattery": false,
+  "firmwareUefi": false,
+  "acpi": null,
+  "acpiTablesDir": null,
+  "source": "scan",
+  "scanConfidence": 0.92
+}

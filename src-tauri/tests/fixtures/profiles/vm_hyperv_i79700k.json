@@ -1,0 +1,74 @@
+{
+  "cpu": {
+    "name": "Intel(R) Core(TM) i7-9700K CPU @ 3.60GHz",
+    "vendor": "intel",
+    "platform": "coffee_lake",
+    "codename": "Coffee Lake-S",
+    "family": 6,
+    "model": 158,
+    "stepping": 13,
+    "cores": 4,
+    "threads": 4,
+    "isMobile": false,
+    "hasAvx2": true,
+    "hasSse42": true,
+    "isHybrid": false
+  },
+  "formFactor": "desktop",
+  "vm": "hyper_v",
+  "gpus": [
+    {
+      "name": "Microsoft Hyper-V Video",
+      "vendor": "virtual",
+      "family": "virtual_display",
+      "vendorId": "1414",
+      "deviceId": "5353",
+      "subsystemId": null,
+      "isIgpu": false,
+      "pciPath": null,
+      "acpiPath": null,
+      "vramMb": null,
+      "disabled": false
+    }
+  ],
+  "audio": null,
+  "ethernet": [
+    {
+      "name": "Microsoft Hyper-V Network Adapter",
+      "bus": "unknown",
+      "vendorId": null,
+      "deviceId": null,
+      "subsystemId": null,
+      "pciPath": null,
+      "macAddress": "00:15:5D:01:02:03"
+    }
+  ],
+  "wifi": null,
+  "bluetooth": null,
+  "input": {
+    "keyboardBus": "usb",
+    "touchpadBus": null,
+    "touchpadVendor": null,
+    "touchpadHid": null,
+    "hasTouchscreen": false
+  },
+  "storage": [
+    {
+      "name": "Microsoft Virtual Disk",
+      "kind": "other",
+      "vendorId": null,
+      "deviceId": null,
+      "sizeBytes": 128000000000
+    }
+  ],
+  "motherboardVendor": "Microsoft Corporation",
+  "motherboardModel": "Virtual Machine",
+  "chipset": null,
+  "ramGb": 8,
+  "hasBattery": false,
+  "firmwareUefi": true,
+  "acpi": null,
+  "acpiTablesDir": null,
+  "source": "scan",
+  "scanConfidence": 0.7
+}

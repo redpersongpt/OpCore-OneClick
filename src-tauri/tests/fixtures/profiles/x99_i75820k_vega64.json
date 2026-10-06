@@ -1,0 +1,125 @@
+{
+  "cpu": {
+    "name": "Intel(R) Core(TM) i7-5820K CPU @ 3.30GHz",
+    "vendor": "intel",
+    "platform": "haswell_e",
+    "codename": "Haswell-E",
+    "family": 6,
+    "model": 63,
+    "stepping": 2,
+    "cores": 6,
+    "threads": 12,
+    "isMobile": false,
+    "hasAvx2": true,
+    "hasSse42": true,
+    "isHybrid": false
+  },
+  "formFactor": "desktop",
+  "vm": null,
+  "gpus": [
+    {
+      "name": "Radeon RX Vega 64",
+      "vendor": "amd",
+      "family": "amd_vega10",
+      "vendorId": "1002",
+      "deviceId": "687f",
+      "subsystemId": "0b361002",
+      "isIgpu": false,
+      "pciPath": "PciRoot(0x0)/Pci(0x3,0x0)/Pci(0x0,0x0)/Pci(0x0,0x0)/Pci(0x0,0x0)",
+      "acpiPath": "\\_SB.PCI0.BR3A.H000",
+      "vramMb": 8192,
+      "disabled": false
+    }
+  ],
+  "audio": {
+    "codecName": "Realtek ALC1150",
+    "codecId": 283904256,
+    "controllerVendorId": "8086",
+    "controllerDeviceId": "8d20",
+    "controllerPciPath": "PciRoot(0x0)/Pci(0x1b,0x0)",
+    "layoutId": null
+  },
+  "ethernet": [
+    {
+      "name": "Intel(R) Ethernet Connection (2) I218-V",
+      "bus": "pci",
+      "vendorId": "8086",
+      "deviceId": "15a1",
+      "subsystemId": "85c41043",
+      "pciPath": "PciRoot(0x0)/Pci(0x19,0x0)",
+      "macAddress": "30:5A:3A:12:34:56"
+    }
+  ],
+  "wifi": null,
+  "bluetooth": null,
+  "input": {
+    "keyboardBus": "usb",
+    "touchpadBus": null,
+    "touchpadVendor": null,
+    "touchpadHid": null,
+    "hasTouchscreen": false
+  },
+  "storage": [
+    {
+      "name": "Samsung SSD 970 EVO Plus 1TB",
+      "kind": "nvme",
+      "vendorId": "144d",
+      "deviceId": "a808",
+      "sizeBytes": 1000000000000
+    },
+    {
+      "name": "ST1000DM003-1SB102",
+      "kind": "sata",
+      "vendorId": null,
+      "deviceId": null,
+      "sizeBytes": 1000000000000
+    }
+  ],
+  "motherboardVendor": "ASUSTeK COMPUTER INC.",
+  "motherboardModel": "X99-A",
+  "chipset": "X99",
+  "ramGb": 32,
+  "hasBattery": false,
+  "firmwareUefi": true,
+  "acpi": {
+    "pciRoot": "\\_SB.PCI0",
+    "lpcBridge": "\\_SB.PCI0.LPC0",
+    "ecPath": null,
+    "ecHasSta": false,
+    "cpuPaths": [
+      "\\_SB.SCK0.CP00",
+      "\\_SB.SCK0.CP01",
+      "\\_SB.SCK0.CP02",
+      "\\_SB.SCK0.CP03",
+      "\\_SB.SCK0.CP04",
+      "\\_SB.SCK0.CP05",
+      "\\_SB.SCK0.CP06",
+      "\\_SB.SCK0.CP07",
+      "\\_SB.SCK0.CP08",
+      "\\_SB.SCK0.CP09",
+      "\\_SB.SCK0.CP0A",
+      "\\_SB.SCK0.CP0B"
+    ],
+    "cpuUsesAcpi0007": false,
+    "awacPath": null,
+    "awacHasStas": false,
+    "rtcPath": "\\_SB.PCI0.LPC0.RTC",
+    "hpetPath": "\\_SB.PCI0.LPC0.HPET",
+    "igpuPath": null,
+    "xhciPaths": [
+      "\\_SB.PCI0.XHCI"
+    ],
+    "rhubPaths": [
+      "\\_SB.PCI0.XHCI.RHUB"
+    ],
+    "gpioPath": null,
+    "smbusPath": "\\_SB.PCI0.SBUS",
+    "pnlfExists": false,
+    "hasOsiWindows": true,
+    "dsdtOemTableId": "A M I   ",
+    "dsdtLength": 301000
+  },
+  "acpiTablesDir": null,
+  "source": "scan",
+  "scanConfidence": 0.92
+}

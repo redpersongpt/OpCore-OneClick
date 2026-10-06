@@ -1355,13 +1355,19 @@ fn tiger_lake_laptop_has_no_display_path() {
 
 #[test]
 fn laptop_with_mux_amd_dgpu_drives_the_panel_from_it() {
-    let p = laptop(
+    let mut p = laptop(
         TigerLake,
         vec![
             intel("9a49", "Intel Iris Xe Graphics"),
             amd("7340", "Radeon RX 5500M"),
         ],
     );
+    // With the iGPU listed the laptop runs in hybrid mode: no display path.
+    let err = fail(&p, Sonoma);
+    assert_eq!(err.code, "NO_DISPLAY_PATH");
+    assert!(err.suggestion.as_deref().is_some_and(|s| s.contains("MUX")), "{err:?}");
+    // MUX switched to discrete-only mode: the iGPU is off.
+    p.gpus[0].disabled = true;
     let r = run(&p, Sonoma, "MacBookPro16,1");
     assert_eq!(r.display, display(Some(1), None, false, &[0]));
     assert!(r.has_arg("applbkl=3"));
@@ -1813,10 +1819,12 @@ fn check_scenario(profile: &HardwareProfile, options: &BuildOptions) {
             .map(|g| (g.device_id.clone(), g.pci_path.is_some()))
             .collect::<Vec<_>>()
     );
-    let native = profile
-        .gpus
-        .iter()
-        .any(|g| gpu_db::support(g).display_capable && gpu_db::natively_supported_on(g, target));
+    // Laptop dGPUs only count without an enabled iGPU (MUX in discrete mode).
+    let native = profile.gpus.iter().enumerate().any(|(i, g)| {
+        gpu_db::support(g).display_capable
+            && gpu_db::natively_supported_on(g, target)
+            && crate::domain::compatibility::can_drive_display(profile, i)
+    });
     let display = match choose_display(&ctx) {
         Ok(display) => display,
         Err(err) => {

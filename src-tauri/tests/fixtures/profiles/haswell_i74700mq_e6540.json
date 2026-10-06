@@ -1,0 +1,97 @@
+{
+  "cpu": {
+    "name": "Intel(R) Core(TM) i7-4700MQ CPU @ 2.40GHz",
+    "vendor": "intel",
+    "platform": "haswell",
+    "codename": "Haswell-H",
+    "family": 6,
+    "model": 60,
+    "stepping": 3,
+    "cores": 4,
+    "threads": 8,
+    "isMobile": true,
+    "hasAvx2": true,
+    "hasSse42": true,
+    "isHybrid": false
+  },
+  "formFactor": "laptop",
+  "vm": null,
+  "gpus": [
+    {
+      "name": "Intel(R) HD Graphics 4600",
+      "vendor": "intel",
+      "family": "intel_haswell",
+      "vendorId": "8086",
+      "deviceId": "0416",
+      "subsystemId": "05be1028",
+      "isIgpu": true,
+      "pciPath": "PciRoot(0x0)/Pci(0x2,0x0)",
+      "acpiPath": "\\_SB.PCI0.GFX0",
+      "vramMb": null,
+      "disabled": false
+    }
+  ],
+  "audio": {
+    "codecName": "Realtek ALC3226 (ALC292)",
+    "codecId": 283902610,
+    "controllerVendorId": "8086",
+    "controllerDeviceId": "8c20",
+    "controllerPciPath": "PciRoot(0x0)/Pci(0x1b,0x0)",
+    "layoutId": null
+  },
+  "ethernet": [
+    {
+      "name": "Intel(R) Ethernet Connection I217-LM",
+      "bus": "pci",
+      "vendorId": "8086",
+      "deviceId": "153a",
+      "subsystemId": "05be1028",
+      "pciPath": "PciRoot(0x0)/Pci(0x19,0x0)",
+      "macAddress": "F8:BC:12:34:56:78"
+    }
+  ],
+  "wifi": {
+    "name": "Intel(R) Dual Band Wireless-AC 7260",
+    "bus": "pci",
+    "vendorId": "8086",
+    "deviceId": "08b1",
+    "subsystemId": "44708086",
+    "pciPath": "PciRoot(0x0)/Pci(0x1c,0x3)/Pci(0x0,0x0)",
+    "macAddress": "5C:51:4F:11:22:33"
+  },
+  "bluetooth": {
+    "name": "Intel Wireless Bluetooth 7260",
+    "bus": "usb",
+    "vendorId": "8087",
+    "deviceId": "07dc",
+    "subsystemId": null,
+    "pciPath": null,
+    "macAddress": null
+  },
+  "input": {
+    "keyboardBus": "ps2",
+    "touchpadBus": "ps2",
+    "touchpadVendor": "alps",
+    "touchpadHid": "DLL05BE",
+    "hasTouchscreen": false
+  },
+  "storage": [
+    {
+      "name": "Samsung SSD 860 EVO 500GB",
+      "kind": "sata",
+      "vendorId": null,
+      "deviceId": null,
+      "sizeBytes": 500000000000
+    }
+  ],
+  "motherboardVendor": "Dell Inc.",
+  "motherboardModel": "0NPRW1",
+  "chipset": "QM87",
+  "ramGb": 16,
+  "hasBattery": true,
+  "firmwareUefi": true,
+  "acpi": null,
+  "acpiTablesDir": null,
+  "source": "scan",
+  "scanConfidence": 0.92
+}

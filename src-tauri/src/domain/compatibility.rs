@@ -24,7 +24,7 @@ use super::model::{
     CpuPlatform, CpuVendor, FormFactor, GpuFamily, HardwareProfile, InputBus, MacOsVersion,
     NoteLevel, PlanNote, ProfileGpu, StorageKind, VmKind,
 };
-use super::{codec_db, kext_catalog, macos_db};
+use super::{codec_db, kext_catalog, macos_db, planner};
 
 // ── Display path (shared with the planner and the BIOS checklist) ───────────
 
@@ -160,38 +160,10 @@ pub fn display_path(profile: &HardwareProfile, version: MacOsVersion) -> Display
 
 // ── CPU facts ───────────────────────────────────────────────────────────────
 
-/// The `cpu_db` identity behind the (possibly edited) profile. Without a
-/// CPUID AVX2 flag the brand string decides when it names the same platform
-/// (Pentium/Celeron parts of AVX2 platforms lack AVX2), else the platform.
+/// The `cpu_db` identity behind the (possibly edited) profile, the same one
+/// the planner works with ([`planner::cpu_identity`]).
 pub fn cpu_identity(profile: &HardwareProfile) -> CpuIdentity {
-    let cpu = &profile.cpu;
-    let info = cpu_db::platform_info(cpu.platform);
-    let vendor = if cpu.vendor == CpuVendor::Unknown {
-        info.vendor
-    } else {
-        cpu.vendor
-    };
-    let has_avx2 = cpu.has_avx2.unwrap_or_else(|| {
-        let vendor_id = match vendor {
-            CpuVendor::Intel => "GenuineIntel",
-            CpuVendor::Amd => "AuthenticAMD",
-            _ => "",
-        };
-        let guess = cpu_db::identify(&cpu.name, vendor_id, cpu.family, cpu.model, cpu.stepping);
-        if guess.platform == cpu.platform {
-            guess.has_avx2
-        } else {
-            info.has_avx2
-        }
-    });
-    CpuIdentity {
-        vendor,
-        platform: cpu.platform,
-        codename: cpu.codename.clone(),
-        is_mobile: cpu.is_mobile,
-        is_hybrid: cpu.is_hybrid,
-        has_avx2,
-    }
+    planner::cpu_identity(&profile.cpu)
 }
 
 fn has_avx2(profile: &HardwareProfile) -> bool {
@@ -302,8 +274,9 @@ fn amd_core_problem(profile: &HardwareProfile, ident: &CpuIdentity) -> Option<St
 }
 
 /// The CPU check of the planner (`planner::validate`), at least as strict as
-/// it: platform supported (VMs only skip the check for an unknown CPU),
-/// per-model floor (Whiskey/Amber Lake need 10.14.1), native ceiling of this
+/// it: platform supported (VMs skip it for a guest CPU model that is not a
+/// bare-metal platform, `cpu_db::usable_as_vm_guest`), per-model floor
+/// (Whiskey/Amber Lake need 10.14.1), native ceiling of this
 /// part (`cpu_db::max_macos_for`), and an AMD core count the kernel patches
 /// can use. Past the native ceiling a `cpu_db` workaround makes it an expert
 /// option.
@@ -318,16 +291,20 @@ fn cpu_verdict(
             "Apple silicon Macs run macOS natively; OpenCore is for Intel and AMD PCs.".into(),
         );
     }
-    if platform == CpuPlatform::Unknown {
-        return if profile.vm.is_some() {
-            CpuVerdict::Ok
+    let info = cpu_db::platform_info(platform);
+    if profile.vm.is_some() && !info.supported && cpu_db::usable_as_vm_guest(platform) {
+        // A guest only sees the CPU model the hypervisor exposes; one macOS
+        // does not know is not checked against platform limits, but without
+        // AVX2 macOS 13+ still needs CryptexFixup (`planner::validate`).
+        return if macos_db::requires_avx2(version) && !ident.has_avx2 {
+            CpuVerdict::Workaround(CRYPTEX_DEFAULT.into())
         } else {
-            CpuVerdict::Refused(
-                "The CPU platform is unknown. Pick it in the hardware editor.".into(),
-            )
+            CpuVerdict::Ok
         };
     }
-    let info = cpu_db::platform_info(platform);
+    if platform == CpuPlatform::Unknown {
+        return CpuVerdict::Refused("The CPU platform is unknown. Pick it in the hardware editor.".into());
+    }
     if !info.supported {
         let why = info.notes.first().copied().unwrap_or_default();
         return CpuVerdict::Refused(
@@ -789,13 +766,11 @@ fn cpu_component(profile: &HardwareProfile, ident: &CpuIdentity, focus: MacOsVer
     }
     let level = if is_apple(profile) {
         SupportLevel::Unsupported
+    } else if vm && !info.supported && cpu_db::usable_as_vm_guest(profile.cpu.platform) {
+        // A VM's CPU model does not need to be one macOS knows.
+        SupportLevel::Partial
     } else if profile.cpu.platform == CpuPlatform::Unknown {
-        // A VM's CPU model does not need to be identified.
-        if vm {
-            SupportLevel::Partial
-        } else {
-            SupportLevel::Unknown
-        }
+        SupportLevel::Unknown
     } else if !info.supported {
         SupportLevel::Unsupported
     } else {
@@ -1829,50 +1804,14 @@ mod tests {
             .collect()
     }
 
-    /// Independent copy of the CPU checks of `planner::validate`, in both of
-    /// its shapes: the platform ceiling, and the per-part ceiling with the
-    /// `cpu_db` workarounds plus the AMD core-count limits. A release the
-    /// report calls supported must pass both.
+    /// The CPU checks of `planner::validate` (the full planner is compared in
+    /// `planner::consistency_tests`).
     fn planner_accepts(profile: &HardwareProfile, target: MacOsVersion) -> bool {
-        let platform = profile.cpu.platform;
-        if platform == CpuPlatform::AppleSilicon || profile.cpu.vendor == CpuVendor::Apple {
-            return false;
-        }
-        let vm = profile.vm.is_some();
-        if platform == CpuPlatform::Unknown {
-            return vm;
-        }
-        let info = cpu_db::platform_info(platform);
-        if !info.supported {
-            return false;
-        }
-        if info.max_macos.is_some_and(|max| target > max)
-            || info.min_macos.is_some_and(|min| target < min)
-        {
-            return false;
-        }
-        let ident = cpu_identity(profile);
-        if let Some(max) = cpu_db::max_macos_for(&ident) {
-            let workaround = cpu_db::ceiling_workaround_for(&ident)
-                .filter(|w| target >= w.from && !matches!(w.max_macos, Some(m) if target > m));
-            if target > max && workaround.is_none() {
-                return false;
-            }
-        }
-        if cpu_db::min_macos_for(&ident).is_some_and(|min| target < min) {
-            return false;
-        }
-        if ident.vendor == CpuVendor::Amd {
-            let cores = if platform == CpuPlatform::AmdBulldozer {
-                profile.cpu.cores.max(profile.cpu.threads)
-            } else {
-                profile.cpu.cores
-            };
-            if cores == 0 || cores > 64 {
-                return false;
-            }
-        }
-        true
+        let options = crate::domain::model::BuildOptions {
+            target,
+            ..Default::default()
+        };
+        crate::domain::planner::validate(profile, &options).is_ok()
     }
 
     #[test]
@@ -2392,7 +2331,7 @@ mod tests {
     }
 
     #[test]
-    fn vm_on_an_unsupported_cpu_is_refused() {
+    fn vm_guest_cpu_models_are_not_held_to_bare_metal_limits() {
         let mut p = desktop(
             CpuPlatform::MeteorLake,
             vec![gpu(
@@ -2402,10 +2341,22 @@ mod tests {
                 "PciRoot(0x0)/Pci(0x1,0x0)",
             )],
         );
-        p.vm = Some(VmKind::Kvm);
+        // Bare metal: the Arc iGPU platform has no working configuration.
         assert!(supported(&assess(&p, None)).is_empty());
+        // As a guest CPU model it runs every release.
+        p.vm = Some(VmKind::Kvm);
+        assert_eq!(supported(&assess(&p, None)).len(), 9);
         p.cpu.platform = CpuPlatform::Unknown;
         assert_eq!(supported(&assess(&p, None)).len(), 9);
+        // Without AVX2, macOS 13+ is an expert option (CryptexFixup).
+        p.cpu.has_avx2 = Some(false);
+        let r = assess(&p, Some(MacOsVersion::Ventura));
+        assert_eq!(supported(&r).len(), 5);
+        assert_eq!(r.level, SupportLevel::Partial);
+        // K10 lacks the instruction set macOS needs, VM or not.
+        p.cpu.platform = CpuPlatform::AmdK10;
+        p.cpu.has_avx2 = None;
+        assert!(supported(&assess(&p, None)).is_empty());
     }
 
     #[test]

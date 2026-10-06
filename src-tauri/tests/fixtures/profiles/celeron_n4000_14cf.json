@@ -1,0 +1,87 @@
+{
+  "cpu": {
+    "name": "Intel(R) Celeron(R) N4000 CPU @ 1.10GHz",
+    "vendor": "intel",
+    "platform": "intel_atom",
+    "codename": "Gemini Lake",
+    "family": 6,
+    "model": 122,
+    "stepping": 1,
+    "cores": 2,
+    "threads": 2,
+    "isMobile": true,
+    "hasAvx2": false,
+    "hasSse42": true,
+    "isHybrid": false
+  },
+  "formFactor": "laptop",
+  "vm": null,
+  "gpus": [
+    {
+      "name": "Intel(R) UHD Graphics 600",
+      "vendor": "intel",
+      "family": "intel_low_power",
+      "vendorId": "8086",
+      "deviceId": "3185",
+      "subsystemId": "85f4103c",
+      "isIgpu": true,
+      "pciPath": "PciRoot(0x0)/Pci(0x2,0x0)",
+      "acpiPath": "\\_SB.PCI0.GFX0",
+      "vramMb": null,
+      "disabled": false
+    }
+  ],
+  "audio": {
+    "codecName": "Realtek ALC236",
+    "codecId": 283902518,
+    "controllerVendorId": "8086",
+    "controllerDeviceId": "3198",
+    "controllerPciPath": "PciRoot(0x0)/Pci(0xe,0x0)",
+    "layoutId": null
+  },
+  "ethernet": [],
+  "wifi": {
+    "name": "Intel(R) Wireless-AC 9560",
+    "bus": "pci",
+    "vendorId": "8086",
+    "deviceId": "31dc",
+    "subsystemId": "02348086",
+    "pciPath": "PciRoot(0x0)/Pci(0xc,0x0)",
+    "macAddress": "B8:08:CF:11:22:33"
+  },
+  "bluetooth": {
+    "name": "Intel Wireless Bluetooth 9560",
+    "bus": "usb",
+    "vendorId": "8087",
+    "deviceId": "0aaa",
+    "subsystemId": null,
+    "pciPath": null,
+    "macAddress": null
+  },
+  "input": {
+    "keyboardBus": "ps2",
+    "touchpadBus": "i2c",
+    "touchpadVendor": "synaptics",
+    "touchpadHid": "SYNA3297",
+    "hasTouchscreen": false
+  },
+  "storage": [
+    {
+      "name": "SanDisk DA4064 eMMC 64GB",
+      "kind": "emmc",
+      "vendorId": null,
+      "deviceId": null,
+      "sizeBytes": 64000000000
+    }
+  ],
+  "motherboardVendor": "HP",
+  "motherboardModel": "85F4",
+  "chipset": "Gemini Lake SoC",
+  "ramGb": 4,
+  "hasBattery": true,
+  "firmwareUefi": true,
+  "acpi": null,
+  "acpiTablesDir": null,
+  "source": "scan",
+  "scanConfidence": 0.92
+}

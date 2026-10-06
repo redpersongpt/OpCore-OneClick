@@ -1,16 +1,19 @@
 import type { CompatibilityReport, MacOsVersion } from '../../bridge/types';
 import { useT } from '../../i18n';
-import { sortedVersions } from '../../lib/compat';
+import { sortedVersions, type Reach } from '../../lib/compat';
 import { macosName } from '../../lib/macos';
 import { Badge } from '../ui/Badge';
 
 export function VersionPicker({
   report,
+  reach,
   selected,
   onSelect,
   disabled = false,
 }: {
   report: CompatibilityReport;
+  /** Expert option or out of reach, for releases the report does not support. */
+  reach: Partial<Record<MacOsVersion, Reach>>;
   selected: MacOsVersion | null;
   onSelect: (version: MacOsVersion) => void;
   disabled?: boolean;
@@ -22,6 +25,7 @@ export function VersionPicker({
     <div role="radiogroup" aria-label={t('compat.versions')} className="grid grid-cols-3 gap-2">
       {versions.map((option) => {
         const isSelected = option.version === selected;
+        const expert = !option.supported && reach[option.version] === 'expert';
         return (
           <button
             key={option.version}
@@ -35,7 +39,9 @@ export function VersionPicker({
                 ? 'border-accent bg-accent-soft'
                 : option.supported
                   ? 'border-line bg-panel hover:border-line-strong hover:bg-panel-2'
-                  : 'border-line bg-panel opacity-60 hover:opacity-90'
+                  : expert
+                    ? 'border-line bg-panel opacity-80 hover:opacity-100'
+                    : 'border-line bg-panel opacity-60 hover:opacity-90'
             }`}
           >
             <span className="flex w-full items-baseline justify-between gap-2">
@@ -46,6 +52,8 @@ export function VersionPicker({
               {option.recommended && <Badge tone="info">{t('compat.recommended')}</Badge>}
               {option.supported ? (
                 <Badge tone="success">{t('compat.supported')}</Badge>
+              ) : expert ? (
+                <Badge tone="warning">{t('compat.expertOption')}</Badge>
               ) : (
                 <Badge tone="danger">{t('compat.notSupported')}</Badge>
               )}

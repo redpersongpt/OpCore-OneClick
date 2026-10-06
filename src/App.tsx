@@ -1,8 +1,10 @@
 import { useEffect, type ComponentType } from 'react';
 import { MotionConfig } from 'motion/react';
 import { ErrorBoundary } from './components/feedback/ErrorBoundary';
+import CloseConfirmDialog from './components/layout/CloseConfirmDialog';
 import Shell from './components/layout/Shell';
 import { useBackendEvents } from './hooks/useBackendEvents';
+import { useCloseGuard } from './hooks/useCloseGuard';
 import { usePersistence } from './hooks/usePersistence';
 import Bios from './pages/Bios';
 import Build from './pages/Build';
@@ -36,6 +38,7 @@ export default function App() {
 
   useBackendEvents();
   usePersistence();
+  useCloseGuard();
 
   useEffect(() => {
     void init();
@@ -54,6 +57,7 @@ export default function App() {
       </Shell>
       <Settings />
       <Troubleshoot />
+      <CloseConfirmDialog />
     </MotionConfig>
   );
 }

@@ -1,0 +1,74 @@
+{
+  "cpu": {
+    "name": "AMD Ryzen 9 5950X 16-Core Processor",
+    "vendor": "amd",
+    "platform": "amd_zen3",
+    "codename": "Vermeer",
+    "family": 25,
+    "model": 33,
+    "stepping": 0,
+    "cores": 8,
+    "threads": 16,
+    "isMobile": false,
+    "hasAvx2": true,
+    "hasSse42": true,
+    "isHybrid": false
+  },
+  "formFactor": "desktop",
+  "vm": "kvm",
+  "gpus": [
+    {
+      "name": "Virtio GPU",
+      "vendor": "virtual",
+      "family": "virtual_display",
+      "vendorId": "1af4",
+      "deviceId": "1050",
+      "subsystemId": "11001af4",
+      "isIgpu": false,
+      "pciPath": "PciRoot(0x0)/Pci(0x1,0x0)",
+      "acpiPath": null,
+      "vramMb": null,
+      "disabled": false
+    }
+  ],
+  "audio": null,
+  "ethernet": [
+    {
+      "name": "Red Hat VirtIO Ethernet Adapter",
+      "bus": "pci",
+      "vendorId": "1af4",
+      "deviceId": "1041",
+      "subsystemId": "11001af4",
+      "pciPath": "PciRoot(0x0)/Pci(0x1c,0x0)/Pci(0x0,0x0)",
+      "macAddress": "52:54:00:12:34:56"
+    }
+  ],
+  "wifi": null,
+  "bluetooth": null,
+  "input": {
+    "keyboardBus": "usb",
+    "touchpadBus": null,
+    "touchpadVendor": null,
+    "touchpadHid": null,
+    "hasTouchscreen": false
+  },
+  "storage": [
+    {
+      "name": "QEMU HARDDISK",
+      "kind": "sata",
+      "vendorId": null,
+      "deviceId": null,
+      "sizeBytes": 128000000000
+    }
+  ],
+  "motherboardVendor": "QEMU",
+  "motherboardModel": "Standard PC (Q35 + ICH9, 2009)",
+  "chipset": "ICH9",
+  "ramGb": 16,
+  "hasBattery": false,
+  "firmwareUefi": true,
+  "acpi": null,
+  "acpiTablesDir": null,
+  "source": "scan",
+  "scanConfidence": 0.75
+}

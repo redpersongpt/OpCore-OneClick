@@ -1,0 +1,130 @@
+{
+  "cpu": {
+    "name": "Intel(R) Core(TM) i7-10510U CPU @ 1.80GHz",
+    "vendor": "intel",
+    "platform": "comet_lake",
+    "codename": "Comet Lake-U",
+    "family": 6,
+    "model": 142,
+    "stepping": 12,
+    "cores": 4,
+    "threads": 8,
+    "isMobile": true,
+    "hasAvx2": true,
+    "hasSse42": true,
+    "isHybrid": false
+  },
+  "formFactor": "laptop",
+  "vm": null,
+  "gpus": [
+    {
+      "name": "Intel(R) UHD Graphics",
+      "vendor": "intel",
+      "family": "intel_comet_lake",
+      "vendorId": "8086",
+      "deviceId": "9b41",
+      "subsystemId": "22be17aa",
+      "isIgpu": true,
+      "pciPath": "PciRoot(0x0)/Pci(0x2,0x0)",
+      "acpiPath": "\\_SB.PCI0.GFX0",
+      "vramMb": null,
+      "disabled": false
+    }
+  ],
+  "audio": {
+    "codecName": "Realtek ALC285",
+    "codecId": 283902597,
+    "controllerVendorId": "8086",
+    "controllerDeviceId": "02c8",
+    "controllerPciPath": "PciRoot(0x0)/Pci(0x1f,0x3)",
+    "layoutId": null
+  },
+  "ethernet": [
+    {
+      "name": "Intel(R) Ethernet Connection (10) I219-V",
+      "bus": "pci",
+      "vendorId": "8086",
+      "deviceId": "0d4f",
+      "subsystemId": "22be17aa",
+      "pciPath": "PciRoot(0x0)/Pci(0x1f,0x6)",
+      "macAddress": "48:2A:E3:12:34:56"
+    }
+  ],
+  "wifi": {
+    "name": "Intel(R) Wi-Fi 6 AX201 160MHz",
+    "bus": "pci",
+    "vendorId": "8086",
+    "deviceId": "02f0",
+    "subsystemId": "00708086",
+    "pciPath": "PciRoot(0x0)/Pci(0x14,0x3)",
+    "macAddress": "F4:46:37:11:22:33"
+  },
+  "bluetooth": {
+    "name": "Intel Wireless Bluetooth AX201",
+    "bus": "usb",
+    "vendorId": "8087",
+    "deviceId": "0026",
+    "subsystemId": null,
+    "pciPath": null,
+    "macAddress": null
+  },
+  "input": {
+    "keyboardBus": "ps2",
+    "touchpadBus": "smbus",
+    "touchpadVendor": "synaptics",
+    "touchpadHid": "LEN2068",
+    "hasTouchscreen": false
+  },
+  "storage": [
+    {
+      "name": "WDC PC SN730 SDBQNTY-512G-1001",
+      "kind": "nvme",
+      "vendorId": "15b7",
+      "deviceId": "5006",
+      "sizeBytes": 512000000000
+    }
+  ],
+  "motherboardVendor": "LENOVO",
+  "motherboardModel": "20U9CTO1WW",
+  "chipset": "400 Series PCH-LP",
+  "ramGb": 16,
+  "hasBattery": true,
+  "firmwareUefi": true,
+  "acpi": {
+    "pciRoot": "\\_SB.PCI0",
+    "lpcBridge": "\\_SB.PCI0.LPCB",
+    "ecPath": "\\_SB.PCI0.LPCB.EC",
+    "ecHasSta": false,
+    "cpuPaths": [
+      "\\_PR.PR00",
+      "\\_PR.PR01",
+      "\\_PR.PR02",
+      "\\_PR.PR03",
+      "\\_PR.PR04",
+      "\\_PR.PR05",
+      "\\_PR.PR06",
+      "\\_PR.PR07"
+    ],
+    "cpuUsesAcpi0007": false,
+    "awacPath": "\\_SB.AWAC",
+    "awacHasStas": true,
+    "rtcPath": "\\_SB.PCI0.LPCB.RTC",
+    "hpetPath": "\\_SB.PCI0.LPCB.HPET",
+    "igpuPath": "\\_SB.PCI0.GFX0",
+    "xhciPaths": [
+      "\\_SB.PCI0.XHC"
+    ],
+    "rhubPaths": [
+      "\\_SB.PCI0.XHC.RHUB"
+    ],
+    "gpioPath": "\\_SB.PCI0.GPI0",
+    "smbusPath": "\\_SB.PCI0.SBUS",
+    "pnlfExists": false,
+    "hasOsiWindows": true,
+    "dsdtOemTableId": "CML     ",
+    "dsdtLength": null
+  },
+  "acpiTablesDir": null,
+  "source": "scan",
+  "scanConfidence": 0.92
+}

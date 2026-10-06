@@ -1,0 +1,87 @@
+{
+  "cpu": {
+    "name": "11th Gen Intel(R) Core(TM) i7-1165G7 @ 2.80GHz",
+    "vendor": "intel",
+    "platform": "tiger_lake",
+    "codename": "Tiger Lake-UP3",
+    "family": 6,
+    "model": 140,
+    "stepping": 1,
+    "cores": 4,
+    "threads": 8,
+    "isMobile": true,
+    "hasAvx2": true,
+    "hasSse42": true,
+    "isHybrid": false
+  },
+  "formFactor": "laptop",
+  "vm": null,
+  "gpus": [
+    {
+      "name": "Intel(R) Iris(R) Xe Graphics",
+      "vendor": "intel",
+      "family": "intel_xe",
+      "vendorId": "8086",
+      "deviceId": "9a49",
+      "subsystemId": "0a201028",
+      "isIgpu": true,
+      "pciPath": "PciRoot(0x0)/Pci(0x2,0x0)",
+      "acpiPath": "\\_SB.PC00.GFX0",
+      "vramMb": null,
+      "disabled": false
+    }
+  ],
+  "audio": {
+    "codecName": "Realtek ALC289",
+    "codecId": 283902601,
+    "controllerVendorId": "8086",
+    "controllerDeviceId": "a0c8",
+    "controllerPciPath": "PciRoot(0x0)/Pci(0x1f,0x3)",
+    "layoutId": null
+  },
+  "ethernet": [],
+  "wifi": {
+    "name": "Killer(R) Wi-Fi 6 AX1650s 160MHz (Intel AX201)",
+    "bus": "pci",
+    "vendorId": "8086",
+    "deviceId": "a0f0",
+    "subsystemId": "16511a56",
+    "pciPath": "PciRoot(0x0)/Pci(0x14,0x3)",
+    "macAddress": "D4:D2:52:11:22:33"
+  },
+  "bluetooth": {
+    "name": "Intel Wireless Bluetooth AX201",
+    "bus": "usb",
+    "vendorId": "8087",
+    "deviceId": "0026",
+    "subsystemId": null,
+    "pciPath": null,
+    "macAddress": null
+  },
+  "input": {
+    "keyboardBus": "ps2",
+    "touchpadBus": "i2c",
+    "touchpadVendor": "synaptics",
+    "touchpadHid": "SYNA2B5F",
+    "hasTouchscreen": false
+  },
+  "storage": [
+    {
+      "name": "Intel RST VMD Controller (RAID)",
+      "kind": "raid",
+      "vendorId": "8086",
+      "deviceId": "9a0b",
+      "sizeBytes": 512000000000
+    }
+  ],
+  "motherboardVendor": "Dell Inc.",
+  "motherboardModel": "0DXP1F",
+  "chipset": "500 Series PCH-LP",
+  "ramGb": 16,
+  "hasBattery": true,
+  "firmwareUefi": true,
+  "acpi": null,
+  "acpiTablesDir": null,
+  "source": "scan",
+  "scanConfidence": 0.92
+}

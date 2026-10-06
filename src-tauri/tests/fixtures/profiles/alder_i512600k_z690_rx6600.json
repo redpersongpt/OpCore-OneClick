@@ -1,0 +1,142 @@
+{
+  "cpu": {
+    "name": "12th Gen Intel(R) Core(TM) i5-12600K",
+    "vendor": "intel",
+    "platform": "alder_lake",
+    "codename": "Alder Lake-S",
+    "family": 6,
+    "model": 151,
+    "stepping": 2,
+    "cores": 10,
+    "threads": 16,
+    "isMobile": false,
+    "hasAvx2": true,
+    "hasSse42": true,
+    "isHybrid": true
+  },
+  "formFactor": "desktop",
+  "vm": null,
+  "gpus": [
+    {
+      "name": "Intel(R) UHD Graphics 770",
+      "vendor": "intel",
+      "family": "intel_xe",
+      "vendorId": "8086",
+      "deviceId": "4680",
+      "subsystemId": "7d251462",
+      "isIgpu": true,
+      "pciPath": "PciRoot(0x0)/Pci(0x2,0x0)",
+      "acpiPath": "\\_SB.PC00.GFX0",
+      "vramMb": null,
+      "disabled": false
+    },
+    {
+      "name": "AMD Radeon RX 6600",
+      "vendor": "amd",
+      "family": "amd_navi23",
+      "vendorId": "1002",
+      "deviceId": "73ff",
+      "subsystemId": "50021462",
+      "isIgpu": false,
+      "pciPath": "PciRoot(0x0)/Pci(0x1,0x0)/Pci(0x0,0x0)/Pci(0x0,0x0)/Pci(0x0,0x0)",
+      "acpiPath": "\\_SB.PC00.PEG1.PEGP",
+      "vramMb": 8192,
+      "disabled": false
+    }
+  ],
+  "audio": {
+    "codecName": "Realtek ALC897",
+    "codecId": 283904151,
+    "controllerVendorId": "8086",
+    "controllerDeviceId": "7ad0",
+    "controllerPciPath": "PciRoot(0x0)/Pci(0x1f,0x3)",
+    "layoutId": null
+  },
+  "ethernet": [
+    {
+      "name": "Intel(R) Ethernet Controller I225-V",
+      "bus": "pci",
+      "vendorId": "8086",
+      "deviceId": "15f3",
+      "subsystemId": "7d251462",
+      "pciPath": "PciRoot(0x0)/Pci(0x1c,0x2)/Pci(0x0,0x0)",
+      "macAddress": "04:7C:16:12:34:56"
+    }
+  ],
+  "wifi": null,
+  "bluetooth": null,
+  "input": {
+    "keyboardBus": "usb",
+    "touchpadBus": null,
+    "touchpadVendor": null,
+    "touchpadHid": null,
+    "hasTouchscreen": false
+  },
+  "storage": [
+    {
+      "name": "WD_BLACK SN770 1TB",
+      "kind": "nvme",
+      "vendorId": "15b7",
+      "deviceId": "5017",
+      "sizeBytes": 1000000000000
+    },
+    {
+      "name": "Samsung SSD 860 EVO 500GB",
+      "kind": "sata",
+      "vendorId": null,
+      "deviceId": null,
+      "sizeBytes": 500000000000
+    }
+  ],
+  "motherboardVendor": "Micro-Star International Co., Ltd.",
+  "motherboardModel": "PRO Z690-A DDR4(MS-7D25)",
+  "chipset": "Z690",
+  "ramGb": 32,
+  "hasBattery": false,
+  "firmwareUefi": true,
+  "acpi": {
+    "pciRoot": "\\_SB.PC00",
+    "lpcBridge": "\\_SB.PC00.LPCB",
+    "ecPath": null,
+    "ecHasSta": false,
+    "cpuPaths": [
+      "\\_SB.PR00",
+      "\\_SB.PR01",
+      "\\_SB.PR02",
+      "\\_SB.PR03",
+      "\\_SB.PR04",
+      "\\_SB.PR05",
+      "\\_SB.PR06",
+      "\\_SB.PR07",
+      "\\_SB.PR08",
+      "\\_SB.PR09",
+      "\\_SB.PR0A",
+      "\\_SB.PR0B",
+      "\\_SB.PR0C",
+      "\\_SB.PR0D",
+      "\\_SB.PR0E",
+      "\\_SB.PR0F"
+    ],
+    "cpuUsesAcpi0007": true,
+    "awacPath": "\\_SB.AWAC",
+    "awacHasStas": true,
+    "rtcPath": "\\_SB.PC00.LPCB.RTC",
+    "hpetPath": null,
+    "igpuPath": "\\_SB.PC00.GFX0",
+    "xhciPaths": [
+      "\\_SB.PC00.XHCI"
+    ],
+    "rhubPaths": [
+      "\\_SB.PC00.XHCI.RHUB"
+    ],
+    "gpioPath": "\\_SB.GPI0",
+    "smbusPath": "\\_SB.PC00.SBUS",
+    "pnlfExists": false,
+    "hasOsiWindows": true,
+    "dsdtOemTableId": "A M I   ",
+    "dsdtLength": 468000
+  },
+  "acpiTablesDir": null,
+  "source": "scan",
+  "scanConfidence": 0.92
+}

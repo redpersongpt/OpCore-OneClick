@@ -1,0 +1,126 @@
+{
+  "cpu": {
+    "name": "Intel(R) Core(TM) i5-6300U CPU @ 2.40GHz",
+    "vendor": "intel",
+    "platform": "skylake",
+    "codename": "Skylake-U",
+    "family": 6,
+    "model": 78,
+    "stepping": 3,
+    "cores": 2,
+    "threads": 4,
+    "isMobile": true,
+    "hasAvx2": true,
+    "hasSse42": true,
+    "isHybrid": false
+  },
+  "formFactor": "laptop",
+  "vm": null,
+  "gpus": [
+    {
+      "name": "Intel(R) HD Graphics 520",
+      "vendor": "intel",
+      "family": "intel_skylake",
+      "vendorId": "8086",
+      "deviceId": "1916",
+      "subsystemId": "224d17aa",
+      "isIgpu": true,
+      "pciPath": "PciRoot(0x0)/Pci(0x2,0x0)",
+      "acpiPath": "\\_SB.PCI0.GFX0",
+      "vramMb": null,
+      "disabled": false
+    }
+  ],
+  "audio": {
+    "codecName": "Realtek ALC3245 (ALC293)",
+    "codecId": 283902611,
+    "controllerVendorId": "8086",
+    "controllerDeviceId": "9d70",
+    "controllerPciPath": "PciRoot(0x0)/Pci(0x1f,0x3)",
+    "layoutId": null
+  },
+  "ethernet": [
+    {
+      "name": "Intel(R) Ethernet Connection I219-LM",
+      "bus": "pci",
+      "vendorId": "8086",
+      "deviceId": "156f",
+      "subsystemId": "224d17aa",
+      "pciPath": "PciRoot(0x0)/Pci(0x1f,0x6)",
+      "macAddress": "54:EE:75:12:34:56"
+    }
+  ],
+  "wifi": {
+    "name": "Intel(R) Dual Band Wireless-AC 8260",
+    "bus": "pci",
+    "vendorId": "8086",
+    "deviceId": "24f3",
+    "subsystemId": "00108086",
+    "pciPath": "PciRoot(0x0)/Pci(0x1c,0x2)/Pci(0x0,0x0)",
+    "macAddress": "E4:B3:18:11:22:33"
+  },
+  "bluetooth": {
+    "name": "Intel Wireless Bluetooth 8260",
+    "bus": "usb",
+    "vendorId": "8087",
+    "deviceId": "0a2b",
+    "subsystemId": null,
+    "pciPath": null,
+    "macAddress": null
+  },
+  "input": {
+    "keyboardBus": "ps2",
+    "touchpadBus": "smbus",
+    "touchpadVendor": "synaptics",
+    "touchpadHid": "LEN2068",
+    "hasTouchscreen": false
+  },
+  "storage": [
+    {
+      "name": "SAMSUNG MZ7LN256HMJP",
+      "kind": "sata",
+      "vendorId": null,
+      "deviceId": null,
+      "sizeBytes": 256000000000
+    }
+  ],
+  "motherboardVendor": "LENOVO",
+  "motherboardModel": "20FMS0ED00",
+  "chipset": "Sunrise Point-LP",
+  "ramGb": 8,
+  "hasBattery": true,
+  "firmwareUefi": true,
+  "acpi": {
+    "pciRoot": "\\_SB.PCI0",
+    "lpcBridge": "\\_SB.PCI0.LPCB",
+    "ecPath": "\\_SB.PCI0.LPCB.EC",
+    "ecHasSta": false,
+    "cpuPaths": [
+      "\\_PR.PR00",
+      "\\_PR.PR01",
+      "\\_PR.PR02",
+      "\\_PR.PR03"
+    ],
+    "cpuUsesAcpi0007": false,
+    "awacPath": null,
+    "awacHasStas": false,
+    "rtcPath": "\\_SB.PCI0.LPCB.RTC",
+    "hpetPath": "\\_SB.PCI0.LPCB.HPET",
+    "igpuPath": "\\_SB.PCI0.GFX0",
+    "xhciPaths": [
+      "\\_SB.PCI0.XHCI"
+    ],
+    "rhubPaths": [
+      "\\_SB.PCI0.XHCI.URTH"
+    ],
+    "gpioPath": "\\_SB.PCI0.GPIO",
+    "smbusPath": "\\_SB.PCI0.SBUS",
+    "pnlfExists": false,
+    "hasOsiWindows": true,
+    "dsdtOemTableId": "SKL     ",
+    "dsdtLength": null
+  },
+  "acpiTablesDir": null,
+  "source": "scan",
+  "scanConfidence": 0.92
+}

@@ -1,0 +1,110 @@
+{
+  "cpu": {
+    "name": "Intel(R) Core(TM) Ultra 9 285K",
+    "vendor": "intel",
+    "platform": "arrow_lake",
+    "codename": "Arrow Lake-S",
+    "family": 6,
+    "model": 198,
+    "stepping": 2,
+    "cores": 24,
+    "threads": 24,
+    "isMobile": false,
+    "hasAvx2": true,
+    "hasSse42": true,
+    "isHybrid": true
+  },
+  "formFactor": "desktop",
+  "vm": null,
+  "gpus": [
+    {
+      "name": "Intel(R) Graphics",
+      "vendor": "intel",
+      "family": "intel_xe",
+      "vendorId": "8086",
+      "deviceId": "7d67",
+      "subsystemId": "7e321462",
+      "isIgpu": true,
+      "pciPath": "PciRoot(0x0)/Pci(0x2,0x0)",
+      "acpiPath": "\\_SB.PC00.GFX0",
+      "vramMb": null,
+      "disabled": false
+    },
+    {
+      "name": "AMD Radeon RX 6800 XT",
+      "vendor": "amd",
+      "family": "amd_navi21",
+      "vendorId": "1002",
+      "deviceId": "73bf",
+      "subsystemId": "e4381da2",
+      "isIgpu": false,
+      "pciPath": "PciRoot(0x0)/Pci(0x1,0x0)/Pci(0x0,0x0)/Pci(0x0,0x0)/Pci(0x0,0x0)",
+      "acpiPath": "\\_SB.PC00.PEG1.PEGP",
+      "vramMb": 16384,
+      "disabled": false
+    }
+  ],
+  "audio": {
+    "codecName": "Realtek ALC897",
+    "codecId": 283904151,
+    "controllerVendorId": "8086",
+    "controllerDeviceId": "7f50",
+    "controllerPciPath": "PciRoot(0x0)/Pci(0x1f,0x3)",
+    "layoutId": null
+  },
+  "ethernet": [
+    {
+      "name": "Realtek Gaming 5GbE Family Controller (RTL8126)",
+      "bus": "pci",
+      "vendorId": "10ec",
+      "deviceId": "8126",
+      "subsystemId": "7e321462",
+      "pciPath": "PciRoot(0x0)/Pci(0x1c,0x0)/Pci(0x0,0x0)",
+      "macAddress": "D8:BB:C1:AB:CD:02"
+    }
+  ],
+  "wifi": {
+    "name": "Intel(R) Wi-Fi 7 BE200 320MHz",
+    "bus": "pci",
+    "vendorId": "8086",
+    "deviceId": "272b",
+    "subsystemId": "00e48086",
+    "pciPath": "PciRoot(0x0)/Pci(0x1c,0x4)/Pci(0x0,0x0)",
+    "macAddress": "0C:9A:3C:11:22:33"
+  },
+  "bluetooth": {
+    "name": "Intel Wireless Bluetooth BE200",
+    "bus": "usb",
+    "vendorId": "8087",
+    "deviceId": "0036",
+    "subsystemId": null,
+    "pciPath": null,
+    "macAddress": null
+  },
+  "input": {
+    "keyboardBus": "usb",
+    "touchpadBus": null,
+    "touchpadVendor": null,
+    "touchpadHid": null,
+    "hasTouchscreen": false
+  },
+  "storage": [
+    {
+      "name": "Samsung SSD 980 PRO 2TB",
+      "kind": "nvme",
+      "vendorId": "144d",
+      "deviceId": "a80a",
+      "sizeBytes": 2000000000000
+    }
+  ],
+  "motherboardVendor": "Micro-Star International Co., Ltd.",
+  "motherboardModel": "PRO Z890-A WIFI (MS-7E32)",
+  "chipset": "Z890",
+  "ramGb": 48,
+  "hasBattery": false,
+  "firmwareUefi": true,
+  "acpi": null,
+  "acpiTablesDir": null,
+  "source": "scan",
+  "scanConfidence": 0.92
+}

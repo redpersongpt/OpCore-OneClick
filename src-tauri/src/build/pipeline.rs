@@ -323,6 +323,7 @@ impl Job<'_> {
         self.reporter.phase(Phase::Acpi, format!("Writing {count} ACPI tables"));
         let mut kept = Vec::new();
         let mut results = Vec::new();
+        let mut skipped: Vec<(String, String)> = Vec::new();
         for (index, table) in planned.into_iter().enumerate() {
             self.cancel().check()?;
             self.reporter.item(Phase::Acpi, index, count, &table.file_name, format!("Adding {}", table.file_name));
@@ -338,12 +339,7 @@ impl Job<'_> {
                     return Err(while_doing(e, &format!("Could not provide {} (required)", table.file_name)));
                 }
                 Err(e) => {
-                    let disabled = ssdt::disable_dependent_patches(&mut self.plan.acpi_patches, &table.file_name);
-                    let mut warning = format!("{} was left out: {}", table.file_name, e.message);
-                    if disabled > 0 {
-                        warning.push_str(&format!(" ({disabled} ACPI patch(es) that need it were disabled)"));
-                    }
-                    self.warnings.push(warning);
+                    skipped.push((table.file_name.clone(), format!("{} was left out: {}", table.file_name, e.message)));
                     results.push(SsdtResult {
                         file_name: table.file_name.clone(),
                         source: ssdt::source_id(&table.source).into(),
@@ -366,6 +362,16 @@ impl Job<'_> {
                 reason: table.reason.clone(),
             });
             kept.push(table);
+        }
+        // Renames of a left-out table go too, unless a table that was written
+        // needs the same rename.
+        let present: Vec<String> = kept.iter().map(|t| t.file_name.clone()).collect();
+        for (file_name, mut warning) in skipped {
+            let disabled = ssdt::disable_dependent_patches(&mut self.plan.acpi_patches, &file_name, &present);
+            if disabled > 0 {
+                warning.push_str(&format!(" ({disabled} ACPI patch(es) that need it were disabled)"));
+            }
+            self.warnings.push(warning);
         }
         self.plan.ssdts = kept;
         Ok(results)

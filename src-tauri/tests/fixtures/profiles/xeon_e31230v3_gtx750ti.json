@@ -1,0 +1,90 @@
+{
+  "cpu": {
+    "name": "Intel(R) Xeon(R) CPU E3-1230 v3 @ 3.30GHz",
+    "vendor": "intel",
+    "platform": "haswell",
+    "codename": "Haswell",
+    "family": 6,
+    "model": 60,
+    "stepping": 3,
+    "cores": 4,
+    "threads": 8,
+    "isMobile": false,
+    "hasAvx2": true,
+    "hasSse42": true,
+    "isHybrid": false
+  },
+  "formFactor": "desktop",
+  "vm": null,
+  "gpus": [
+    {
+      "name": "NVIDIA GeForce GTX 750 Ti",
+      "vendor": "nvidia",
+      "family": "nvidia_maxwell",
+      "vendorId": "10de",
+      "deviceId": "1380",
+      "subsystemId": "362d1458",
+      "isIgpu": false,
+      "pciPath": "PciRoot(0x0)/Pci(0x1,0x0)/Pci(0x0,0x0)",
+      "acpiPath": "\\_SB.PCI0.PEG0.PEGP",
+      "vramMb": 2048,
+      "disabled": false
+    }
+  ],
+  "audio": {
+    "codecName": "Realtek ALC1150",
+    "codecId": 283904256,
+    "controllerVendorId": "8086",
+    "controllerDeviceId": "8c20",
+    "controllerPciPath": "PciRoot(0x0)/Pci(0x1b,0x0)",
+    "layoutId": null
+  },
+  "ethernet": [
+    {
+      "name": "Intel(R) Ethernet Connection I217-LM",
+      "bus": "pci",
+      "vendorId": "8086",
+      "deviceId": "153a",
+      "subsystemId": "153a15d9",
+      "pciPath": "PciRoot(0x0)/Pci(0x19,0x0)",
+      "macAddress": "0C:C4:7A:12:34:56"
+    },
+    {
+      "name": "Intel(R) I210 Gigabit Network Connection",
+      "bus": "pci",
+      "vendorId": "8086",
+      "deviceId": "1533",
+      "subsystemId": "153315d9",
+      "pciPath": "PciRoot(0x0)/Pci(0x1c,0x4)/Pci(0x0,0x0)",
+      "macAddress": "0C:C4:7A:12:34:57"
+    }
+  ],
+  "wifi": null,
+  "bluetooth": null,
+  "input": {
+    "keyboardBus": "usb",
+    "touchpadBus": null,
+    "touchpadVendor": null,
+    "touchpadHid": null,
+    "hasTouchscreen": false
+  },
+  "storage": [
+    {
+      "name": "Samsung SSD 860 EVO 500GB",
+      "kind": "sata",
+      "vendorId": null,
+      "deviceId": null,
+      "sizeBytes": 500000000000
+    }
+  ],
+  "motherboardVendor": "Supermicro",
+  "motherboardModel": "X10SAE",
+  "chipset": "C226",
+  "ramGb": 32,
+  "hasBattery": false,
+  "firmwareUefi": true,
+  "acpi": null,
+  "acpiTablesDir": null,
+  "source": "scan",
+  "scanConfidence": 0.92
+}

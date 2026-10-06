@@ -1,0 +1,140 @@
+{
+  "cpu": {
+    "name": "AMD Ryzen 7 5800X 8-Core Processor",
+    "vendor": "amd",
+    "platform": "amd_zen3",
+    "codename": "Vermeer",
+    "family": 25,
+    "model": 33,
+    "stepping": 0,
+    "cores": 8,
+    "threads": 16,
+    "isMobile": false,
+    "hasAvx2": true,
+    "hasSse42": true,
+    "isHybrid": false
+  },
+  "formFactor": "desktop",
+  "vm": null,
+  "gpus": [
+    {
+      "name": "AMD Radeon RX 6700 XT",
+      "vendor": "amd",
+      "family": "amd_navi22",
+      "vendorId": "1002",
+      "deviceId": "73df",
+      "subsystemId": "e4451da2",
+      "isIgpu": false,
+      "pciPath": "PciRoot(0x0)/Pci(0x3,0x1)/Pci(0x0,0x0)/Pci(0x0,0x0)/Pci(0x0,0x0)",
+      "acpiPath": "\\_SB.PCI0.GPP0.SWUS.SWDS.VGA",
+      "vramMb": 12288,
+      "disabled": false
+    }
+  ],
+  "audio": {
+    "codecName": "Realtek ALCS1200A",
+    "codecId": 283904768,
+    "controllerVendorId": "1022",
+    "controllerDeviceId": "1487",
+    "controllerPciPath": "PciRoot(0x0)/Pci(0x8,0x1)/Pci(0x0,0x4)",
+    "layoutId": null
+  },
+  "ethernet": [
+    {
+      "name": "Realtek Gaming 2.5GbE Family Controller (RTL8125B)",
+      "bus": "pci",
+      "vendorId": "10ec",
+      "deviceId": "8125",
+      "subsystemId": "7c911462",
+      "pciPath": "PciRoot(0x0)/Pci(0x1,0x2)/Pci(0x0,0x2)/Pci(0x9,0x0)/Pci(0x0,0x0)",
+      "macAddress": "2C:F0:5D:12:34:56"
+    }
+  ],
+  "wifi": {
+    "name": "Intel(R) Wi-Fi 6 AX200 160MHz",
+    "bus": "pci",
+    "vendorId": "8086",
+    "deviceId": "2723",
+    "subsystemId": "00848086",
+    "pciPath": "PciRoot(0x0)/Pci(0x1,0x2)/Pci(0x0,0x2)/Pci(0x8,0x0)/Pci(0x0,0x0)",
+    "macAddress": "50:E0:85:12:34:57"
+  },
+  "bluetooth": {
+    "name": "Intel Wireless Bluetooth AX200",
+    "bus": "usb",
+    "vendorId": "8087",
+    "deviceId": "0029",
+    "subsystemId": null,
+    "pciPath": null,
+    "macAddress": null
+  },
+  "input": {
+    "keyboardBus": "usb",
+    "touchpadBus": null,
+    "touchpadVendor": null,
+    "touchpadHid": null,
+    "hasTouchscreen": false
+  },
+  "storage": [
+    {
+      "name": "WD_BLACK SN770 1TB",
+      "kind": "nvme",
+      "vendorId": "15b7",
+      "deviceId": "5017",
+      "sizeBytes": 1000000000000
+    }
+  ],
+  "motherboardVendor": "Micro-Star International Co., Ltd.",
+  "motherboardModel": "MAG B550 TOMAHAWK (MS-7C91)",
+  "chipset": "B550",
+  "ramGb": 32,
+  "hasBattery": false,
+  "firmwareUefi": true,
+  "acpi": {
+    "pciRoot": "\\_SB.PCI0",
+    "lpcBridge": "\\_SB.PCI0.SBRG",
+    "ecPath": null,
+    "ecHasSta": false,
+    "cpuPaths": [
+      "\\_SB.C000",
+      "\\_SB.C001",
+      "\\_SB.C002",
+      "\\_SB.C003",
+      "\\_SB.C004",
+      "\\_SB.C005",
+      "\\_SB.C006",
+      "\\_SB.C007",
+      "\\_SB.C008",
+      "\\_SB.C009",
+      "\\_SB.C00A",
+      "\\_SB.C00B",
+      "\\_SB.C00C",
+      "\\_SB.C00D",
+      "\\_SB.C00E",
+      "\\_SB.C00F"
+    ],
+    "cpuUsesAcpi0007": true,
+    "awacPath": null,
+    "awacHasStas": false,
+    "rtcPath": "\\_SB.PCI0.SBRG.RTC",
+    "hpetPath": "\\_SB.PCI0.SBRG.HPET",
+    "igpuPath": null,
+    "xhciPaths": [
+      "\\_SB.PCI0.GP17.XHC0",
+      "\\_SB.PCI0.GP17.XHC1"
+    ],
+    "rhubPaths": [
+      "\\_SB.PCI0.GP17.XHC0.RHUB",
+      "\\_SB.PCI0.GP17.XHC1.RHUB"
+    ],
+    "gpioPath": null,
+    "smbusPath": null,
+    "pnlfExists": false,
+    "hasOsiWindows": true,
+    "dsdtOemTableId": "A M I   ",
+    "dsdtLength": 96000
+  },
+  "acpiTablesDir": null,
+  "source": "scan",
+  "scanConfidence": 0.92
+}

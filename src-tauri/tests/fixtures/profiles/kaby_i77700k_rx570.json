@@ -1,0 +1,101 @@
+{
+  "cpu": {
+    "name": "Intel(R) Core(TM) i7-7700K CPU @ 4.20GHz",
+    "vendor": "intel",
+    "platform": "kaby_lake",
+    "codename": "Kaby Lake-S",
+    "family": 6,
+    "model": 158,
+    "stepping": 9,
+    "cores": 4,
+    "threads": 8,
+    "isMobile": false,
+    "hasAvx2": true,
+    "hasSse42": true,
+    "isHybrid": false
+  },
+  "formFactor": "desktop",
+  "vm": null,
+  "gpus": [
+    {
+      "name": "Intel(R) HD Graphics 630",
+      "vendor": "intel",
+      "family": "intel_kaby_lake",
+      "vendorId": "8086",
+      "deviceId": "5912",
+      "subsystemId": "86941043",
+      "isIgpu": true,
+      "pciPath": "PciRoot(0x0)/Pci(0x2,0x0)",
+      "acpiPath": "\\_SB.PCI0.GFX0",
+      "vramMb": null,
+      "disabled": false
+    },
+    {
+      "name": "Radeon RX 570 Series",
+      "vendor": "amd",
+      "family": "amd_polaris",
+      "vendorId": "1002",
+      "deviceId": "67df",
+      "subsystemId": "e3871da2",
+      "isIgpu": false,
+      "pciPath": "PciRoot(0x0)/Pci(0x1,0x0)/Pci(0x0,0x0)",
+      "acpiPath": "\\_SB.PCI0.PEG0.PEGP",
+      "vramMb": 4096,
+      "disabled": false
+    }
+  ],
+  "audio": {
+    "codecName": "Realtek S1220A",
+    "codecId": 283906408,
+    "controllerVendorId": "8086",
+    "controllerDeviceId": "a2f0",
+    "controllerPciPath": "PciRoot(0x0)/Pci(0x1f,0x3)",
+    "layoutId": null
+  },
+  "ethernet": [
+    {
+      "name": "Intel(R) Ethernet Connection (2) I219-V",
+      "bus": "pci",
+      "vendorId": "8086",
+      "deviceId": "15b8",
+      "subsystemId": "86721043",
+      "pciPath": "PciRoot(0x0)/Pci(0x1f,0x6)",
+      "macAddress": "AC:9E:17:12:34:56"
+    }
+  ],
+  "wifi": null,
+  "bluetooth": null,
+  "input": {
+    "keyboardBus": "usb",
+    "touchpadBus": null,
+    "touchpadVendor": null,
+    "touchpadHid": null,
+    "hasTouchscreen": false
+  },
+  "storage": [
+    {
+      "name": "WDC WDS500G3X0C-00SJG0 (SN750)",
+      "kind": "nvme",
+      "vendorId": "15b7",
+      "deviceId": "5006",
+      "sizeBytes": 500000000000
+    },
+    {
+      "name": "ST1000DM003-1SB102",
+      "kind": "sata",
+      "vendorId": null,
+      "deviceId": null,
+      "sizeBytes": 1000000000000
+    }
+  ],
+  "motherboardVendor": "ASUSTeK COMPUTER INC.",
+  "motherboardModel": "PRIME Z270-A",
+  "chipset": "Z270",
+  "ramGb": 16,
+  "hasBattery": false,
+  "firmwareUefi": true,
+  "acpi": null,
+  "acpiTablesDir": null,
+  "source": "scan",
+  "scanConfidence": 0.92
+}

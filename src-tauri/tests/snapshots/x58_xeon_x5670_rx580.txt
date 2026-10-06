@@ -1,0 +1,118 @@
+fixture: x58_xeon_x5670_rx580
+cpu: Intel(R) Xeon(R) CPU X5670 @ 2.93GHz | NehalemHedt (Westmere-EP) | 6C/12T | avx2 false
+machine: Desktop | ASUSTeK Computer INC. P6X58D-E | chipset ICH10 | uefi false
+gpu: Radeon RX 580 Series [1002:67df AmdPolaris]
+audio: Realtek ALC889 [10ec0889]
+net: Marvell Yukon 88E8056 PCI-E Gigabit Ethernet Controller [11ab:4364 Pci]
+assessment: Partial, recommended 12
+summary: macOS Monterey 12 works with caveats. This machine can run macOS High Sierra 10.13 to macOS Monterey 12. It is the recommended release.
+releases:
+  10.13 supported   | ok MacPro5,1 sbm=Disabled csr=00000000 gpu=WhateverGreen kexts=9 ssdts=1
+  10.14 supported   | ok MacPro5,1 sbm=Disabled csr=00000000 gpu=WhateverGreen kexts=10 ssdts=1
+  10.15 supported   | ok MacPro6,1 sbm=Disabled csr=00000000 gpu=WhateverGreen kexts=11 ssdts=1
+  11    supported   | ok MacPro6,1 sbm=Default csr=00000000 gpu=WhateverGreen kexts=11 ssdts=1
+  12    supported   | ok MacPro6,1 sbm=Default csr=00000000 gpu=WhateverGreen kexts=11 ssdts=1
+  13    expert      root-patch | ok MacPro6,1 (skip) sbm=Disabled csr=00000803 gpu=WhateverGreen kexts=16 ssdts=1
+  14    expert      root-patch | ok MacPro6,1 (skip) sbm=Disabled csr=00000803 gpu=WhateverGreen kexts=16 ssdts=1
+  15    expert      root-patch | ok MacPro6,1 (skip) sbm=Disabled csr=00000803 gpu=WhateverGreen kexts=16 ssdts=1
+  26    expert      root-patch | ok MacPro6,1 (skip) sbm=Disabled csr=00000803 gpu=WhateverGreen kexts=16 ssdts=1
+report-notes:
+  [warning] network: No network in macOS Recovery
+  [warning] platform: Legacy BIOS boot
+  [warning] platform: BitLocker and dual boot
+
+== plan for macOS Monterey 12 (recommended) ==
+smbios: MacPro6,1 | alternatives: -
+secure-boot-model: Default
+csr-active-config: 00000000
+boot-args: -v keepsyms=1 debug=0x100
+kexts:
+  + Lilu.kext (Lilu) required
+  + VirtualSMC.kext (VirtualSMC) required
+  + WhateverGreen.kext (WhateverGreen) required
+  + SMCRadeonSensors.kext (SMCRadeonSensors)
+  + SMCProcessor.kext (VirtualSMC)
+  + SMCSuperIO.kext (VirtualSMC)
+  + AppleALC.kext (AppleALC) required
+  + CpuTscSync.kext (CpuTscSync)
+  + AppleMCEReporterDisabler.kext (AppleMCEReporterDisabler) [19.0.0..] required
+  + USBToolBox.kext (USBToolBox) required
+  + UTBDefault.kext (USBToolBox) required
+ssdts:
+  SSDT-EC-DESKTOP.aml <- dortania SSDT-EC-DESKTOP.aml
+device-properties:
+  PciRoot(0x0)/Pci(0x1b,0x0)
+    layout-id = <01000000>
+acpi-quirks:
+  on: ResetLogoStatus
+  off: FadtEnableReset NormalizeHeaders RebaseRegions ResetHwSig SyncTableIds
+booter-quirks:
+  on: AvoidRuntimeDefrag FixupAppleEfiImages RebuildAppleMemoryMap
+  off: DevirtualiseMmio EnableSafeModeSlide EnableWriteUnprotector ProtectMemoryRegions ProtectUefiServices ProvideCustomSlide SetupVirtualMap SyncRuntimePermissions
+  set: ResizeAppleGpuBars=-1
+kernel-quirks:
+  on: AppleCpuPmCfgLock DisableIoMapper DisableLinkeditJettison PanicNoKextDump PowerTimeoutKernelPanic
+  off: AppleXcpmCfgLock AppleXcpmExtraMsrs AppleXcpmForceBoost CustomSMBIOSGuid DisableIoMapperMapping DisableRtcChecksum ExtendBTFeatureFlags ForceAquantiaEthernet ForceSecureBootScheme IncreasePciBarSize LapicKernelPanic ProvideCurrentCpuInfo ThirdPartyDrives XhciPortLimit
+  set: SetApfsTrimTimeout=-1
+kernel-emulate:
+  off: DummyPowerManagement
+  set: Cpuid1Data=<> Cpuid1Mask=<>
+misc-boot:
+  on: ShowPicker
+  off: HideAuxiliary PickerAudioAssist PollAppleHotKeys
+  set: ConsoleAttributes=0 HibernateMode="None" LauncherOption="Disabled" LauncherPath="Default" PickerAttributes=17 PickerMode="External" PickerVariant="Acidanthera\GoldenGate" TakeoffDelay=0 Timeout=5
+misc-security:
+  on: AllowSetDefault BlacklistAppleUpdate
+  off: AuthRestart EnablePassword
+  set: ApECID=0 DmgLoading="Signed" ExposeSensitiveData=7 ScanPolicy=0 SecureBootModel="Default" Vault="Optional"
+tools: OpenShell.efi
+nvram:
+  on: WriteFlash
+  off: LegacyOverwrite
+platform-info:
+  on: Automatic UpdateDataHub UpdateNVRAM UpdateSMBIOS
+  off: CustomMemory UseRawUuidEncoding
+  set: UpdateSMBIOSMode="Create"
+drivers: OpenRuntime.efi HfsPlusLegacy.efi OpenCanopy.efi OpenUsbKbDxe.efi ResetNvramEntry.efi
+uefi-quirks:
+  on: EnableVectorAcceleration IgnoreInvalidFlexRatio
+  off: DisableSecurityPolicy ForceOcWriteFlash ReleaseUsbOwnership RequestBootVarRouting UnblockFsConnect
+  set: ResizeGpuBars=-1
+uefi-apfs:
+  on: EnableJumpstart HideVerbose
+  off: GlobalConnect JumpstartHotPlug
+  set: MinDate=0 MinVersion=0
+uefi-output:
+  on: ProvideConsoleGop
+  off: DirectGopRendering ForceResolution ReconnectOnResChange
+  set: GopPassThrough="Disabled" Resolution="Max" TextRenderer="BuiltinGraphics" UIScale=0
+uefi-input:
+  off: KeyFiltering KeySupport KeySwap PointerSupport
+  set: KeyForgetThreshold=5 KeySupportMode="Auto" TimerResolution=50000
+bios: Boot mode = Legacy BIOS (required)
+bios: Fast Boot = disable (required)
+bios: SATA Mode = AHCI (required)
+bios: EHCI/XHCI Hand-off = enable (required)
+bios: CFG Lock (MSR 0xE2 write protection) = disable
+bios: VT-d (Intel Virtualization for Directed I/O) = disable
+bios: VT-x (Intel Virtualization Technology) = enable
+bios: Execute Disable Bit = enable (required)
+bios: Hyper-Threading = enable
+bios: Serial / Parallel port = disable
+notes:
+  [warning] ethernet: Marvell Yukon 88E8056 PCI-E Gigabit Ethernet Controller: not configured
+  [warning] network: No network in macOS Recovery
+  [warning] firmware: Legacy BIOS boot
+  [info] gpu: Display: Radeon RX 580 Series
+  [info] acpi: Generic prebuilt SSDTs
+  [info] cpu: CFG Lock
+  [info] boot: Verbose boot is on
+post-install:
+  [info] boot: Copy the EFI to the internal drive
+  [info] usb: Map the USB ports
+  [info] bootloader: Boot picker after install
+  [info] nvram: Install the emulated NVRAM script
+  [info] audio: Try other layout-ids if a jack or the microphone is silent
+  [info] smbios: Check the serial number before using iServices
+  [info] boot: Turn off verbose boot
+  [warning] platform: Dual boot with Windows

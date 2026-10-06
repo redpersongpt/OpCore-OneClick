@@ -1,0 +1,144 @@
+fixture: raptor_i913900k_z790_rx6900xt
+cpu: 13th Gen Intel(R) Core(TM) i9-13900K | RaptorLake (Raptor Lake-S) | 24C/32T | avx2 true
+machine: Desktop | Gigabyte Technology Co., Ltd. Z790 AORUS ELITE AX | chipset Z790 | uefi true
+gpu: Intel(R) UHD Graphics 770 [8086:a780 IntelXe igpu]
+gpu: AMD Radeon RX 6900 XT [1002:73bf AmdNavi21]
+audio: Realtek ALC897 [10ec0897]
+net: Realtek Gaming 2.5GbE Family Controller (RTL8125B) [10ec:8125 Pci]
+net: Intel(R) Wi-Fi 6E AX211 160MHz [8086:7a70 Pci]
+net: Intel Wireless Bluetooth AX211 [8087:0033 Usb]
+assessment: Partial, recommended 15
+summary: macOS Sequoia 15 works with caveats. This machine can run macOS Big Sur 11 to macOS Tahoe 26. It is the recommended release.
+releases:
+  10.13 unsupported | err TARGET_BELOW_CPU_MINIMUM (recoverable)
+  10.14 unsupported | err TARGET_BELOW_CPU_MINIMUM (recoverable)
+  10.15 unsupported | err NO_DISPLAY_PATH (recoverable)
+  11    supported   | ok MacPro7,1 sbm=Default csr=00000000 gpu=WhateverGreen kexts=17 ssdts=3
+  12    supported   | ok MacPro7,1 sbm=Default csr=00000000 gpu=WhateverGreen kexts=17 ssdts=3
+  13    supported   | ok MacPro7,1 sbm=Default csr=00000000 gpu=WhateverGreen kexts=17 ssdts=3
+  14    supported   | ok MacPro7,1 sbm=Disabled csr=00000000 gpu=WhateverGreen kexts=17 ssdts=3
+  15    supported   | ok MacPro7,1 sbm=Disabled csr=00000000 gpu=WhateverGreen kexts=17 ssdts=3
+  26    supported   root-patch | ok MacPro7,1 sbm=Disabled csr=00000000 gpu=WhateverGreen kexts=18 ssdts=3
+report-notes:
+  [warning] platform: BitLocker and dual boot
+
+== plan for macOS Sequoia 15 (recommended) ==
+smbios: MacPro7,1 | alternatives: iMacPro1,1
+secure-boot-model: Disabled
+csr-active-config: 00000000
+boot-args: -wegnoigpu revpatch=pci,cpuname,sbvmm revcpu=1 -v keepsyms=1 debug=0x100
+kexts:
+  + Lilu.kext (Lilu) required
+  + VirtualSMC.kext (VirtualSMC) required
+  + WhateverGreen.kext (WhateverGreen) required
+  + SMCRadeonSensors.kext (SMCRadeonSensors)
+  + SMCProcessor.kext (VirtualSMC)
+  + SMCSuperIO.kext (VirtualSMC)
+  + AppleALC.kext (AppleALC) required
+  + CpuTopologyRebuild.kext (CpuTopologyRebuild)
+  + RTL812xLucy.kext (RTL812xLucy) [19.0.0..] required
+  - LucyRTL8125Ethernet.kext (LucyRTL8125Ethernet) [19.0.0..]
+  + itlwm.kext (itlwm)
+  + IntelBluetoothFirmware.kext (IntelBluetoothFirmware)
+  + IntelBTPatcher.kext (IntelBluetoothFirmware)
+  + BlueToolFixup.kext (BrcmPatchRAM) [21.0.0..]
+  + USBToolBox.kext (USBToolBox) required
+  + UTBDefault.kext (USBToolBox) required
+  + NVMeFix.kext (NVMeFix) [18.0.0..]
+  + RestrictEvents.kext (RestrictEvents)
+ssdts:
+  SSDT-PLUG-ALT.aml <- opencore SSDT-PLUG-ALT.aml
+  SSDT-EC-USBX-DESKTOP.aml <- dortania SSDT-EC-USBX-DESKTOP.aml
+  SSDT-AWAC.aml <- dortania SSDT-AWAC.aml
+device-properties:
+  PciRoot(0x0)/Pci(0x1f,0x3)
+    layout-id = <0B000000>
+  PciRoot(0x0)/Pci(0x1c,0x2)/Pci(0x0,0x0)
+    built-in = <01>
+acpi-quirks:
+  on: ResetLogoStatus
+  off: FadtEnableReset NormalizeHeaders RebaseRegions ResetHwSig SyncTableIds
+booter-quirks:
+  on: AvoidRuntimeDefrag DevirtualiseMmio EnableSafeModeSlide FixupAppleEfiImages ProtectUefiServices ProvideCustomSlide RebuildAppleMemoryMap SyncRuntimePermissions
+  off: EnableWriteUnprotector ProtectMemoryRegions SetupVirtualMap
+  set: ResizeAppleGpuBars=-1
+kernel-quirks:
+  on: AppleXcpmCfgLock DisableIoMapper DisableLinkeditJettison PanicNoKextDump PowerTimeoutKernelPanic ProvideCurrentCpuInfo
+  off: AppleCpuPmCfgLock AppleXcpmExtraMsrs AppleXcpmForceBoost CustomSMBIOSGuid DisableIoMapperMapping DisableRtcChecksum ExtendBTFeatureFlags ForceAquantiaEthernet ForceSecureBootScheme IncreasePciBarSize LapicKernelPanic ThirdPartyDrives XhciPortLimit
+  set: SetApfsTrimTimeout=0
+kernel-emulate:
+  off: DummyPowerManagement
+  set: Cpuid1Data=<55060A00000000000000000000000000> Cpuid1Mask=<FFFFFFFF000000000000000000000000>
+misc-boot:
+  on: ShowPicker
+  off: HideAuxiliary PickerAudioAssist PollAppleHotKeys
+  set: ConsoleAttributes=0 HibernateMode="None" LauncherOption="Disabled" LauncherPath="Default" PickerAttributes=17 PickerMode="External" PickerVariant="Acidanthera\GoldenGate" TakeoffDelay=0 Timeout=5
+misc-security:
+  on: AllowSetDefault BlacklistAppleUpdate
+  off: AuthRestart EnablePassword
+  set: ApECID=0 DmgLoading="Signed" ExposeSensitiveData=6 ScanPolicy=0 SecureBootModel="Disabled" Vault="Optional"
+tools: OpenShell.efi ControlMsrE2.efi
+nvram-add: 7C436110-AB2A-4BBB-A880-FE41995C9F82:bluetoothExternalDongleFailed = <00>
+nvram-add: 7C436110-AB2A-4BBB-A880-FE41995C9F82:bluetoothInternalControllerInfo = <0000000000000000000000000000>
+nvram-delete: 7C436110-AB2A-4BBB-A880-FE41995C9F82:bluetoothExternalDongleFailed
+nvram-delete: 7C436110-AB2A-4BBB-A880-FE41995C9F82:bluetoothInternalControllerInfo
+nvram:
+  on: WriteFlash
+  off: LegacyOverwrite
+platform-info:
+  on: Automatic UpdateDataHub UpdateNVRAM UpdateSMBIOS
+  off: CustomMemory UseRawUuidEncoding
+  set: UpdateSMBIOSMode="Create"
+drivers: OpenRuntime.efi HfsPlus.efi OpenCanopy.efi ResetNvramEntry.efi
+uefi-quirks:
+  on: EnableVectorAcceleration RequestBootVarRouting
+  off: DisableSecurityPolicy ForceOcWriteFlash IgnoreInvalidFlexRatio ReleaseUsbOwnership UnblockFsConnect
+  set: ResizeGpuBars=-1
+uefi-apfs:
+  on: EnableJumpstart HideVerbose
+  off: GlobalConnect JumpstartHotPlug
+  set: MinDate=0 MinVersion=0
+uefi-output:
+  on: ProvideConsoleGop
+  off: DirectGopRendering ForceResolution ReconnectOnResChange
+  set: GopPassThrough="Disabled" Resolution="Max" TextRenderer="BuiltinGraphics" UIScale=0
+uefi-input:
+  on: KeySupport
+  off: KeyFiltering KeySwap PointerSupport
+  set: KeyForgetThreshold=5 KeySupportMode="Auto" TimerResolution=50000
+bios: CSM (Compatibility Support Module) = disable (required)
+bios: Secure Boot = disable (required)
+bios: Fast Boot = disable (required)
+bios: OS Type = Windows 8.1/10 UEFI Mode (or Other OS)
+bios: SATA Mode = AHCI (required)
+bios: Intel VMD controller = disable
+bios: EHCI/XHCI Hand-off = enable (required)
+bios: Above 4G Decoding = enable
+bios: Resizable BAR (Re-Size BAR Support) = disable
+bios: CFG Lock (MSR 0xE2 write protection) = disable
+bios: VT-d (Intel Virtualization for Directed I/O) = disable
+bios: VT-x (Intel Virtualization Technology) = enable
+bios: Execute Disable Bit = enable (required)
+bios: Efficient cores (E-cores) = enable
+bios: Intel Platform Trust Technology (PTT) = disable
+bios: Hyper-Threading = enable
+bios: Internal Graphics = disable
+bios: Serial / Parallel port = disable
+bios: Thunderbolt / USB4 = disable for the install
+notes:
+  [info] gpu: Intel(R) UHD Graphics 770 disabled
+  [info] gpu: Display: AMD Radeon RX 6900 XT
+  [info] ethernet: Realtek RTL8125 2.5GbE Ethernet
+  [info] acpi: Generic prebuilt SSDTs
+  [info] cpu: CFG Lock
+  [info] storage: Boot-time TRIM off for Samsung NVMe
+  [info] boot: Verbose boot is on
+post-install:
+  [info] boot: Copy the EFI to the internal drive
+  [info] usb: Map the USB ports
+  [info] wifi: Install HeliPort for Intel Wi-Fi
+  [info] bootloader: Boot picker after install
+  [info] audio: Try other layout-ids if a jack or the microphone is silent
+  [info] smbios: Check the serial number before using iServices
+  [info] boot: Turn off verbose boot
+  [warning] platform: Dual boot with Windows

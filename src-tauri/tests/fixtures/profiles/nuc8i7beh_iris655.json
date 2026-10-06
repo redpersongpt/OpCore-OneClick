@@ -1,0 +1,130 @@
+{
+  "cpu": {
+    "name": "Intel(R) Core(TM) i7-8559U CPU @ 2.70GHz",
+    "vendor": "intel",
+    "platform": "coffee_lake",
+    "codename": "Coffee Lake-U",
+    "family": 6,
+    "model": 142,
+    "stepping": 10,
+    "cores": 4,
+    "threads": 8,
+    "isMobile": true,
+    "hasAvx2": true,
+    "hasSse42": true,
+    "isHybrid": false
+  },
+  "formFactor": "mini_pc",
+  "vm": null,
+  "gpus": [
+    {
+      "name": "Intel(R) Iris(R) Plus Graphics 655",
+      "vendor": "intel",
+      "family": "intel_coffee_lake",
+      "vendorId": "8086",
+      "deviceId": "3ea5",
+      "subsystemId": "20748086",
+      "isIgpu": true,
+      "pciPath": "PciRoot(0x0)/Pci(0x2,0x0)",
+      "acpiPath": "\\_SB.PCI0.GFX0",
+      "vramMb": null,
+      "disabled": false
+    }
+  ],
+  "audio": {
+    "codecName": "Realtek ALC235",
+    "codecId": 283902517,
+    "controllerVendorId": "8086",
+    "controllerDeviceId": "9dc8",
+    "controllerPciPath": "PciRoot(0x0)/Pci(0x1f,0x3)",
+    "layoutId": null
+  },
+  "ethernet": [
+    {
+      "name": "Intel(R) Ethernet Connection (6) I219-V",
+      "bus": "pci",
+      "vendorId": "8086",
+      "deviceId": "15be",
+      "subsystemId": "20748086",
+      "pciPath": "PciRoot(0x0)/Pci(0x1f,0x6)",
+      "macAddress": "1C:69:7A:12:34:56"
+    }
+  ],
+  "wifi": {
+    "name": "Intel(R) Wireless-AC 9560 160MHz",
+    "bus": "pci",
+    "vendorId": "8086",
+    "deviceId": "9df0",
+    "subsystemId": "00348086",
+    "pciPath": "PciRoot(0x0)/Pci(0x14,0x3)",
+    "macAddress": "50:E0:85:AB:CD:07"
+  },
+  "bluetooth": {
+    "name": "Intel Wireless Bluetooth 9560",
+    "bus": "usb",
+    "vendorId": "8087",
+    "deviceId": "0aaa",
+    "subsystemId": null,
+    "pciPath": null,
+    "macAddress": null
+  },
+  "input": {
+    "keyboardBus": "usb",
+    "touchpadBus": null,
+    "touchpadVendor": null,
+    "touchpadHid": null,
+    "hasTouchscreen": false
+  },
+  "storage": [
+    {
+      "name": "INTEL SSDPEKNW512G8 (660p)",
+      "kind": "nvme",
+      "vendorId": "8086",
+      "deviceId": "f1a8",
+      "sizeBytes": 512000000000
+    }
+  ],
+  "motherboardVendor": "Intel Corporation",
+  "motherboardModel": "NUC8BEB",
+  "chipset": "Cannon Point-LP",
+  "ramGb": 16,
+  "hasBattery": false,
+  "firmwareUefi": true,
+  "acpi": {
+    "pciRoot": "\\_SB.PCI0",
+    "lpcBridge": "\\_SB.PCI0.LPCB",
+    "ecPath": null,
+    "ecHasSta": false,
+    "cpuPaths": [
+      "\\_PR.PR00",
+      "\\_PR.PR01",
+      "\\_PR.PR02",
+      "\\_PR.PR03",
+      "\\_PR.PR04",
+      "\\_PR.PR05",
+      "\\_PR.PR06",
+      "\\_PR.PR07"
+    ],
+    "cpuUsesAcpi0007": false,
+    "awacPath": null,
+    "awacHasStas": false,
+    "rtcPath": "\\_SB.PCI0.LPCB.RTC",
+    "hpetPath": "\\_SB.PCI0.LPCB.HPET",
+    "igpuPath": "\\_SB.PCI0.GFX0",
+    "xhciPaths": [
+      "\\_SB.PCI0.XHC"
+    ],
+    "rhubPaths": [
+      "\\_SB.PCI0.XHC.RHUB"
+    ],
+    "gpioPath": "\\_SB.PCI0.GPI0",
+    "smbusPath": "\\_SB.PCI0.SBUS",
+    "pnlfExists": false,
+    "hasOsiWindows": true,
+    "dsdtOemTableId": "CFL     ",
+    "dsdtLength": null
+  },
+  "acpiTablesDir": null,
+  "source": "scan",
+  "scanConfidence": 0.92
+}

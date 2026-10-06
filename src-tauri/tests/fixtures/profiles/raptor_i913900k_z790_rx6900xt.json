@@ -1,0 +1,117 @@
+{
+  "cpu": {
+    "name": "13th Gen Intel(R) Core(TM) i9-13900K",
+    "vendor": "intel",
+    "platform": "raptor_lake",
+    "codename": "Raptor Lake-S",
+    "family": 6,
+    "model": 183,
+    "stepping": 1,
+    "cores": 24,
+    "threads": 32,
+    "isMobile": false,
+    "hasAvx2": true,
+    "hasSse42": true,
+    "isHybrid": true
+  },
+  "formFactor": "desktop",
+  "vm": null,
+  "gpus": [
+    {
+      "name": "Intel(R) UHD Graphics 770",
+      "vendor": "intel",
+      "family": "intel_xe",
+      "vendorId": "8086",
+      "deviceId": "a780",
+      "subsystemId": "d0001458",
+      "isIgpu": true,
+      "pciPath": "PciRoot(0x0)/Pci(0x2,0x0)",
+      "acpiPath": "\\_SB.PC00.GFX0",
+      "vramMb": null,
+      "disabled": false
+    },
+    {
+      "name": "AMD Radeon RX 6900 XT",
+      "vendor": "amd",
+      "family": "amd_navi21",
+      "vendorId": "1002",
+      "deviceId": "73bf",
+      "subsystemId": "e4391da2",
+      "isIgpu": false,
+      "pciPath": "PciRoot(0x0)/Pci(0x1,0x0)/Pci(0x0,0x0)/Pci(0x0,0x0)/Pci(0x0,0x0)",
+      "acpiPath": "\\_SB.PC00.PEG1.PEGP",
+      "vramMb": 16384,
+      "disabled": false
+    }
+  ],
+  "audio": {
+    "codecName": "Realtek ALC897",
+    "codecId": 283904151,
+    "controllerVendorId": "8086",
+    "controllerDeviceId": "7a50",
+    "controllerPciPath": "PciRoot(0x0)/Pci(0x1f,0x3)",
+    "layoutId": null
+  },
+  "ethernet": [
+    {
+      "name": "Realtek Gaming 2.5GbE Family Controller (RTL8125B)",
+      "bus": "pci",
+      "vendorId": "10ec",
+      "deviceId": "8125",
+      "subsystemId": "e0001458",
+      "pciPath": "PciRoot(0x0)/Pci(0x1c,0x2)/Pci(0x0,0x0)",
+      "macAddress": "74:56:3C:12:34:56"
+    }
+  ],
+  "wifi": {
+    "name": "Intel(R) Wi-Fi 6E AX211 160MHz",
+    "bus": "pci",
+    "vendorId": "8086",
+    "deviceId": "7a70",
+    "subsystemId": "00908086",
+    "pciPath": "PciRoot(0x0)/Pci(0x14,0x3)",
+    "macAddress": "84:7B:57:11:22:33"
+  },
+  "bluetooth": {
+    "name": "Intel Wireless Bluetooth AX211",
+    "bus": "usb",
+    "vendorId": "8087",
+    "deviceId": "0033",
+    "subsystemId": null,
+    "pciPath": null,
+    "macAddress": null
+  },
+  "input": {
+    "keyboardBus": "usb",
+    "touchpadBus": null,
+    "touchpadVendor": null,
+    "touchpadHid": null,
+    "hasTouchscreen": false
+  },
+  "storage": [
+    {
+      "name": "Samsung SSD 980 PRO 2TB",
+      "kind": "nvme",
+      "vendorId": "144d",
+      "deviceId": "a80a",
+      "sizeBytes": 2000000000000
+    },
+    {
+      "name": "WD_BLACK SN770 1TB",
+      "kind": "nvme",
+      "vendorId": "15b7",
+      "deviceId": "5017",
+      "sizeBytes": 1000000000000
+    }
+  ],
+  "motherboardVendor": "Gigabyte Technology Co., Ltd.",
+  "motherboardModel": "Z790 AORUS ELITE AX",
+  "chipset": "Z790",
+  "ramGb": 64,
+  "hasBattery": false,
+  "firmwareUefi": true,
+  "acpi": null,
+  "acpiTablesDir": null,
+  "source": "scan",
+  "scanConfidence": 0.92
+}

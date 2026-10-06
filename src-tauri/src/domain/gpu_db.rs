@@ -378,8 +378,8 @@ const NOTE_AVX2: &str =
 const NOTE_TAHOE_WEG: &str =
     "macOS 26 needs Lilu 1.7.2 and WhateverGreen 1.7.1 or newer with AMD GPUs.";
 const NOTE_AGDP: &str = "agdpmod=pikera avoids the black screen caused by the AppleGraphicsDevicePolicy board-id \
-     check with iMac/Macmini SMBIOS; MacPro7,1 and iMacPro1,1 do not need it. On macOS 26 the WhateverGreen \
-     maintainer recommends agdpmod=ignore instead.";
+     check with iMac, iMacPro and Macmini SMBIOS (harmless where it is not needed); MacPro7,1 does not need it. On \
+     macOS 26 the WhateverGreen maintainer recommends agdpmod=ignore instead.";
 const NOTE_NOOTRX_BUILDS: &str =
     "NootRX has no tagged releases; it comes from the project's nightly builds.";
 const NOTE_NO_PIKERA: &str = "Do not use agdpmod=pikera with Polaris or Vega cards.";

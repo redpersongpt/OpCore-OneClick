@@ -1,0 +1,151 @@
+fixture: ryzen_7950x_x670e_rx6950xt
+cpu: AMD Ryzen 9 7950X 16-Core Processor | AmdZen4 (Raphael) | 16C/32T | avx2 true
+machine: Desktop | ASUSTeK COMPUTER INC. ROG CROSSHAIR X670E HERO | chipset X670E | uefi true
+gpu: AMD Radeon(TM) Graphics [1002:164e AmdApuRdna igpu]
+gpu: AMD Radeon RX 6950 XT [1002:73a5 AmdNavi21]
+net: Intel(R) Ethernet Controller I225-V [8086:15f3 Pci]
+net: Marvell AQtion 10Gbit Network Adapter (AQC113CS) [1d6a:04c0 Pci]
+net: MediaTek Wi-Fi 6E MT7922 160MHz [14c3:0616 Pci]
+net: MediaTek Bluetooth MT7922 [0489:e0d8 Usb]
+assessment: Partial, recommended 26
+summary: macOS Tahoe 26 works with caveats. This machine can run macOS Monterey 12 to macOS Tahoe 26. It is the recommended release.
+releases:
+  10.13 unsupported | err TARGET_BELOW_CPU_MINIMUM (recoverable)
+  10.14 unsupported | err TARGET_BELOW_CPU_MINIMUM (recoverable)
+  10.15 unsupported | err TARGET_BELOW_CPU_MINIMUM (recoverable)
+  11    unsupported | err TARGET_BELOW_CPU_MINIMUM (recoverable)
+  12    supported   | ok MacPro7,1 sbm=Default csr=00000000 gpu=WhateverGreen kexts=9 ssdts=2
+  13    supported   | ok MacPro7,1 sbm=Default csr=00000000 gpu=WhateverGreen kexts=10 ssdts=2
+  14    supported   | ok MacPro7,1 sbm=Disabled csr=00000000 gpu=WhateverGreen kexts=10 ssdts=2
+  15    supported   | ok MacPro7,1 sbm=Disabled csr=00000000 gpu=WhateverGreen kexts=10 ssdts=2
+  26    supported   | ok MacPro7,1 sbm=Disabled csr=00000000 gpu=WhateverGreen kexts=10 ssdts=2
+report-notes:
+  [warning] wifi: Wi-Fi card not supported
+  [warning] platform: BitLocker and dual boot
+
+== plan for macOS Tahoe 26 (recommended) ==
+smbios: MacPro7,1 | alternatives: -
+secure-boot-model: Disabled
+csr-active-config: 00000000
+boot-args: -radcodec agdpmod=ignore revpatch=pci,cpuname,sbvmm -v keepsyms=1 debug=0x100
+amd-core-count: 16
+kexts:
+  + Lilu.kext (Lilu) required
+  + VirtualSMC.kext (VirtualSMC) required
+  + WhateverGreen.kext (WhateverGreen) required
+  + SMCRadeonSensors.kext (SMCRadeonSensors)
+  - AMDRyzenCPUPowerManagement.kext (AMDRyzenCPUPowerManagement)
+  - SMCAMDProcessor.kext (SMCAMDProcessor)
+  + AppleMCEReporterDisabler.kext (AppleMCEReporterDisabler) [19.0.0..] required
+  + AppleIGC.kext (AppleIGC) [19.0.0..] required
+  + USBToolBox.kext (USBToolBox) required
+  + UTBDefault.kext (USBToolBox) required
+  + NVMeFix.kext (NVMeFix) [18.0.0..]
+  + RestrictEvents.kext (RestrictEvents)
+ssdts:
+  SSDT-PLUG-ALT.aml <- opencore SSDT-PLUG-ALT.aml
+  SSDT-EC-USBX-DESKTOP.aml <- dortania SSDT-EC-USBX-DESKTOP.aml
+device-properties:
+  PciRoot(0x0)/Pci(0x3,0x1)/Pci(0x0,0x0)/Pci(0x0,0x0)/Pci(0x0,0x0)
+    device-id = <BF730000>
+    model = "AMD Radeon RX 6950 XT"
+  PciRoot(0x0)/Pci(0x8,0x1)/Pci(0x0,0x0)
+    disable-gpu = <01000000>
+  PciRoot(0x0)/Pci(0x2,0x1)/Pci(0x0,0x0)/Pci(0x8,0x0)/Pci(0x0,0x0)
+    built-in = <01>
+acpi-quirks:
+  on: ResetLogoStatus
+  off: FadtEnableReset NormalizeHeaders RebaseRegions ResetHwSig SyncTableIds
+booter-quirks:
+  on: AvoidRuntimeDefrag DevirtualiseMmio EnableSafeModeSlide FixupAppleEfiImages ProvideCustomSlide RebuildAppleMemoryMap SetupVirtualMap SyncRuntimePermissions
+  off: EnableWriteUnprotector ProtectMemoryRegions ProtectUefiServices
+  set: ResizeAppleGpuBars=0
+mmio: + 0xfd000000 MMIO devirt 0xFD000000 (0x1E00 pages)
+kernel-quirks:
+  on: DisableLinkeditJettison ForceAquantiaEthernet PanicNoKextDump PowerTimeoutKernelPanic ProvideCurrentCpuInfo XhciPortLimit
+  off: AppleCpuPmCfgLock AppleXcpmCfgLock AppleXcpmExtraMsrs AppleXcpmForceBoost CustomSMBIOSGuid DisableIoMapper DisableIoMapperMapping DisableRtcChecksum ExtendBTFeatureFlags ForceSecureBootScheme IncreasePciBarSize LapicKernelPanic ThirdPartyDrives
+  set: SetApfsTrimTimeout=0
+kernel-emulate:
+  on: DummyPowerManagement
+  set: Cpuid1Data=<> Cpuid1Mask=<>
+kernel-patches:
+  + CaseySJ - Fix alloc_dma_buffer (com.apple.driver.AppleEthernetAquantiaAqtion) [21.4.0..22.99.99]
+  + CaseySJ - Fix alloc_dma_buffer (Sonoma) (com.apple.driver.AppleEthernetAquantiaAqtion) [23.0.0..25.99.99]
+  + CaseySJ - Fix IOBufferMemoryDescriptor::withOptions (com.apple.driver.AppleEthernetAquantiaAqtion) [21.4.0..25.99.99]
+  + CaseySJ - Fix alloc_dma_buffer (com.apple.driver.AppleEthernetAquantiaAqtion) [21.4.0..22.99.99]
+  + CaseySJ - Fix alloc_dma_buffer (Sonoma) (com.apple.driver.AppleEthernetAquantiaAqtion) [23.0.0..25.99.99]
+  + CaseySJ - Fix IOBufferMemoryDescriptor::withOptions (com.apple.driver.AppleEthernetAquantiaAqtion) [21.4.0..25.99.99]
+  + CaseySJ - Fix allocAvbPacket (com.apple.driver.AppleEthernetAquantiaAqtion) [21.4.0..22.99.99]
+  + CaseySJ - Fix allocAvbPacket (Sonoma) (com.apple.driver.AppleEthernetAquantiaAqtion) [23.0.0..25.99.99]
+  + CaseySJ - Fix allocPtpPacket (com.apple.driver.AppleEthernetAquantiaAqtion) [21.4.0..25.99.99]
+misc-boot:
+  on: ShowPicker
+  off: HideAuxiliary PickerAudioAssist PollAppleHotKeys
+  set: ConsoleAttributes=0 HibernateMode="None" LauncherOption="Disabled" LauncherPath="Default" PickerAttributes=17 PickerMode="External" PickerVariant="Acidanthera\GoldenGate" TakeoffDelay=0 Timeout=5
+misc-security:
+  on: AllowSetDefault BlacklistAppleUpdate
+  off: AuthRestart EnablePassword
+  set: ApECID=0 DmgLoading="Signed" ExposeSensitiveData=6 ScanPolicy=0 SecureBootModel="Disabled" Vault="Optional"
+tools: OpenShell.efi
+nvram:
+  on: WriteFlash
+  off: LegacyOverwrite
+platform-info:
+  on: Automatic UpdateDataHub UpdateNVRAM UpdateSMBIOS
+  off: CustomMemory UseRawUuidEncoding
+  set: UpdateSMBIOSMode="Create"
+drivers: OpenRuntime.efi HfsPlus.efi OpenCanopy.efi ResetNvramEntry.efi
+uefi-quirks:
+  on: EnableVectorAcceleration RequestBootVarRouting
+  off: DisableSecurityPolicy ForceOcWriteFlash IgnoreInvalidFlexRatio ReleaseUsbOwnership UnblockFsConnect
+  set: ResizeGpuBars=-1
+uefi-apfs:
+  on: EnableJumpstart HideVerbose
+  off: GlobalConnect JumpstartHotPlug
+  set: MinDate=0 MinVersion=0
+uefi-output:
+  on: ProvideConsoleGop
+  off: DirectGopRendering ForceResolution ReconnectOnResChange
+  set: GopPassThrough="Disabled" Resolution="Max" TextRenderer="BuiltinGraphics" UIScale=0
+uefi-input:
+  on: KeySupport
+  off: KeyFiltering KeySwap PointerSupport
+  set: KeyForgetThreshold=5 KeySupportMode="Auto" TimerResolution=50000
+bios: CSM (Compatibility Support Module) = disable (required)
+bios: Secure Boot = disable (required)
+bios: Fast Boot = disable (required)
+bios: OS Type = Windows 8.1/10 UEFI Mode (or Other OS)
+bios: SATA Mode = AHCI (required)
+bios: EHCI/XHCI Hand-off = enable (required)
+bios: Above 4G Decoding = enable (required)
+bios: Resizable BAR (Re-Size BAR Support) = disable
+bios: SVM Mode (AMD-V) = enable
+bios: IOMMU (AMD-Vi) = disable (required)
+bios: Integrated Graphics = disable
+bios: Serial / Parallel port = disable
+bios: Thunderbolt / USB4 = disable for the install
+notes:
+  [warning] wifi: MediaTek Wi-Fi 6E MT7922 160MHz: Wi-Fi not supported
+  [warning] ethernet: Aquantia 10GbE
+  [info] gpu: AMD graphics on macOS 26
+  [info] gpu: AMD Radeon(TM) Graphics disabled
+  [info] gpu: Display: AMD Radeon RX 6950 XT
+  [info] cpu: AMD power management on macOS 26
+  [info] audio: No audio codec detected
+  [info] ethernet: Intel I225-V Ethernet
+  [info] ethernet: Aquantia AQC113 Ethernet
+  [info] bluetooth: MediaTek Bluetooth MT7922: Bluetooth not supported
+  [info] ethernet: Aquantia kernel patches added
+  [info] acpi: Generic prebuilt SSDTs
+  [info] firmware: Resizable BAR
+  [info] storage: Boot-time TRIM off for Samsung NVMe
+  [info] boot: Verbose boot is on
+post-install:
+  [info] boot: Copy the EFI to the internal drive
+  [info] usb: Map the USB ports
+  [info] bootloader: Boot picker after install
+  [info] smbios: Check the serial number before using iServices
+  [info] boot: Turn off verbose boot
+  [info] storage: Leave FileVault off
+  [info] cpu: Apps that expect an Intel CPU
+  [warning] platform: Dual boot with Windows

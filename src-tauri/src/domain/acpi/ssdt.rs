@@ -436,6 +436,7 @@ fn global_patch(comment: &str, find: &[u8; 4], replace: &[u8; 4], enabled: bool)
         oem_table_id: None,
         count: 0,
         enabled,
+        ..Default::default()
     }
 }
 
@@ -629,6 +630,7 @@ impl<'a> Patches<'a> {
             },
             count: 1,
             enabled,
+            ..Default::default()
         });
         true
     }
@@ -1616,6 +1618,7 @@ fn pnlf(ctx: &Ctx, uid: u32) -> GeneratedSsdt {
                 oem_table_id: None,
                 count: 0,
                 enabled: false,
+                ..Default::default()
             });
         }
         if defs(&[0x08, b'N', b'B', b'C', b'F', 0x00]) {
@@ -1627,6 +1630,7 @@ fn pnlf(ctx: &Ctx, uid: u32) -> GeneratedSsdt {
                 oem_table_id: None,
                 count: 0,
                 enabled: false,
+                ..Default::default()
             });
         }
     }

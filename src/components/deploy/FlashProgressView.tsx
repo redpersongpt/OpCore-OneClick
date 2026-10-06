@@ -1,22 +1,13 @@
 import { CheckCircle2, Circle, Loader2, XCircle } from 'lucide-react';
-import { useT, type MessageKey } from '../../i18n';
+import { useT } from '../../i18n';
 import { formatPercent } from '../../lib/format';
-import { flashMilestones, milestoneStates, type MilestoneState } from '../../lib/flash';
+import { flashMilestones, flashPhaseLabel, milestoneStates, type MilestoneState } from '../../lib/flash';
 import type { FlashStatus } from '../../stores/deploy';
 import type { AppError } from '../../bridge/errors';
 import type { FlashProgress } from '../../bridge/types';
 import { ErrorPanel } from '../feedback/ErrorPanel';
 import { Progress } from '../ui/Progress';
 import { Section } from '../ui/Section';
-
-const PHASE_LABEL: Record<string, MessageKey> = {
-  prepare: 'flash.phase.prepare',
-  partition: 'flash.phase.partition',
-  format: 'flash.phase.format',
-  'copy-efi': 'flash.phase.copyEfi',
-  'copy-recovery': 'flash.phase.copyRecovery',
-  verify: 'flash.phase.verify',
-};
 
 export function FlashProgressView({
   status,
@@ -51,7 +42,7 @@ export function FlashProgressView({
           {milestones.map((m, i) => (
             <li key={m} className="flex items-center gap-2 text-sm">
               <MilestoneIcon state={states[i]} />
-              <span className={states[i] === 'pending' ? 'text-fg-3' : 'text-fg'}>{t(PHASE_LABEL[m])}</span>
+              <span className={states[i] === 'pending' ? 'text-fg-3' : 'text-fg'}>{t(flashPhaseLabel(m) ?? 'flash.phase.prepare')}</span>
             </li>
           ))}
         </ol>

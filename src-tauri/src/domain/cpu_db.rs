@@ -82,6 +82,13 @@ pub fn needs_cryptexfixup(identity: &CpuIdentity, target: MacOsVersion) -> bool 
     })
 }
 
+/// In a VM the guest sees only the CPU model the hypervisor exposes. A model
+/// that is not usable on bare metal (for iGPU or chipset reasons) still runs
+/// macOS there, except AMD K10, which lacks SSSE3/SSE4.1.
+pub fn usable_as_vm_guest(platform: CpuPlatform) -> bool {
+    !matches!(platform, CpuPlatform::AmdK10 | CpuPlatform::AppleSilicon)
+}
+
 /// True when a Penryn-class CPU (SSE4.1 without SSE4.2) runs `target`
 /// (Mojave+), i.e. the build must add telemetrap.kext.
 pub fn needs_telemetrap(identity: &CpuIdentity, target: MacOsVersion) -> bool {

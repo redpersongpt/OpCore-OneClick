@@ -1,0 +1,101 @@
+{
+  "cpu": {
+    "name": "Intel(R) Core(TM) i7-3770 CPU @ 3.40GHz",
+    "vendor": "intel",
+    "platform": "ivy_bridge",
+    "codename": "Ivy Bridge",
+    "family": 6,
+    "model": 58,
+    "stepping": 9,
+    "cores": 4,
+    "threads": 8,
+    "isMobile": false,
+    "hasAvx2": false,
+    "hasSse42": true,
+    "isHybrid": false
+  },
+  "formFactor": "desktop",
+  "vm": null,
+  "gpus": [
+    {
+      "name": "Intel(R) HD Graphics 4000",
+      "vendor": "intel",
+      "family": "intel_ivy_bridge",
+      "vendorId": "8086",
+      "deviceId": "0162",
+      "subsystemId": "d0001458",
+      "isIgpu": true,
+      "pciPath": "PciRoot(0x0)/Pci(0x2,0x0)",
+      "acpiPath": "\\_SB.PCI0.GFX0",
+      "vramMb": null,
+      "disabled": false
+    },
+    {
+      "name": "NVIDIA GeForce GTX 770",
+      "vendor": "nvidia",
+      "family": "nvidia_kepler",
+      "vendorId": "10de",
+      "deviceId": "1184",
+      "subsystemId": "36581458",
+      "isIgpu": false,
+      "pciPath": "PciRoot(0x0)/Pci(0x1,0x0)/Pci(0x0,0x0)",
+      "acpiPath": "\\_SB.PCI0.PEG0.PEGP",
+      "vramMb": 2048,
+      "disabled": false
+    }
+  ],
+  "audio": {
+    "codecName": "Realtek ALC898",
+    "codecId": 283904153,
+    "controllerVendorId": "8086",
+    "controllerDeviceId": "1e20",
+    "controllerPciPath": "PciRoot(0x0)/Pci(0x1b,0x0)",
+    "layoutId": null
+  },
+  "ethernet": [
+    {
+      "name": "Intel(R) 82579V Gigabit Network Connection",
+      "bus": "pci",
+      "vendorId": "8086",
+      "deviceId": "1503",
+      "subsystemId": "e0001458",
+      "pciPath": "PciRoot(0x0)/Pci(0x19,0x0)",
+      "macAddress": "90:2B:34:AB:CD:EF"
+    }
+  ],
+  "wifi": null,
+  "bluetooth": null,
+  "input": {
+    "keyboardBus": "usb",
+    "touchpadBus": null,
+    "touchpadVendor": null,
+    "touchpadHid": null,
+    "hasTouchscreen": false
+  },
+  "storage": [
+    {
+      "name": "Samsung SSD 860 EVO 500GB",
+      "kind": "sata",
+      "vendorId": null,
+      "deviceId": null,
+      "sizeBytes": 500000000000
+    },
+    {
+      "name": "ST1000DM003-1SB102",
+      "kind": "sata",
+      "vendorId": null,
+      "deviceId": null,
+      "sizeBytes": 1000000000000
+    }
+  ],
+  "motherboardVendor": "Micro-Star International Co., Ltd.",
+  "motherboardModel": "Z77A-GD65 (MS-7751)",
+  "chipset": "Z77",
+  "ramGb": 16,
+  "hasBattery": false,
+  "firmwareUefi": true,
+  "acpi": null,
+  "acpiTablesDir": null,
+  "source": "scan",
+  "scanConfidence": 0.92
+}

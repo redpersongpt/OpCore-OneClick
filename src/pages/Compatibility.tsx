@@ -23,7 +23,7 @@ import { useWizard } from '../stores/wizard';
 export default function Compatibility() {
   const t = useT();
   const profile = useHardware((s) => s.profile);
-  const { report, reportKey, requestKey, target, expertFor, loading, error, check, setExpert } = useCompat();
+  const { report, reportKey, requestKey, target, expertFor, reach, loading, error, check, classify, setExpert } = useCompat();
   const complete = useWizard((s) => s.complete);
   const goTo = useWizard((s) => s.goTo);
 
@@ -33,6 +33,11 @@ export default function Compatibility() {
     if (!profile || loading || requestKey === key) return;
     void check(profile, target);
   }, [profile, target, key, loading, requestKey, check]);
+
+  // Tell expert options (workarounds) from releases that cannot run at all.
+  useEffect(() => {
+    if (profile && report && !loading) void classify(profile);
+  }, [profile, report, loading, classify]);
 
   if (!profile) {
     return (
@@ -111,12 +116,15 @@ export default function Compatibility() {
         )}
 
         <Section title={t('compat.versions')} description={t('compat.versionsHint')}>
-          <VersionPicker report={report} selected={target} onSelect={(v) => selectTarget(v)} disabled={loading} />
+          <VersionPicker report={report} reach={reach} selected={target} onSelect={(v) => selectTarget(v)} disabled={loading} />
           <p className="mt-3 text-xs text-fg-3">{t('compat.lastIntel')}</p>
         </Section>
 
         {option && (option.notes.length > 0 || option.needsRootPatch) && (
-          <Banner tone={option.supported ? 'warning' : 'danger'} title={t('compat.aboutVersion', { version: macosLabel(option.version) })}>
+          <Banner
+            tone={option.supported || gate === 'expert' ? 'warning' : 'danger'}
+            title={t('compat.aboutVersion', { version: macosLabel(option.version) })}
+          >
             <ul className="list-disc space-y-0.5 pl-4">
               {option.needsRootPatch && <li>{t('compat.rootPatchBody')}</li>}
               {option.notes.map((n) => (
@@ -159,10 +167,17 @@ export default function Compatibility() {
           )}
         </Section>
 
-        {fresh && gate === 'expert' && (
-          <Banner tone="warning" title={t('compat.expertTitle')}>
-            <p>{t('compat.expertBody')}</p>
-            <Checkbox checked={expertAccepted} onChange={setExpert} label={t('compat.expertAccept')} />
+        {fresh && gate === 'expert' && target && (
+          <Banner tone="warning" title={t('compat.expertTitle', { version: macosLabel(target) })}>
+            <p>{option?.supported ? t('compat.expertBodyNotes') : t('compat.expertBody')}</p>
+            <ul className="mt-1.5 list-disc space-y-0.5 pl-4">
+              <li>{t('compat.expertRisk.updates')}</li>
+              <li>{t('compat.expertRisk.features')}</li>
+              <li>{t('compat.expertRisk.support')}</li>
+            </ul>
+            <div className="mt-2">
+              <Checkbox checked={expertAccepted} onChange={setExpert} label={t('compat.expertAccept')} />
+            </div>
           </Banner>
         )}
         {fresh && gate === 'blocked' && (

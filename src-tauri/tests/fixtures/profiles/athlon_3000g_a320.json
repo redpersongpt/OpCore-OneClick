@@ -1,0 +1,81 @@
+{
+  "cpu": {
+    "name": "AMD Athlon 3000G with Radeon Vega Graphics",
+    "vendor": "amd",
+    "platform": "amd_zen",
+    "codename": "Picasso",
+    "family": 23,
+    "model": 24,
+    "stepping": 1,
+    "cores": 2,
+    "threads": 4,
+    "isMobile": false,
+    "hasAvx2": true,
+    "hasSse42": true,
+    "isHybrid": false
+  },
+  "formFactor": "desktop",
+  "vm": null,
+  "gpus": [
+    {
+      "name": "AMD Radeon(TM) Vega 3 Graphics",
+      "vendor": "amd",
+      "family": "amd_apu_vega",
+      "vendorId": "1002",
+      "deviceId": "15d8",
+      "subsystemId": "15d81849",
+      "isIgpu": true,
+      "pciPath": "PciRoot(0x0)/Pci(0x8,0x1)/Pci(0x0,0x0)",
+      "acpiPath": "\\_SB.PCI0.GP17.VGA",
+      "vramMb": 512,
+      "disabled": false
+    }
+  ],
+  "audio": {
+    "codecName": "Realtek ALC887",
+    "codecId": 283904135,
+    "controllerVendorId": "1022",
+    "controllerDeviceId": "15e3",
+    "controllerPciPath": "PciRoot(0x0)/Pci(0x8,0x1)/Pci(0x0,0x6)",
+    "layoutId": null
+  },
+  "ethernet": [
+    {
+      "name": "Realtek PCIe GbE Family Controller (RTL8111H)",
+      "bus": "pci",
+      "vendorId": "10ec",
+      "deviceId": "8168",
+      "subsystemId": "81681849",
+      "pciPath": "PciRoot(0x0)/Pci(0x1,0x2)/Pci(0x0,0x0)/Pci(0x1,0x0)/Pci(0x0,0x0)",
+      "macAddress": "A8:A1:59:12:34:56"
+    }
+  ],
+  "wifi": null,
+  "bluetooth": null,
+  "input": {
+    "keyboardBus": "usb",
+    "touchpadBus": null,
+    "touchpadVendor": null,
+    "touchpadHid": null,
+    "hasTouchscreen": false
+  },
+  "storage": [
+    {
+      "name": "Samsung SSD 860 EVO 500GB",
+      "kind": "sata",
+      "vendorId": null,
+      "deviceId": null,
+      "sizeBytes": 500000000000
+    }
+  ],
+  "motherboardVendor": "ASRock",
+  "motherboardModel": "A320M-HDV R4.0",
+  "chipset": "A320",
+  "ramGb": 8,
+  "hasBattery": false,
+  "firmwareUefi": true,
+  "acpi": null,
+  "acpiTablesDir": null,
+  "source": "scan",
+  "scanConfidence": 0.92
+}

@@ -1,8 +1,9 @@
 import { useState, type ReactNode } from 'react';
 import { AlertOctagon, Check, Copy } from 'lucide-react';
-import { describeError, type AppError } from '../../bridge/errors';
-import { useT } from '../../i18n';
+import { describeError, UNKNOWN_MESSAGE, type AppError } from '../../bridge/errors';
+import { useI18n } from '../../i18n';
 import { copyText } from '../../lib/external';
+import { errorHint } from '../../lib/labels';
 
 /** Shows a backend error with its suggestion and code, plus caller-provided actions. */
 export function ErrorPanel({
@@ -16,12 +17,20 @@ export function ErrorPanel({
   actions?: ReactNode;
   compact?: boolean;
 }) {
-  const t = useT();
+  const { t, lang } = useI18n();
   const [copied, setCopied] = useState(false);
   // Errors raised by the frontend itself (not by a backend command) are translated here.
   const local = error.code === 'IPC_UNAVAILABLE';
-  const message = local ? t('error.ipcUnavailable') : error.message;
-  const suggestion = local ? t('error.ipcUnavailableHint') : error.suggestion;
+  const message = local ? t('error.ipcUnavailable') : error.message === UNKNOWN_MESSAGE ? t('error.unknown') : error.message;
+  // Backend text is English. For well-known codes other languages get translated
+  // advice first; the backend's own (often more specific) suggestion follows.
+  const hint = local ? null : errorHint(error.code);
+  let suggestion = local ? t('error.ipcUnavailableHint') : error.suggestion;
+  let detail: string | null = null;
+  if (hint && (lang !== 'en' || !suggestion)) {
+    detail = lang !== 'en' ? suggestion : null;
+    suggestion = t(hint);
+  }
   const tone = error.severity === 'warning' ? 'border-warn-line bg-warn-soft' : 'border-err-line bg-err-soft';
   const iconTone = error.severity === 'warning' ? 'text-warn' : 'text-err';
 
@@ -38,6 +47,7 @@ export function ErrorPanel({
               {suggestion}
             </p>
           )}
+          {detail && <p className="mt-0.5 text-xs text-fg-3">{detail}</p>}
           <div className="mt-2 flex flex-wrap items-center gap-2">
             {actions}
             <button

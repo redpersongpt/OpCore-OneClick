@@ -7,8 +7,8 @@
 //! Every hash below was computed from the downloaded file (or, for the
 //! ChefKiss releases, taken from the `digest` GitHub publishes for the
 //! release asset). Files that are not GitHub release assets (OCLP payloads,
-//! Dortania and OpCore-Simplify mirrors) are pinned to a commit, never to a
-//! branch, so the URL keeps serving the same bytes.
+//! Dortania, Legacy-Kexts and OpCore-Simplify mirrors) are pinned to a
+//! commit, never to a branch, so the URL keeps serving the same bytes.
 //!
 //! Catalog ids are stable: the planner refers to them through
 //! `KextSelection::catalog_id`. Variants of one project use a suffix
@@ -99,6 +99,18 @@ macro_rules! ocs_mirror {
         concat!(
             "https://raw.githubusercontent.com/lzhoang2801/lzhoang2801.github.io/",
             "819ac0d4b49dba10eaee5edbed0b6b53087133f8/public/extra-files/",
+            $file
+        )
+    };
+}
+
+/// khronokernel/Legacy-Kexts (the copy Dortania's kext list links), pinned to
+/// commit 4dfc274 (2020-10-14).
+macro_rules! legacy_kexts {
+    ($file:literal) => {
+        concat!(
+            "https://raw.githubusercontent.com/khronokernel/Legacy-Kexts/",
+            "4dfc274111abdc94e94498d1e76d9354f3700fc9/",
             $file
         )
     };
@@ -256,6 +268,45 @@ static CATALOG: &[KextCatalogEntry] = &[
         latest_asset_regex: r"^CryptexFixup-[0-9][0-9.]*-RELEASE\.zip$",
         bundles: &["CryptexFixup.kext"],
         description: "Installs the non-AVX2 Rosetta cryptex on macOS 13+ for CPUs without AVX2.",
+    },
+    KextCatalogEntry {
+        id: "telemetrap",
+        repo: "",
+        pin: Pin {
+            version: "1.0.0",
+            url: oclp_payload!("SSE/telemetrap-v1.0.0.zip"),
+            sha256: Some("609c068866aeb1953c67e29c65ca7d2925dbda593e5fe791e18c5c2e3fa1028a"),
+        },
+        archive: ArchiveKind::Zip,
+        latest_asset_regex: "",
+        bundles: &["telemetrap.kext"],
+        description: "Keeps the SSE4.2-only telemetry plugin from loading, so SSE4.1 CPUs (Penryn) boot macOS 10.14+ (OCLP payload).",
+    },
+    KextCatalogEntry {
+        id: "AppleIntelCPUPowerManagement",
+        repo: "",
+        pin: Pin {
+            version: "1.0.0",
+            url: oclp_payload!("Misc/AppleIntelCPUPowerManagement-v1.0.0.zip"),
+            sha256: Some("8adeb0f3002387bb18d78c50100fa79f4939277b654e43d8f1178f0831e4f332"),
+        },
+        archive: ArchiveKind::Zip,
+        latest_asset_regex: "",
+        bundles: &["AppleIntelCPUPowerManagement.kext"],
+        description: "Apple's pre-XCPM CPU power management, removed in macOS 13; re-injected for Sandy/Ivy Bridge and older (OCLP payload).",
+    },
+    KextCatalogEntry {
+        id: "AppleIntelCPUPowerManagementClient",
+        repo: "",
+        pin: Pin {
+            version: "1.0.0",
+            url: oclp_payload!("Misc/AppleIntelCPUPowerManagementClient-v1.0.0.zip"),
+            sha256: Some("8d90f67dc7a94b61e80a0a3448248fa4246eb7271ecd049debfb3d90b6fdfd01"),
+        },
+        archive: ArchiveKind::Zip,
+        latest_asset_regex: "",
+        bundles: &["AppleIntelCPUPowerManagementClient.kext"],
+        description: "Helper of AppleIntelCPUPowerManagement for macOS 13+ (OCLP payload).",
     },
     KextCatalogEntry {
         id: "FeatureUnlock",
@@ -545,6 +596,19 @@ static CATALOG: &[KextCatalogEntry] = &[
         description: "Intel I211 Ethernet for macOS 10.15-11 (does not load on 12+).",
     },
     KextCatalogEntry {
+        id: "SmallTreeIntel82576-1.2.5",
+        repo: "",
+        pin: Pin {
+            version: "1.2.5",
+            url: gh_release!("khronokernel/SmallTree-I211-AT-patch", "1.2.5", "SmallTree-I211-AT-patch.kext.zip"),
+            sha256: Some("5ce752a230fb131286a20e3103ef0b0b9e50e05e0ed3fbea0172b67ef0cb84e0"),
+        },
+        archive: ArchiveKind::KextZip,
+        latest_asset_regex: "",
+        bundles: &["SmallTreeIntel82576.kext"],
+        description: "Intel I211 Ethernet for macOS 10.13-10.14 (the release notes limit this build to those two).",
+    },
+    KextCatalogEntry {
         id: "AppleIGC",
         repo: "SongXiaoXi/AppleIGC",
         pin: Pin {
@@ -621,6 +685,19 @@ static CATALOG: &[KextCatalogEntry] = &[
         latest_asset_regex: "",
         bundles: &["RealtekRTL8111.kext"],
         description: "Realtek RTL8111/8168 without AppleVTD; the version the author recommends for AMD systems.",
+    },
+    KextCatalogEntry {
+        id: "RealtekRTL8111-2.2.2",
+        repo: "",
+        pin: Pin {
+            version: "2.2.2",
+            url: gh_release!("Mieze/RTL8111_driver_for_OS_X", "v2.2.2", "RealtekRTL8111-V2.2.2.zip"),
+            sha256: Some("23542dc0b6e0fae1f2b599de2ee90f2c082f55ad6b93531b05049ad8e231ecb1"),
+        },
+        archive: ArchiveKind::Zip,
+        latest_asset_regex: "",
+        bundles: &["RealtekRTL8111.kext"],
+        description: "Realtek RTL8111/8168 for macOS 10.13 (2.3.0 and newer need 10.14; the archive's Release build is used).",
     },
     KextCatalogEntry {
         id: "LucyRTL8125Ethernet",
@@ -1070,6 +1147,19 @@ static CATALOG: &[KextCatalogEntry] = &[
         description: "AHCI driver for SATA controllers macOS 11+ no longer supports (Dortania copy).",
     },
     KextCatalogEntry {
+        id: "SATA-unsupported",
+        repo: "",
+        pin: Pin {
+            version: "0.9.2",
+            url: legacy_kexts!("Injectors/Zip/SATA-unsupported.kext.zip"),
+            sha256: Some("319bba55113888fe58b57cc6bcb1fda506929a370996d7e067fc5578e9c61b84"),
+        },
+        archive: ArchiveKind::KextZip,
+        latest_asset_regex: "",
+        bundles: &["SATA-unsupported.kext"],
+        description: "Codeless AHCI injector for Intel SATA controllers macOS 10.15 and older do not match (RST mode, some 100-series and mobile PCHs).",
+    },
+    KextCatalogEntry {
         id: "EmeraldSDHC",
         repo: "acidanthera/EmeraldSDHC",
         pin: Pin {
@@ -1399,6 +1489,12 @@ mod tests {
             assert!(entry(id).is_some_and(|e| e.provides(bundle)), "{id} should provide {bundle}");
         }
         assert!(entry("RealtekRTL8111-2.4.2").is_some_and(|e| e.pin.version == "2.4.2"));
+        assert!(entry("RealtekRTL8111-2.2.2").is_some_and(|e| e.provides("RealtekRTL8111.kext")));
+        assert!(entry("SmallTreeIntel82576-1.2.5").is_some_and(|e| e.provides("SmallTreeIntel82576.kext")));
+        for id in ["telemetrap", "AppleIntelCPUPowerManagement", "AppleIntelCPUPowerManagementClient"] {
+            assert!(entry(id).is_some_and(|e| e.pin.url.contains("/OpenCore-Legacy-Patcher/")), "{id}");
+        }
+        assert!(entry("SATA-unsupported").is_some_and(|e| e.provides("SATA-unsupported.kext")));
         assert!(entry("NootRX").is_some_and(|e| e.pin.sha256.is_none() && e.archive == ArchiveKind::NestedZip));
     }
 }

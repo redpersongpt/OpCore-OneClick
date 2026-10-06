@@ -1,0 +1,134 @@
+fixture: coffee_i99900k_z390_rx580
+cpu: Intel(R) Core(TM) i9-9900K CPU @ 3.60GHz | CoffeeLake (Coffee Lake-S) | 8C/16T | avx2 true
+machine: Desktop | Gigabyte Technology Co., Ltd. Z390 AORUS PRO-CF | chipset Z390 | uefi true
+gpu: Intel(R) UHD Graphics 630 [8086:3e98 IntelCoffeeLake igpu]
+gpu: Radeon RX 580 Series [1002:67df AmdPolaris]
+audio: Realtek ALC1220 [10ec1220]
+net: Intel(R) Ethernet Connection (7) I219-V [8086:15bc Pci]
+net: Broadcom BCM4360 802.11ac (Fenvi T919) [14e4:43a0 Pci]
+net: Apple Broadcom BCM20702 Bluetooth 4.0 [05ac:828d Usb]
+assessment: Supported, recommended 13
+summary: macOS Ventura 13 is fully supported. This machine can run macOS High Sierra 10.13 to macOS Tahoe 26. It is the recommended release.
+releases:
+  10.13 supported   | ok iMacPro1,1 sbm=Default csr=00000000 gpu=WhateverGreen kexts=10 ssdts=4
+  10.14 supported   | ok iMac19,1 sbm=Disabled csr=00000000 gpu=WhateverGreen kexts=11 ssdts=4
+  10.15 supported   | ok iMac19,1 sbm=Disabled csr=00000000 gpu=WhateverGreen kexts=11 ssdts=4
+  11    supported   | ok iMac19,1 sbm=Default csr=00000000 gpu=WhateverGreen kexts=11 ssdts=4
+  12    supported   | ok iMac19,1 sbm=Default csr=00000000 gpu=WhateverGreen kexts=11 ssdts=4
+  13    supported   | ok iMac19,1 sbm=Default csr=00000000 gpu=WhateverGreen kexts=11 ssdts=4
+  14    supported   root-patch | ok iMac19,1 sbm=Disabled csr=00000803 gpu=WhateverGreen kexts=15 ssdts=4
+  15    supported   root-patch | ok iMac19,1 sbm=Disabled csr=00000803 gpu=WhateverGreen kexts=15 ssdts=4
+  26    supported   root-patch | ok iMac20,1 sbm=Disabled csr=00000803 gpu=WhateverGreen kexts=16 ssdts=4
+report-notes:
+  [warning] platform: BitLocker and dual boot
+
+== plan for macOS Ventura 13 (recommended) ==
+smbios: iMac19,1 | alternatives: iMac20,1 iMac18,3
+secure-boot-model: Default
+csr-active-config: 00000000
+boot-args: -v keepsyms=1 debug=0x100
+kexts:
+  + Lilu.kext (Lilu) required
+  + VirtualSMC.kext (VirtualSMC) required
+  + WhateverGreen.kext (WhateverGreen) required
+  + SMCRadeonSensors.kext (SMCRadeonSensors)
+  + SMCProcessor.kext (VirtualSMC)
+  + SMCSuperIO.kext (VirtualSMC)
+  + AppleALC.kext (AppleALC) required
+  + IntelMausi.kext (IntelMausi) required
+  + USBToolBox.kext (USBToolBox) required
+  + UTBDefault.kext (USBToolBox) required
+  + NVMeFix.kext (NVMeFix) [18.0.0..]
+ssdts:
+  SSDT-PLUG.aml <- machine (120 bytes)
+  SSDT-EC-USBX.aml <- machine (353 bytes)
+  SSDT-AWAC.aml <- machine (75 bytes)
+  SSDT-PMC.aml <- machine (192 bytes)
+device-properties:
+  PciRoot(0x0)/Pci(0x2,0x0)
+    AAPL,ig-platform-id = <0300913E>
+  PciRoot(0x0)/Pci(0x1f,0x3)
+    layout-id = <01000000>
+  PciRoot(0x0)/Pci(0x1f,0x6)
+    built-in = <01>
+acpi-quirks:
+  on: ResetLogoStatus
+  off: FadtEnableReset NormalizeHeaders RebaseRegions ResetHwSig SyncTableIds
+booter-quirks:
+  on: AvoidRuntimeDefrag DevirtualiseMmio EnableSafeModeSlide FixupAppleEfiImages ProtectUefiServices ProvideCustomSlide RebuildAppleMemoryMap SetupVirtualMap SyncRuntimePermissions
+  off: EnableWriteUnprotector ProtectMemoryRegions
+  set: ResizeAppleGpuBars=-1
+kernel-quirks:
+  on: AppleXcpmCfgLock DisableIoMapper DisableLinkeditJettison PanicNoKextDump PowerTimeoutKernelPanic
+  off: AppleCpuPmCfgLock AppleXcpmExtraMsrs AppleXcpmForceBoost CustomSMBIOSGuid DisableIoMapperMapping DisableRtcChecksum ExtendBTFeatureFlags ForceAquantiaEthernet ForceSecureBootScheme IncreasePciBarSize LapicKernelPanic ProvideCurrentCpuInfo ThirdPartyDrives XhciPortLimit
+  set: SetApfsTrimTimeout=0
+kernel-emulate:
+  off: DummyPowerManagement
+  set: Cpuid1Data=<> Cpuid1Mask=<>
+misc-boot:
+  on: ShowPicker
+  off: HideAuxiliary PickerAudioAssist PollAppleHotKeys
+  set: ConsoleAttributes=0 HibernateMode="None" LauncherOption="Disabled" LauncherPath="Default" PickerAttributes=17 PickerMode="External" PickerVariant="Acidanthera\GoldenGate" TakeoffDelay=0 Timeout=5
+misc-security:
+  on: AllowSetDefault BlacklistAppleUpdate
+  off: AuthRestart EnablePassword
+  set: ApECID=0 DmgLoading="Signed" ExposeSensitiveData=6 ScanPolicy=0 SecureBootModel="Default" Vault="Optional"
+tools: OpenShell.efi ControlMsrE2.efi
+nvram:
+  on: WriteFlash
+  off: LegacyOverwrite
+platform-info:
+  on: Automatic UpdateDataHub UpdateNVRAM UpdateSMBIOS
+  off: CustomMemory UseRawUuidEncoding
+  set: UpdateSMBIOSMode="Create"
+drivers: OpenRuntime.efi HfsPlus.efi OpenCanopy.efi ResetNvramEntry.efi
+uefi-quirks:
+  on: EnableVectorAcceleration RequestBootVarRouting
+  off: DisableSecurityPolicy ForceOcWriteFlash IgnoreInvalidFlexRatio ReleaseUsbOwnership UnblockFsConnect
+  set: ResizeGpuBars=-1
+uefi-apfs:
+  on: EnableJumpstart HideVerbose
+  off: GlobalConnect JumpstartHotPlug
+  set: MinDate=0 MinVersion=0
+uefi-output:
+  on: ProvideConsoleGop
+  off: DirectGopRendering ForceResolution ReconnectOnResChange
+  set: GopPassThrough="Disabled" Resolution="Max" TextRenderer="BuiltinGraphics" UIScale=0
+uefi-input:
+  on: KeySupport
+  off: KeyFiltering KeySwap PointerSupport
+  set: KeyForgetThreshold=5 KeySupportMode="Auto" TimerResolution=50000
+bios: CSM (Compatibility Support Module) = disable (required)
+bios: Secure Boot = disable (required)
+bios: Fast Boot = disable (required)
+bios: OS Type = Windows 8.1/10 UEFI Mode (or Other OS)
+bios: SATA Mode = AHCI (required)
+bios: EHCI/XHCI Hand-off = enable (required)
+bios: Above 4G Decoding = enable
+bios: CFG Lock (MSR 0xE2 write protection) = disable
+bios: VT-d (Intel Virtualization for Directed I/O) = disable
+bios: VT-x (Intel Virtualization Technology) = enable
+bios: Execute Disable Bit = enable (required)
+bios: Intel SGX (Software Guard Extensions) = disable
+bios: Intel Platform Trust Technology (PTT) = disable
+bios: Hyper-Threading = enable
+bios: iGPU Multi-Monitor = enable
+bios: Primary Display / Initiate Graphic Adapter = PEG (PCIe)
+bios: Serial / Parallel port = disable
+bios: Thunderbolt / USB4 = disable for the install
+notes:
+  [info] smbios: iMac19,1 stops at macOS 15.8.1
+  [info] gpu: Intel(R) UHD Graphics 630 runs headless
+  [info] gpu: Display: Radeon RX 580 Series
+  [info] storage: Samsung SSD 970 EVO Plus 1TB
+  [info] cpu: CFG Lock
+  [info] storage: Boot-time TRIM off for Samsung NVMe
+  [info] boot: Verbose boot is on
+post-install:
+  [info] boot: Copy the EFI to the internal drive
+  [info] usb: Map the USB ports
+  [info] bootloader: Boot picker after install
+  [info] audio: Try other layout-ids if a jack or the microphone is silent
+  [info] smbios: Check the serial number before using iServices
+  [info] boot: Turn off verbose boot
+  [warning] platform: Dual boot with Windows

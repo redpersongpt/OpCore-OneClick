@@ -163,6 +163,24 @@ fn write_acpi(
                 "Find and Replace must be non-empty and of equal size",
             ));
         }
+        let mask = decode_hex(&p.mask, &format!("{path}/Mask"))?;
+        let replace_mask = decode_hex(&p.replace_mask, &format!("{path}/ReplaceMask"))?;
+        if !mask.is_empty() && mask.len() != find.len() {
+            return Err(invalid(&path, "Mask and Find differ in size"));
+        }
+        if !replace_mask.is_empty() && replace_mask.len() != replace.len() {
+            return Err(invalid(&path, "ReplaceMask and Replace differ in size"));
+        }
+        if !properly_masked(&find, &mask) {
+            return Err(invalid(&path, "Find has bits set outside Mask"));
+        }
+        if !properly_masked(&replace, &replace_mask) {
+            return Err(invalid(&path, "Replace has bits set outside ReplaceMask"));
+        }
+        let base = p.base.trim();
+        if !base.is_ascii() || base.chars().any(|c| c.is_ascii_control()) {
+            return Err(invalid(&format!("{path}/Base"), "must be a plain ASCII ACPI path"));
+        }
         let signature = match p.table_signature.as_deref() {
             Some(sig) if !sig.is_empty() => ascii_id(sig, 4, &format!("{path}/TableSignature"))?,
             _ => Vec::new(),
@@ -173,19 +191,19 @@ fn write_acpi(
         };
         let mut entry = Entry::new(&patch_template, "ACPI/Patch");
         entry
-            .set("Base", string(""))?
-            .set("BaseSkip", int(0))?
+            .set("Base", string(base))?
+            .set("BaseSkip", int(p.base_skip))?
             .set("Comment", comment(&p.comment))?
             .set("Count", int(p.count))?
             .set("Enabled", Value::Boolean(p.enabled))?
             .set("Find", Value::Data(find))?
-            .set("Limit", int(0))?
-            .set("Mask", Value::Data(Vec::new()))?
+            .set("Limit", int(p.limit))?
+            .set("Mask", Value::Data(mask))?
             .set("OemTableId", Value::Data(oem_table_id))?
             .set("Replace", Value::Data(replace))?
-            .set("ReplaceMask", Value::Data(Vec::new()))?
-            .set("Skip", int(0))?
-            .set("TableLength", int(0))?
+            .set("ReplaceMask", Value::Data(replace_mask))?
+            .set("Skip", int(p.skip))?
+            .set("TableLength", int(p.table_length))?
             .set("TableSignature", Value::Data(signature))?;
         patches.push(entry.finish());
     }
@@ -1658,6 +1676,7 @@ mod tests {
             oem_table_id: None,
             count: 0,
             enabled: true,
+            ..Default::default()
         }];
         let out = f.config();
 
@@ -1714,6 +1733,62 @@ mod tests {
     }
 
     #[test]
+    fn acpi_patches_keep_base_masks_and_limits() {
+        let mut f = Fixture::new();
+        f.plan.acpi_patches = vec![
+            AcpiPatch {
+                comment: "_HID to XHID rename (Hyper-V VMOD) (SSDT-HV-VMBUS.aml)".into(),
+                find: "5F484944".into(),
+                replace: "58484944".into(),
+                table_signature: Some("DSDT".into()),
+                count: 1,
+                enabled: true,
+                base: "\\_SB.VMOD".into(),
+                ..Default::default()
+            },
+            AcpiPatch {
+                comment: "masked".into(),
+                find: "A000000092935043484100".into(),
+                replace: "A3A3A3A3A3A3A3A3A3A3A3".into(),
+                mask: "FF000000FFFFFFFFFFFFFF".into(),
+                table_signature: Some("DSDT".into()),
+                count: 1,
+                enabled: true,
+                base_skip: 2,
+                limit: 4096,
+                skip: 1,
+                table_length: 1234,
+                ..Default::default()
+            },
+        ];
+        let out = f.config();
+        let patch = entries(&out, "ACPI/Patch");
+        assert_eq!(str_at(patch[0], "Base"), "\\_SB.VMOD");
+        assert_eq!(patch[0].get("Count").and_then(Value::as_signed_integer), Some(1));
+        let int = |p: &Dictionary, k: &str| p.get(k).and_then(Value::as_signed_integer);
+        assert_eq!(data_at(patch[1], "Mask"), [0xFF, 0, 0, 0, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF]);
+        assert_eq!(data_at(patch[1], "ReplaceMask"), b"");
+        assert_eq!(int(patch[1], "BaseSkip"), Some(2));
+        assert_eq!(int(patch[1], "Limit"), Some(4096));
+        assert_eq!(int(patch[1], "Skip"), Some(1));
+        assert_eq!(int(patch[1], "TableLength"), Some(1234));
+
+        for (mask, replace_mask) in [("FF00", ""), ("", "FF"), ("00000000", "")] {
+            let mut f = Fixture::new();
+            f.plan.acpi_patches = vec![AcpiPatch {
+                comment: "bad mask".into(),
+                find: "5F4F5349".into(),
+                replace: "584F5349".into(),
+                mask: mask.into(),
+                replace_mask: replace_mask.into(),
+                enabled: true,
+                ..Default::default()
+            }];
+            assert_eq!(f.write().unwrap_err().code, "CONFIG_VALUE_INVALID", "{mask}/{replace_mask}");
+        }
+    }
+
+    #[test]
     fn acpi_entries_are_validated() {
         let mut f = Fixture::new();
         f.plan.acpi_patches = vec![AcpiPatch {
@@ -1724,6 +1799,7 @@ mod tests {
             oem_table_id: None,
             count: 0,
             enabled: true,
+            ..Default::default()
         }];
         assert_eq!(f.write().unwrap_err().code, "CONFIG_VALUE_INVALID");
 

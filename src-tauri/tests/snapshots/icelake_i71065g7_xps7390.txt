@@ -1,0 +1,168 @@
+fixture: icelake_i71065g7_xps7390
+cpu: Intel(R) Core(TM) i7-1065G7 CPU @ 1.30GHz | IceLake (Ice Lake-U) | 4C/8T | avx2 true
+machine: Laptop | Dell Inc. 06CDVY | chipset Ice Lake PCH-LP | uefi true
+gpu: Intel(R) Iris(R) Plus Graphics [8086:8a52 IntelIceLake igpu]
+audio: Realtek ALC289 [10ec0289]
+net: Killer(R) Wi-Fi 6 AX1650s 160MHz (Intel AX201) [8086:34f0 Pci]
+net: Intel Wireless Bluetooth AX201 [8087:0026 Usb]
+touchpad: I2c Some(Synaptics) SYNA2393
+assessment: Partial, recommended 15
+summary: macOS Sequoia 15 works with caveats. This machine can run macOS Catalina 10.15 to macOS Tahoe 26. It is the recommended release.
+releases:
+  10.13 unsupported | err TARGET_BELOW_CPU_MINIMUM (recoverable)
+  10.14 unsupported | err TARGET_BELOW_CPU_MINIMUM (recoverable)
+  10.15 supported   | ok MacBookAir9,1 sbm=Default csr=00000000 gpu=WhateverGreen kexts=20 ssdts=7
+  11    supported   | ok MacBookAir9,1 sbm=Default csr=00000000 gpu=WhateverGreen kexts=20 ssdts=7
+  12    supported   | ok MacBookAir9,1 sbm=Default csr=00000000 gpu=WhateverGreen kexts=20 ssdts=7
+  13    supported   | ok MacBookAir9,1 sbm=Default csr=00000000 gpu=WhateverGreen kexts=20 ssdts=7
+  14    supported   | ok MacBookAir9,1 sbm=Disabled csr=00000000 gpu=WhateverGreen kexts=21 ssdts=7
+  15    supported   | ok MacBookAir9,1 sbm=Disabled csr=00000000 gpu=WhateverGreen kexts=21 ssdts=7
+  26    supported   root-patch | ok MacBookPro16,2 sbm=Disabled csr=00000000 gpu=WhateverGreen kexts=21 ssdts=7
+report-notes:
+  [warning] network: No network in macOS Recovery
+  [warning] platform: BitLocker and dual boot
+  [warning] platform: Sleep
+
+== plan for macOS Sequoia 15 (recommended) ==
+smbios: MacBookAir9,1 | alternatives: MacBookPro16,2
+secure-boot-model: Disabled
+csr-active-config: 00000000
+boot-args: -igfxcdc -igfxdvmt revpatch=sbvmm,memtab -v keepsyms=1 debug=0x100
+kexts:
+  + Lilu.kext (Lilu) required
+  + VirtualSMC.kext (VirtualSMC) required
+  + WhateverGreen.kext (WhateverGreen) required
+  + SMCProcessor.kext (VirtualSMC)
+  + SMCBatteryManager.kext (VirtualSMC) required
+  + ECEnabler.kext (ECEnabler)
+  + BrightnessKeys.kext (BrightnessKeys)
+  + SMCLightSensor.kext (VirtualSMC)
+  + SMCDellSensors.kext (VirtualSMC)
+  + AppleALC.kext (AppleALC) required
+  + itlwm.kext (itlwm)
+  + IntelBluetoothFirmware.kext (IntelBluetoothFirmware)
+  + IntelBTPatcher.kext (IntelBluetoothFirmware)
+  + BlueToolFixup.kext (BrcmPatchRAM) [21.0.0..]
+  + USBToolBox.kext (USBToolBox) required
+  + UTBDefault.kext (USBToolBox) required
+  + VoodooPS2Controller.kext (VoodooPS2Controller) required
+      - VoodooInput.kext
+      + VoodooPS2Keyboard.kext
+      + VoodooPS2Trackpad.kext
+      + VoodooPS2Mouse.kext
+  + VoodooRMI.kext (VoodooRMI) required
+      + VoodooInput.kext
+      + RMII2C.kext
+      - RMISMBus.kext
+  + VoodooI2C.kext (VoodooI2C) required
+      + VoodooGPIO.kext
+      + VoodooI2CServices.kext
+      - VoodooInput.kext
+  + NVMeFix.kext (NVMeFix) [18.0.0..]
+  + RestrictEvents.kext (RestrictEvents)
+ssdts:
+  SSDT-PLUG.aml <- machine (120 bytes)
+  SSDT-EC-USBX.aml <- machine (353 bytes)
+  SSDT-AWAC.aml <- machine (75 bytes)
+  SSDT-RHUB.aml <- machine (140 bytes)
+  SSDT-GPI0.aml <- machine (78 bytes) (optional)
+  SSDT-PNLF.aml <- machine (105 bytes) (optional)
+  SSDT-ALS0.aml <- machine (166 bytes) (optional)
+device-properties:
+  PciRoot(0x0)/Pci(0x2,0x0)
+    AAPL,ig-platform-id = <0000528A>
+    framebuffer-patch-enable = <01000000>
+    framebuffer-stolenmem = <00003001>
+    framebuffer-fbmem = <00009000>
+    enable-backlight-registers-fix = <01000000>
+  PciRoot(0x0)/Pci(0x1f,0x3)
+    layout-id = <0B000000>
+acpi-quirks:
+  on: ResetLogoStatus
+  off: FadtEnableReset NormalizeHeaders RebaseRegions ResetHwSig SyncTableIds
+booter-quirks:
+  on: AvoidRuntimeDefrag DevirtualiseMmio EnableSafeModeSlide FixupAppleEfiImages ProtectUefiServices ProvideCustomSlide RebuildAppleMemoryMap SyncRuntimePermissions
+  off: EnableWriteUnprotector ProtectMemoryRegions SetupVirtualMap
+  set: ResizeAppleGpuBars=-1
+kernel-quirks:
+  on: AppleXcpmCfgLock CustomSMBIOSGuid DisableIoMapper DisableLinkeditJettison PanicNoKextDump PowerTimeoutKernelPanic
+  off: AppleCpuPmCfgLock AppleXcpmExtraMsrs AppleXcpmForceBoost DisableIoMapperMapping DisableRtcChecksum ExtendBTFeatureFlags ForceAquantiaEthernet ForceSecureBootScheme IncreasePciBarSize LapicKernelPanic ProvideCurrentCpuInfo ThirdPartyDrives XhciPortLimit
+  set: SetApfsTrimTimeout=-1
+kernel-emulate:
+  off: DummyPowerManagement
+  set: Cpuid1Data=<> Cpuid1Mask=<>
+misc-boot:
+  on: ShowPicker
+  off: HideAuxiliary PickerAudioAssist PollAppleHotKeys
+  set: ConsoleAttributes=0 HibernateMode="None" LauncherOption="Disabled" LauncherPath="Default" PickerAttributes=17 PickerMode="External" PickerVariant="Acidanthera\GoldenGate" TakeoffDelay=0 Timeout=5
+misc-security:
+  on: AllowSetDefault BlacklistAppleUpdate
+  off: AuthRestart EnablePassword
+  set: ApECID=0 DmgLoading="Signed" ExposeSensitiveData=6 ScanPolicy=0 SecureBootModel="Disabled" Vault="Optional"
+tools: OpenShell.efi ControlMsrE2.efi
+nvram-add: 7C436110-AB2A-4BBB-A880-FE41995C9F82:bluetoothExternalDongleFailed = <00>
+nvram-add: 7C436110-AB2A-4BBB-A880-FE41995C9F82:bluetoothInternalControllerInfo = <0000000000000000000000000000>
+nvram-delete: 7C436110-AB2A-4BBB-A880-FE41995C9F82:bluetoothExternalDongleFailed
+nvram-delete: 7C436110-AB2A-4BBB-A880-FE41995C9F82:bluetoothInternalControllerInfo
+nvram:
+  on: WriteFlash
+  off: LegacyOverwrite
+platform-info:
+  on: Automatic UpdateDataHub UpdateNVRAM UpdateSMBIOS
+  off: CustomMemory UseRawUuidEncoding
+  set: UpdateSMBIOSMode="Custom"
+drivers: OpenRuntime.efi HfsPlus.efi OpenCanopy.efi ResetNvramEntry.efi
+uefi-quirks:
+  on: EnableVectorAcceleration ReleaseUsbOwnership RequestBootVarRouting
+  off: DisableSecurityPolicy ForceOcWriteFlash IgnoreInvalidFlexRatio UnblockFsConnect
+  set: ResizeGpuBars=-1
+uefi-apfs:
+  on: EnableJumpstart HideVerbose
+  off: GlobalConnect JumpstartHotPlug
+  set: MinDate=0 MinVersion=0
+uefi-output:
+  on: ProvideConsoleGop
+  off: DirectGopRendering ForceResolution ReconnectOnResChange
+  set: GopPassThrough="Disabled" Resolution="Max" TextRenderer="BuiltinGraphics" UIScale=0
+uefi-input:
+  on: KeySupport
+  off: KeyFiltering KeySwap PointerSupport
+  set: KeyForgetThreshold=5 KeySupportMode="Auto" TimerResolution=50000
+bios: CSM (Compatibility Support Module) = disable (required)
+bios: Secure Boot = disable (required)
+bios: Fast Boot = disable (required)
+bios: SATA Mode = AHCI (required)
+bios: Intel VMD controller = disable
+bios: EHCI/XHCI Hand-off = enable (required)
+bios: Above 4G Decoding = enable
+bios: CFG Lock (MSR 0xE2 write protection) = disable
+bios: VT-d (Intel Virtualization for Directed I/O) = disable
+bios: VT-x (Intel Virtualization Technology) = enable
+bios: Execute Disable Bit = enable (required)
+bios: Intel SGX (Software Guard Extensions) = disable
+bios: Intel Platform Trust Technology (PTT) = disable
+bios: Hyper-Threading = enable
+bios: DVMT Pre-Allocated = 256MB (required)
+bios: Thunderbolt / USB4 = disable for the install
+bios: Sleep State = S3 if available
+notes:
+  [warning] network: No network in macOS Recovery
+  [warning] power: Sleep may not work
+  [info] smbios: MacBookAir9,1 stops at macOS 15.8.1
+  [info] gpu: Ice Lake graphics
+  [info] gpu: Display: Intel(R) Iris(R) Plus Graphics
+  [info] input: I2C input devices
+  [info] acpi: SSDT-XOSI left out
+  [info] firmware: Early boot hang fallback
+  [info] cpu: CFG Lock
+  [info] boot: Verbose boot is on
+post-install:
+  [info] boot: Copy the EFI to the internal drive
+  [info] usb: Map the USB ports
+  [info] wifi: Install HeliPort for Intel Wi-Fi
+  [info] bootloader: Boot picker after install
+  [info] power: Tune sleep settings
+  [info] audio: Try other layout-ids if a jack or the microphone is silent
+  [info] smbios: Check the serial number before using iServices
+  [info] boot: Turn off verbose boot
+  [warning] platform: Dual boot with Windows

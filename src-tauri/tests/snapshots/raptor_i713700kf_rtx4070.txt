@@ -1,0 +1,33 @@
+fixture: raptor_i713700kf_rtx4070
+cpu: 13th Gen Intel(R) Core(TM) i7-13700KF | RaptorLake (Raptor Lake-S) | 16C/24T | avx2 true
+machine: Desktop | Micro-Star International Co., Ltd. MAG B760 TOMAHAWK WIFI DDR4 (MS-7E26) | chipset B760 | uefi true
+gpu: NVIDIA GeForce RTX 4070 [10de:2786 NvidiaModern]
+audio: Realtek ALC897 [10ec0897]
+net: Realtek Gaming 2.5GbE Family Controller (RTL8125B) [10ec:8125 Pci]
+assessment: Unsupported, recommended none
+summary: No macOS release runs natively on this machine. No GPU can drive a display on macOS Tahoe 26: NVIDIA GeForce RTX 4070 has no macOS driver.
+releases:
+  10.13 unsupported | err TARGET_BELOW_CPU_MINIMUM (recoverable)
+  10.14 unsupported | err TARGET_BELOW_CPU_MINIMUM (recoverable)
+  10.15 unsupported | err NO_DISPLAY_PATH (recoverable)
+  11    unsupported | err NO_DISPLAY_PATH (recoverable)
+  12    unsupported | err NO_DISPLAY_PATH (recoverable)
+  13    unsupported | err NO_DISPLAY_PATH (recoverable)
+  14    unsupported | err NO_DISPLAY_PATH (recoverable)
+  15    unsupported | err NO_DISPLAY_PATH (recoverable)
+  26    unsupported root-patch | err NO_DISPLAY_PATH (recoverable)
+report-notes:
+  [blocking] gpu: Not supported on macOS Tahoe 26
+  [warning] audio: Limitation on macOS Tahoe 26
+  [warning] platform: BitLocker and dual boot
+
+== no recommended release ==
+10.13: [TARGET_BELOW_CPU_MINIMUM] Raptor Lake (13th/14th gen Core) needs macOS Catalina 10.15 or newer.
+10.14: [TARGET_BELOW_CPU_MINIMUM] Raptor Lake (13th/14th gen Core) needs macOS Catalina 10.15 or newer.
+10.15: [NO_DISPLAY_PATH] No graphics device in this machine can show a picture on macOS Catalina 10.15: NVIDIA GeForce RTX 4070 (macOS has no driver for it).
+11: [NO_DISPLAY_PATH] No graphics device in this machine can show a picture on macOS Big Sur 11: NVIDIA GeForce RTX 4070 (macOS has no driver for it).
+12: [NO_DISPLAY_PATH] No graphics device in this machine can show a picture on macOS Monterey 12: NVIDIA GeForce RTX 4070 (macOS has no driver for it).
+13: [NO_DISPLAY_PATH] No graphics device in this machine can show a picture on macOS Ventura 13: NVIDIA GeForce RTX 4070 (macOS has no driver for it).
+14: [NO_DISPLAY_PATH] No graphics device in this machine can show a picture on macOS Sonoma 14: NVIDIA GeForce RTX 4070 (macOS has no driver for it).
+15: [NO_DISPLAY_PATH] No graphics device in this machine can show a picture on macOS Sequoia 15: NVIDIA GeForce RTX 4070 (macOS has no driver for it).
+26: [NO_DISPLAY_PATH] No graphics device in this machine can show a picture on macOS Tahoe 26: NVIDIA GeForce RTX 4070 (macOS has no driver for it).

@@ -1,0 +1,126 @@
+{
+  "cpu": {
+    "name": "Intel(R) Core(TM) i5-5300U CPU @ 2.30GHz",
+    "vendor": "intel",
+    "platform": "broadwell",
+    "codename": "Broadwell-U",
+    "family": 6,
+    "model": 61,
+    "stepping": 4,
+    "cores": 2,
+    "threads": 4,
+    "isMobile": true,
+    "hasAvx2": true,
+    "hasSse42": true,
+    "isHybrid": false
+  },
+  "formFactor": "laptop",
+  "vm": null,
+  "gpus": [
+    {
+      "name": "Intel(R) HD Graphics 5500",
+      "vendor": "intel",
+      "family": "intel_broadwell",
+      "vendorId": "8086",
+      "deviceId": "1616",
+      "subsystemId": "223617aa",
+      "isIgpu": true,
+      "pciPath": "PciRoot(0x0)/Pci(0x2,0x0)",
+      "acpiPath": "\\_SB.PCI0.VID",
+      "vramMb": null,
+      "disabled": false
+    }
+  ],
+  "audio": {
+    "codecName": "Realtek ALC3232 (ALC292)",
+    "codecId": 283902610,
+    "controllerVendorId": "8086",
+    "controllerDeviceId": "9ca0",
+    "controllerPciPath": "PciRoot(0x0)/Pci(0x1b,0x0)",
+    "layoutId": null
+  },
+  "ethernet": [
+    {
+      "name": "Intel(R) Ethernet Connection (3) I218-LM",
+      "bus": "pci",
+      "vendorId": "8086",
+      "deviceId": "15a2",
+      "subsystemId": "223617aa",
+      "pciPath": "PciRoot(0x0)/Pci(0x19,0x0)",
+      "macAddress": "50:7B:9D:12:34:56"
+    }
+  ],
+  "wifi": {
+    "name": "Intel(R) Dual Band Wireless-AC 7265",
+    "bus": "pci",
+    "vendorId": "8086",
+    "deviceId": "095b",
+    "subsystemId": "50108086",
+    "pciPath": "PciRoot(0x0)/Pci(0x1c,0x1)/Pci(0x0,0x0)",
+    "macAddress": "60:57:18:11:22:33"
+  },
+  "bluetooth": {
+    "name": "Intel Wireless Bluetooth 7265",
+    "bus": "usb",
+    "vendorId": "8087",
+    "deviceId": "0a2a",
+    "subsystemId": null,
+    "pciPath": null,
+    "macAddress": null
+  },
+  "input": {
+    "keyboardBus": "ps2",
+    "touchpadBus": "smbus",
+    "touchpadVendor": "synaptics",
+    "touchpadHid": "LEN2020",
+    "hasTouchscreen": false
+  },
+  "storage": [
+    {
+      "name": "SAMSUNG MZ7LN256HCHP",
+      "kind": "sata",
+      "vendorId": null,
+      "deviceId": null,
+      "sizeBytes": 256000000000
+    }
+  ],
+  "motherboardVendor": "LENOVO",
+  "motherboardModel": "20BUS0QQ00",
+  "chipset": "Wildcat Point-LP",
+  "ramGb": 8,
+  "hasBattery": true,
+  "firmwareUefi": true,
+  "acpi": {
+    "pciRoot": "\\_SB.PCI0",
+    "lpcBridge": "\\_SB.PCI0.LPC",
+    "ecPath": "\\_SB.PCI0.LPC.EC",
+    "ecHasSta": false,
+    "cpuPaths": [
+      "\\_PR.CPU0",
+      "\\_PR.CPU1",
+      "\\_PR.CPU2",
+      "\\_PR.CPU3"
+    ],
+    "cpuUsesAcpi0007": false,
+    "awacPath": null,
+    "awacHasStas": false,
+    "rtcPath": "\\_SB.PCI0.LPC.RTC",
+    "hpetPath": "\\_SB.PCI0.LPC.HPET",
+    "igpuPath": "\\_SB.PCI0.VID",
+    "xhciPaths": [
+      "\\_SB.PCI0.XHCI"
+    ],
+    "rhubPaths": [
+      "\\_SB.PCI0.XHCI.URTH"
+    ],
+    "gpioPath": null,
+    "smbusPath": "\\_SB.PCI0.SMBU",
+    "pnlfExists": false,
+    "hasOsiWindows": true,
+    "dsdtOemTableId": "TP-JB   ",
+    "dsdtLength": null
+  },
+  "acpiTablesDir": null,
+  "source": "scan",
+  "scanConfidence": 0.92
+}

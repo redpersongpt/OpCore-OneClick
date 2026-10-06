@@ -1,0 +1,158 @@
+{
+  "cpu": {
+    "name": "Intel(R) Core(TM) i9-9900K CPU @ 3.60GHz",
+    "vendor": "intel",
+    "platform": "coffee_lake",
+    "codename": "Coffee Lake-S",
+    "family": 6,
+    "model": 158,
+    "stepping": 13,
+    "cores": 8,
+    "threads": 16,
+    "isMobile": false,
+    "hasAvx2": true,
+    "hasSse42": true,
+    "isHybrid": false
+  },
+  "formFactor": "desktop",
+  "vm": null,
+  "gpus": [
+    {
+      "name": "Intel(R) UHD Graphics 630",
+      "vendor": "intel",
+      "family": "intel_coffee_lake",
+      "vendorId": "8086",
+      "deviceId": "3e98",
+      "subsystemId": "d0001458",
+      "isIgpu": true,
+      "pciPath": "PciRoot(0x0)/Pci(0x2,0x0)",
+      "acpiPath": "\\_SB.PCI0.GFX0",
+      "vramMb": null,
+      "disabled": false
+    },
+    {
+      "name": "Radeon RX 580 Series",
+      "vendor": "amd",
+      "family": "amd_polaris",
+      "vendorId": "1002",
+      "deviceId": "67df",
+      "subsystemId": "e3661da2",
+      "isIgpu": false,
+      "pciPath": "PciRoot(0x0)/Pci(0x1,0x0)/Pci(0x0,0x0)",
+      "acpiPath": "\\_SB.PCI0.PEG0.PEGP",
+      "vramMb": 8192,
+      "disabled": false
+    }
+  ],
+  "audio": {
+    "codecName": "Realtek ALC1220",
+    "codecId": 283906592,
+    "controllerVendorId": "8086",
+    "controllerDeviceId": "a348",
+    "controllerPciPath": "PciRoot(0x0)/Pci(0x1f,0x3)",
+    "layoutId": null
+  },
+  "ethernet": [
+    {
+      "name": "Intel(R) Ethernet Connection (7) I219-V",
+      "bus": "pci",
+      "vendorId": "8086",
+      "deviceId": "15bc",
+      "subsystemId": "e0001458",
+      "pciPath": "PciRoot(0x0)/Pci(0x1f,0x6)",
+      "macAddress": "18:C0:4D:12:34:56"
+    }
+  ],
+  "wifi": {
+    "name": "Broadcom BCM4360 802.11ac (Fenvi T919)",
+    "bus": "pci",
+    "vendorId": "14e4",
+    "deviceId": "43a0",
+    "subsystemId": "0117106b",
+    "pciPath": "PciRoot(0x0)/Pci(0x1c,0x4)/Pci(0x0,0x0)",
+    "macAddress": "A4:83:E7:20:10:4C"
+  },
+  "bluetooth": {
+    "name": "Apple Broadcom BCM20702 Bluetooth 4.0",
+    "bus": "usb",
+    "vendorId": "05ac",
+    "deviceId": "828d",
+    "subsystemId": null,
+    "pciPath": null,
+    "macAddress": null
+  },
+  "input": {
+    "keyboardBus": "usb",
+    "touchpadBus": null,
+    "touchpadVendor": null,
+    "touchpadHid": null,
+    "hasTouchscreen": false
+  },
+  "storage": [
+    {
+      "name": "Samsung SSD 970 EVO Plus 1TB",
+      "kind": "nvme",
+      "vendorId": "144d",
+      "deviceId": "a808",
+      "sizeBytes": 1000000000000
+    },
+    {
+      "name": "WDC WDS500G3X0C-00SJG0 (SN750)",
+      "kind": "nvme",
+      "vendorId": "15b7",
+      "deviceId": "5006",
+      "sizeBytes": 500000000000
+    }
+  ],
+  "motherboardVendor": "Gigabyte Technology Co., Ltd.",
+  "motherboardModel": "Z390 AORUS PRO-CF",
+  "chipset": "Z390",
+  "ramGb": 32,
+  "hasBattery": false,
+  "firmwareUefi": true,
+  "acpi": {
+    "pciRoot": "\\_SB.PCI0",
+    "lpcBridge": "\\_SB.PCI0.LPCB",
+    "ecPath": "\\_SB.PCI0.LPCB.H_EC",
+    "ecHasSta": true,
+    "cpuPaths": [
+      "\\_PR.PR00",
+      "\\_PR.PR01",
+      "\\_PR.PR02",
+      "\\_PR.PR03",
+      "\\_PR.PR04",
+      "\\_PR.PR05",
+      "\\_PR.PR06",
+      "\\_PR.PR07",
+      "\\_PR.PR08",
+      "\\_PR.PR09",
+      "\\_PR.PR0A",
+      "\\_PR.PR0B",
+      "\\_PR.PR0C",
+      "\\_PR.PR0D",
+      "\\_PR.PR0E",
+      "\\_PR.PR0F"
+    ],
+    "cpuUsesAcpi0007": false,
+    "awacPath": "\\_SB.AWAC",
+    "awacHasStas": true,
+    "rtcPath": "\\_SB.PCI0.LPCB.RTC",
+    "hpetPath": "\\_SB.PCI0.LPCB.HPET",
+    "igpuPath": "\\_SB.PCI0.GFX0",
+    "xhciPaths": [
+      "\\_SB.PCI0.XHC"
+    ],
+    "rhubPaths": [
+      "\\_SB.PCI0.XHC.RHUB"
+    ],
+    "gpioPath": "\\_SB.GPI0",
+    "smbusPath": "\\_SB.PCI0.SBUS",
+    "pnlfExists": false,
+    "hasOsiWindows": true,
+    "dsdtOemTableId": "A M I   ",
+    "dsdtLength": 243000
+  },
+  "acpiTablesDir": null,
+  "source": "scan",
+  "scanConfidence": 0.92
+}

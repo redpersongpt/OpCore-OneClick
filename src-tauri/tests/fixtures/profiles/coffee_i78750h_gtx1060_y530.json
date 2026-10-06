@@ -1,0 +1,117 @@
+{
+  "cpu": {
+    "name": "Intel(R) Core(TM) i7-8750H CPU @ 2.20GHz",
+    "vendor": "intel",
+    "platform": "coffee_lake",
+    "codename": "Coffee Lake-H",
+    "family": 6,
+    "model": 158,
+    "stepping": 10,
+    "cores": 6,
+    "threads": 12,
+    "isMobile": true,
+    "hasAvx2": true,
+    "hasSse42": true,
+    "isHybrid": false
+  },
+  "formFactor": "laptop",
+  "vm": null,
+  "gpus": [
+    {
+      "name": "Intel(R) UHD Graphics 630",
+      "vendor": "intel",
+      "family": "intel_coffee_lake",
+      "vendorId": "8086",
+      "deviceId": "3e9b",
+      "subsystemId": "380017aa",
+      "isIgpu": true,
+      "pciPath": "PciRoot(0x0)/Pci(0x2,0x0)",
+      "acpiPath": "\\_SB.PCI0.GFX0",
+      "vramMb": null,
+      "disabled": false
+    },
+    {
+      "name": "NVIDIA GeForce GTX 1060",
+      "vendor": "nvidia",
+      "family": "nvidia_pascal",
+      "vendorId": "10de",
+      "deviceId": "1c20",
+      "subsystemId": "380017aa",
+      "isIgpu": false,
+      "pciPath": "PciRoot(0x0)/Pci(0x1,0x0)/Pci(0x0,0x0)",
+      "acpiPath": "\\_SB.PCI0.PEG0.PEGP",
+      "vramMb": 6144,
+      "disabled": false
+    }
+  ],
+  "audio": {
+    "codecName": "Realtek ALC3287 (ALC257)",
+    "codecId": 283902551,
+    "controllerVendorId": "8086",
+    "controllerDeviceId": "a348",
+    "controllerPciPath": "PciRoot(0x0)/Pci(0x1f,0x3)",
+    "layoutId": null
+  },
+  "ethernet": [
+    {
+      "name": "Realtek PCIe GbE Family Controller (RTL8111)",
+      "bus": "pci",
+      "vendorId": "10ec",
+      "deviceId": "8168",
+      "subsystemId": "380017aa",
+      "pciPath": "PciRoot(0x0)/Pci(0x1d,0x5)/Pci(0x0,0x0)",
+      "macAddress": "8C:16:45:12:34:56"
+    }
+  ],
+  "wifi": {
+    "name": "Broadcom BCM94352Z 802.11ac (DW1560)",
+    "bus": "pci",
+    "vendorId": "14e4",
+    "deviceId": "43b1",
+    "subsystemId": "00231028",
+    "pciPath": "PciRoot(0x0)/Pci(0x1d,0x6)/Pci(0x0,0x0)",
+    "macAddress": "AC:B5:7D:11:22:33"
+  },
+  "bluetooth": {
+    "name": "Broadcom BCM20702A1 Bluetooth 4.0",
+    "bus": "usb",
+    "vendorId": "0a5c",
+    "deviceId": "216f",
+    "subsystemId": null,
+    "pciPath": null,
+    "macAddress": null
+  },
+  "input": {
+    "keyboardBus": "ps2",
+    "touchpadBus": "smbus",
+    "touchpadVendor": "synaptics",
+    "touchpadHid": "SYN1219",
+    "hasTouchscreen": false
+  },
+  "storage": [
+    {
+      "name": "SAMSUNG MZVLB512HAJQ-000L7 (PM981)",
+      "kind": "nvme",
+      "vendorId": "144d",
+      "deviceId": "a808",
+      "sizeBytes": 512000000000
+    },
+    {
+      "name": "ST1000DM003-1SB102",
+      "kind": "sata",
+      "vendorId": null,
+      "deviceId": null,
+      "sizeBytes": 1000000000000
+    }
+  ],
+  "motherboardVendor": "LENOVO",
+  "motherboardModel": "LNVNB161216",
+  "chipset": "HM370",
+  "ramGb": 16,
+  "hasBattery": true,
+  "firmwareUefi": true,
+  "acpi": null,
+  "acpiTablesDir": null,
+  "source": "scan",
+  "scanConfidence": 0.92
+}

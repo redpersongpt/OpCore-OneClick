@@ -165,14 +165,9 @@ export const useDeploy = create<DeployState>((set, get) => ({
 
   cancelRecovery: async () => {
     if (!get().recoveryDownloading) return;
-    const running = useTasks.getState().latest(TASK_KINDS.recovery);
-    const taskId = get().recoveryTaskId ?? (running?.status === 'running' ? running.taskId : null);
+    const taskId = get().recoveryTaskId ?? useTasks.getState().running(TASK_KINDS.recovery)?.taskId ?? null;
     if (!taskId) return;
-    try {
-      await api.taskCancel(taskId);
-    } catch {
-      // Already finished.
-    }
+    await useTasks.getState().cancel(taskId);
   },
 
   onRecoveryProgress: (progress) => {

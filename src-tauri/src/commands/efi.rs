@@ -21,10 +21,10 @@ use crate::tasks::registry::TaskRegistry;
 static BUILDING: AtomicBool = AtomicBool::new(false);
 
 /// Held while an EFI build runs.
-struct BuildGuard;
+pub(crate) struct BuildGuard;
 
 impl BuildGuard {
-    fn acquire() -> Option<Self> {
+    pub(crate) fn acquire() -> Option<Self> {
         BUILDING.compare_exchange(false, true, Ordering::SeqCst, Ordering::SeqCst).ok().map(|_| BuildGuard)
     }
 }

@@ -66,9 +66,10 @@ pub fn gpu_kext(ctx: &PlanContext, display: &DisplayPlan) -> GpuKext {
 
 /// True when the GPU driving the displays has no native driver on the target:
 /// macOS installs and boots unaccelerated, and OCLP root patches restore
-/// acceleration after install. The kexts and settings stages call this for
-/// the root-patch prerequisites (AMFIPass, csr-active-config 0x0803,
-/// SecureBootModel Disabled, `ipc_control_port_options=0`).
+/// acceleration after install (legacy iGPUs, Kepler, GCN 1-3, Polaris/Vega
+/// on a CPU without AVX2). The single source of the graphics part of
+/// [`super::root_patching_planned`], which decides AMFIPass,
+/// csr-active-config, SecureBootModel and `ipc_control_port_options=0`.
 pub fn needs_root_patch_graphics(ctx: &PlanContext, display: &DisplayPlan) -> bool {
     display
         .primary
@@ -76,17 +77,62 @@ pub fn needs_root_patch_graphics(ctx: &PlanContext, display: &DisplayPlan) -> bo
         .is_some_and(|gpu| usability(ctx, gpu, &gpu_db::support(gpu)) == Usability::RootPatch)
 }
 
-/// True when an enabled NVIDIA Maxwell/Pascal card (driving the displays or
-/// kept next to the display GPU) needs the NVIDIA Web Driver on High Sierra
-/// (SecureBootModel must be Disabled).
+/// True when an enabled NVIDIA Web Driver era card runs on the web driver:
+/// on High Sierra any active Maxwell/Pascal card (driving the displays or
+/// kept next to the display GPU), on later releases a Fermi/Maxwell/Pascal
+/// display GPU, which only OCLP's web-driver patch set can drive. Secure Boot
+/// must be off with the web driver, and its root patch needs SIP `030A0000`.
 pub fn uses_nvidia_web_driver(ctx: &PlanContext, display: &DisplayPlan) -> bool {
-    ctx.target == MacOsVersion::HighSierra
-        && active(display, &views(ctx)).iter().any(|v| {
+    let views = views(ctx);
+    if ctx.target == MacOsVersion::HighSierra {
+        return active(display, &views).iter().any(|v| {
             matches!(
                 v.family(),
                 GpuFamily::NvidiaMaxwell | GpuFamily::NvidiaPascal
             )
+        });
+    }
+    display
+        .primary
+        .and_then(|i| views.get(i))
+        .is_some_and(|v| {
+            !v.gpu.disabled
+                && matches!(
+                    v.family(),
+                    GpuFamily::NvidiaFermi | GpuFamily::NvidiaMaxwell | GpuFamily::NvidiaPascal
+                )
         })
+}
+
+/// `device-id` (little endian) of the IMEI device at
+/// `PciRoot(0x0)/Pci(0x16,0x0)` when the plan drives an Intel iGPU whose
+/// generation differs from the PCH's: Sandy Bridge on a 7-series board gets
+/// the 6-series id 0x1C3A, Ivy Bridge on a 6-series board the 7-series id
+/// 0x1E3A (Dortania sandy-bridge.md / ivy-bridge.md). `apply` injects it, and
+/// the acpi stage adds SSDT-IMEI for exactly these plans. Reads
+/// `plan.smbios.model` (an iGPU hidden for MacPro/iMacPro gets nothing).
+pub fn imei_device_id(
+    ctx: &PlanContext,
+    display: &DisplayPlan,
+    plan: &BuildPlan,
+) -> Option<[u8; 4]> {
+    let views = views(ctx);
+    let v = display.igpu.and_then(|i| views.get(i))?;
+    if !v.is_intel_igpu() || hides_igpu(display, &views, &plan.smbios.model) {
+        return None;
+    }
+    igpu::recipe(v.gpu, igpu_role(ctx, display), ctx.target)?;
+    let hex = igpu::imei_device_id(v.family(), ctx.chipset.as_ref())?;
+    let id = u32::from_str_radix(hex, 16).ok()?;
+    Some(id.to_be_bytes())
+}
+
+/// iMacPro1,1 / MacPro7,1 expect no iGPU: a headless one is hidden with
+/// `-wegnoigpu` instead of configured (WhateverGreen README).
+fn hides_igpu(display: &DisplayPlan, views: &[View], model: &str) -> bool {
+    display.igpu_headless
+        && resolve_kext(display, views) == GpuKext::WhateverGreen
+        && igpu_less_model(model)
 }
 
 // ── Display selection ───────────────────────────────────────────────────────
@@ -272,7 +318,7 @@ fn usability(ctx: &PlanContext, gpu: &ProfileGpu, s: &GpuSupport) -> Usability {
         // Polaris/Vega/Navi userspace needs AVX2 from macOS 13 on (Dortania
         // ventura.md); OCLP restores Polaris/Vega on such CPUs, Navi only
         // behind a developer flag.
-        if ctx.needs_cryptexfixup && needs_avx2(gpu.family) {
+        if ctx.lacks_avx2_for_target() && needs_avx2(gpu.family) {
             return if oclp_patches_without_avx2(gpu.family) {
                 Usability::RootPatch
             } else {
@@ -281,9 +327,11 @@ fn usability(ctx: &PlanContext, gpu: &ProfileGpu, s: &GpuSupport) -> Usability {
         }
         return Usability::Native;
     }
+    // OCLP root patches run on Big Sur and newer only (research-gpu §8).
     if s.display_capable
         && reached
         && !within
+        && target >= MacOsVersion::BigSur
         && s.max_with_root_patch.is_some_and(|max| target <= max)
     {
         return Usability::RootPatch;
@@ -333,10 +381,15 @@ fn choose_laptop(ctx: &PlanContext, views: &[View]) -> Option<DisplayPlan> {
         )
     };
     // The internal panel hangs off the iGPU; a dGPU only drives it on MUX
-    // laptops switched to discrete mode (Dortania GPU Buyers Guide).
-    let primary = pick(false, Native)
-        .or_else(|| pick(false, RootPatch))
-        .or_else(|| pick(true, Native))?;
+    // laptops switched to discrete mode (Dortania GPU Buyers Guide), which
+    // the profile shows as a disabled or missing iGPU. Same rule as
+    // `compatibility::can_drive_display`.
+    let igpu_enabled = views.iter().any(|v| v.is_igpu() && !v.gpu.disabled);
+    let primary = if igpu_enabled {
+        pick(false, Native).or_else(|| pick(false, RootPatch))?
+    } else {
+        pick(true, Native).or_else(|| pick(true, RootPatch))?
+    };
     let rules = Rules {
         keep_native_dgpus: false,
         allow_headless: false,
@@ -528,7 +581,7 @@ fn why_unusable(ctx: &PlanContext, v: &View) -> String {
         return "it could not be identified".into();
     }
     if s.display_capable
-        && ctx.needs_cryptexfixup
+        && ctx.lacks_avx2_for_target()
         && needs_avx2(v.family())
         && gpu_db::natively_supported_on(v.gpu, target)
     {
@@ -593,6 +646,16 @@ fn suggestion(ctx: &PlanContext, views: &[View]) -> String {
              Vega APU)."
                 .into(),
         );
+        let dgpu_works = views.iter().any(|v| {
+            v.is_dgpu() && !v.gpu.disabled && matches!(v.usability, Usability::Native | Usability::RootPatch)
+        });
+        if dgpu_works {
+            parts.push(
+                "If the laptop has a MUX switch, set it to discrete-only mode in the BIOS and scan again (or \
+                 disable the integrated graphics in the hardware editor) to drive the displays from the dGPU."
+                    .into(),
+            );
+        }
     } else {
         parts.push(
             "Otherwise install a graphics card macOS supports natively, such as an AMD Radeon RX 580, \
@@ -614,16 +677,12 @@ pub fn apply(ctx: &PlanContext, display: &DisplayPlan, plan: &mut BuildPlan) {
     let views = views(ctx);
     let kext = resolve_kext(display, &views);
     let primary = display.primary.and_then(|i| views.get(i));
+    let imei = imei_device_id(ctx, display, plan);
 
-    // iMacPro1,1 / MacPro7,1 expect no iGPU: hide a headless one instead
-    // (WhateverGreen README, -wegnoigpu).
     let mut hide_igpu = false;
     if let Some(v) = display.igpu.and_then(|i| views.get(i)) {
         if v.is_intel_igpu() {
-            if display.igpu_headless
-                && kext == GpuKext::WhateverGreen
-                && igpu_less_model(&plan.smbios.model)
-            {
+            if hides_igpu(display, &views, &plan.smbios.model) {
                 hide_igpu = true;
             } else {
                 apply_intel_igpu(ctx, display, v, plan);
@@ -631,6 +690,14 @@ pub fn apply(ctx: &PlanContext, display: &DisplayPlan, plan: &mut BuildPlan) {
         } else if v.family() == GpuFamily::AmdApuVega {
             apply_nootedred(v, plan);
         }
+    }
+    if let Some(id) = imei {
+        plan.device_properties.push(DevicePropertyEntry {
+            path: IMEI_PATH.to_string(),
+            properties: vec![data_prop("device-id", &id)],
+            reason: "IMEI: graphics driver needs the id matching the CPU generation (SSDT-IMEI)"
+                .into(),
+        });
     }
 
     for v in active(display, &views).into_iter().filter(|v| v.is_dgpu()) {
@@ -744,15 +811,6 @@ fn apply_intel_igpu(ctx: &PlanContext, display: &DisplayPlan, v: &View, plan: &m
         for arg in &v.support.boot_args {
             push_arg(plan, arg);
         }
-    }
-
-    if let Some(imei) = igpu::imei_device_id(v.family(), ctx.chipset.as_ref()) {
-        plan.device_properties.push(DevicePropertyEntry {
-            path: IMEI_PATH.to_string(),
-            properties: vec![hex_prop("device-id", imei)],
-            reason: "IMEI: graphics driver needs the id matching the CPU generation (SSDT-IMEI)"
-                .into(),
-        });
     }
 
     igpu_notes(ctx, display, v, role, recipe.device_id, plan);
@@ -1276,9 +1334,9 @@ fn push_display_notes(
             NoteLevel::Warning,
             "Discrete GPU drives the laptop panel",
             format!(
-                "The integrated graphics cannot run macOS, so the {label} is used. This only works when the panel is \
-                 wired to it: set the MUX switch to discrete-only mode in the BIOS, or use external displays on \
-                 ports wired to the dGPU."
+                "The integrated graphics is off or not listed, so the {label} is used. This only works when the \
+                 panel is wired to it: keep the MUX switch in discrete-only mode in the BIOS, or use external \
+                 displays on ports wired to the dGPU."
             ),
         ));
     }

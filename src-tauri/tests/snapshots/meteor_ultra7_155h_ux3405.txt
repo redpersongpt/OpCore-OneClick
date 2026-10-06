@@ -1,0 +1,36 @@
+fixture: meteor_ultra7_155h_ux3405
+cpu: Intel(R) Core(TM) Ultra 7 155H | MeteorLake (Meteor Lake-H) | 16C/22T | avx2 true
+machine: Laptop | ASUSTeK COMPUTER INC. UX3405MA | chipset Meteor Lake SoC | uefi true
+gpu: Intel(R) Arc(TM) Graphics [8086:7d55 IntelXe igpu]
+audio: Realtek ALC294 [10ec0294]
+net: Intel(R) Wi-Fi 6E AX211 160MHz [8086:7e40 Pci]
+net: Intel Wireless Bluetooth AX211 [8087:0033 Usb]
+touchpad: I2c Some(Other) ASUE1407
+assessment: Unsupported, recommended none
+summary: No macOS release runs natively on this machine. Meteor Lake (Core Ultra 100) CPUs cannot run macOS. Laptop and mini-PC platform whose Arc iGPU has no macOS driver.
+releases:
+  10.13 unsupported | err CPU_UNSUPPORTED
+  10.14 unsupported | err CPU_UNSUPPORTED
+  10.15 unsupported | err CPU_UNSUPPORTED
+  11    unsupported | err CPU_UNSUPPORTED
+  12    unsupported | err CPU_UNSUPPORTED
+  13    unsupported | err CPU_UNSUPPORTED
+  14    unsupported | err CPU_UNSUPPORTED
+  15    unsupported | err CPU_UNSUPPORTED
+  26    unsupported | err CPU_UNSUPPORTED
+report-notes:
+  [blocking] cpu: Not supported on macOS Sequoia 15
+  [warning] network: No network in macOS Recovery
+  [warning] platform: BitLocker and dual boot
+  [warning] platform: Sleep
+
+== no recommended release ==
+10.13: [CPU_UNSUPPORTED] Meteor Lake (Core Ultra 100) CPUs cannot run macOS through OpenCore.
+10.14: [CPU_UNSUPPORTED] Meteor Lake (Core Ultra 100) CPUs cannot run macOS through OpenCore.
+10.15: [CPU_UNSUPPORTED] Meteor Lake (Core Ultra 100) CPUs cannot run macOS through OpenCore.
+11: [CPU_UNSUPPORTED] Meteor Lake (Core Ultra 100) CPUs cannot run macOS through OpenCore.
+12: [CPU_UNSUPPORTED] Meteor Lake (Core Ultra 100) CPUs cannot run macOS through OpenCore.
+13: [CPU_UNSUPPORTED] Meteor Lake (Core Ultra 100) CPUs cannot run macOS through OpenCore.
+14: [CPU_UNSUPPORTED] Meteor Lake (Core Ultra 100) CPUs cannot run macOS through OpenCore.
+15: [CPU_UNSUPPORTED] Meteor Lake (Core Ultra 100) CPUs cannot run macOS through OpenCore.
+26: [CPU_UNSUPPORTED] Meteor Lake (Core Ultra 100) CPUs cannot run macOS through OpenCore.

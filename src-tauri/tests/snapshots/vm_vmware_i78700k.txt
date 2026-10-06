@@ -1,0 +1,91 @@
+fixture: vm_vmware_i78700k
+cpu: Intel(R) Core(TM) i7-8700K CPU @ 3.70GHz | CoffeeLake (Coffee Lake-S) | 4C/4T | avx2 true
+machine: Desktop vm Vmware | VMware, Inc. 440BX Desktop Reference Platform | chipset - | uefi true
+gpu: VMware SVGA 3D [15ad:0405 VirtualDisplay]
+net: vmxnet3 Ethernet Adapter [15ad:07b0 Pci]
+assessment: Partial, recommended 26
+summary: macOS Tahoe 26 works with caveats. This machine can run macOS High Sierra 10.13 to macOS Tahoe 26. It is the recommended release.
+releases:
+  10.13 supported   | ok iMacPro1,1 sbm=Disabled csr=00000000 gpu=none kexts=2 ssdts=1
+  10.14 supported   | ok iMacPro1,1 sbm=Disabled csr=00000000 gpu=none kexts=3 ssdts=1
+  10.15 supported   | ok iMacPro1,1 sbm=Disabled csr=00000000 gpu=none kexts=3 ssdts=1
+  11    supported   | ok iMacPro1,1 sbm=Default csr=00000000 gpu=none kexts=3 ssdts=1
+  12    supported   | ok iMacPro1,1 sbm=Default csr=00000000 gpu=none kexts=3 ssdts=1
+  13    supported   | ok iMacPro1,1 sbm=Default csr=00000000 gpu=none kexts=3 ssdts=1
+  14    supported   | ok iMacPro1,1 sbm=Disabled csr=00000000 gpu=none kexts=4 ssdts=1
+  15    supported   | ok iMacPro1,1 sbm=Disabled csr=00000000 gpu=none kexts=4 ssdts=1
+  26    supported   | ok MacPro7,1 sbm=Disabled csr=00000000 gpu=none kexts=4 ssdts=1
+
+== plan for macOS Tahoe 26 (recommended) ==
+smbios: MacPro7,1 | alternatives: -
+secure-boot-model: Disabled
+csr-active-config: 00000000
+boot-args: revpatch=pci,sbvmm -v keepsyms=1 debug=0x100
+kexts:
+  + Lilu.kext (Lilu) required
+  + VirtualSMC.kext (VirtualSMC) required
+  + NVMeFix.kext (NVMeFix) [18.0.0..]
+  + RestrictEvents.kext (RestrictEvents)
+ssdts:
+  SSDT-EC-USBX-DESKTOP.aml <- dortania SSDT-EC-USBX-DESKTOP.aml
+device-properties:
+  PciRoot(0x0)/Pci(0x15,0x0)/Pci(0x0,0x0)
+    built-in = <01>
+acpi-quirks:
+  on: ResetLogoStatus
+  off: FadtEnableReset NormalizeHeaders RebaseRegions ResetHwSig SyncTableIds
+booter-quirks:
+  on: AvoidRuntimeDefrag EnableSafeModeSlide EnableWriteUnprotector FixupAppleEfiImages ProvideCustomSlide SetupVirtualMap
+  off: DevirtualiseMmio ProtectMemoryRegions ProtectUefiServices RebuildAppleMemoryMap SyncRuntimePermissions
+  set: ResizeAppleGpuBars=-1
+kernel-quirks:
+  on: DisableLinkeditJettison ForceSecureBootScheme PanicNoKextDump PowerTimeoutKernelPanic ProvideCurrentCpuInfo
+  off: AppleCpuPmCfgLock AppleXcpmCfgLock AppleXcpmExtraMsrs AppleXcpmForceBoost CustomSMBIOSGuid DisableIoMapper DisableIoMapperMapping DisableRtcChecksum ExtendBTFeatureFlags ForceAquantiaEthernet IncreasePciBarSize LapicKernelPanic ThirdPartyDrives XhciPortLimit
+  set: SetApfsTrimTimeout=-1
+kernel-emulate:
+  on: DummyPowerManagement
+  set: Cpuid1Data=<> Cpuid1Mask=<>
+misc-boot:
+  on: ShowPicker
+  off: HideAuxiliary PickerAudioAssist PollAppleHotKeys
+  set: ConsoleAttributes=0 HibernateMode="None" LauncherOption="Disabled" LauncherPath="Default" PickerAttributes=17 PickerMode="External" PickerVariant="Acidanthera\GoldenGate" TakeoffDelay=0 Timeout=5
+misc-security:
+  on: AllowSetDefault BlacklistAppleUpdate
+  off: AuthRestart EnablePassword
+  set: ApECID=0 DmgLoading="Signed" ExposeSensitiveData=6 ScanPolicy=0 SecureBootModel="Disabled" Vault="Optional"
+tools: OpenShell.efi
+nvram:
+  on: WriteFlash
+  off: LegacyOverwrite
+platform-info:
+  on: Automatic UpdateDataHub UpdateNVRAM UpdateSMBIOS
+  off: CustomMemory UseRawUuidEncoding
+  set: UpdateSMBIOSMode="Create"
+drivers: OpenRuntime.efi OpenHfsPlus.efi OpenCanopy.efi ResetNvramEntry.efi
+uefi-quirks:
+  on: EnableVectorAcceleration RequestBootVarRouting
+  off: DisableSecurityPolicy ForceOcWriteFlash IgnoreInvalidFlexRatio ReleaseUsbOwnership UnblockFsConnect
+  set: ResizeGpuBars=-1
+uefi-apfs:
+  on: EnableJumpstart HideVerbose
+  off: GlobalConnect JumpstartHotPlug
+  set: MinDate=0 MinVersion=0
+uefi-output:
+  on: ProvideConsoleGop
+  off: DirectGopRendering ForceResolution ReconnectOnResChange
+  set: GopPassThrough="Disabled" Resolution="Max" TextRenderer="BuiltinGraphics" UIScale=0
+uefi-input:
+  on: KeySupport
+  off: KeyFiltering KeySwap PointerSupport
+  set: KeyForgetThreshold=5 KeySupportMode="Auto" TimerResolution=50000
+bios: VM firmware = UEFI (required)
+bios: Secure Boot (VM firmware) = disable (required)
+notes:
+  [info] gpu: Display: VMware SVGA 3D
+  [info] ethernet: VMware vmxnet3 Ethernet
+  [info] acpi: Generic prebuilt SSDTs
+post-install:
+  [info] boot: Copy the EFI to the internal drive
+  [info] bootloader: Boot picker after install
+  [info] boot: Turn off verbose boot
+  [info] storage: Leave FileVault off

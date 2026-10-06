@@ -133,7 +133,7 @@ pub enum EthernetDriver {
     /// Intel 82577..I219 — IntelMausi (or Mieze IntelMausiEthernet with AppleVTD
     /// and for the 700/800-series I219 ids only that fork matches).
     IntelMausi,
-    /// Intel I211 / 82576 class — SmallTreeIntel82576 (10.15-11) / AppleIGB (12+).
+    /// Intel I211 / 82576 class — SmallTreeIntel82576 (1.2.5 on 10.13-10.14, 1.3.0 on 10.15-11) / AppleIGB (12+).
     /// 82575/82580/I354/DH89xx are AppleIGB only (see `EthernetInfo::preferred_kext`).
     IntelI211,
     /// Intel I225/I226 — AppleIGC kext, or native AppleIntelI210 with a device-id spoof.

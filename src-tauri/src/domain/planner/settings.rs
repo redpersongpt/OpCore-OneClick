@@ -2,35 +2,28 @@
 //! APFS/Output/Input settings, tools and final boot-args / csr-active-config.
 //!
 //! Runs after every hardware stage: boot-args are only appended, and the
-//! SIP / Secure Boot values follow the root-patch rule of
-//! [`super::root_patching_planned`].
+//! SIP / Secure Boot values follow [`super::root_patching_planned`].
 
 use crate::domain::model::{
-    BuildPlan, CpuPlatform as P, DriverPlan, GpuFamily, MacOsVersion, NoteLevel, PickerStyle,
-    PlistScalar, SettingMap,
+    BuildPlan, CpuPlatform as P, DriverPlan, MacOsVersion, NoteLevel, PickerStyle, PlistScalar,
+    SettingMap,
 };
 
-use super::{note, root_patching_planned, PlanContext};
-
-/// csr-active-config for OCLP root patches: CSR_ALLOW_UNTRUSTED_KEXTS |
-/// CSR_ALLOW_UNRESTRICTED_FS | CSR_ALLOW_UNAUTHENTICATED_ROOT, NVRAM bytes
-/// `03080000` (research-opencore-macos §3.4, OCLP `security.py`).
-pub const SIP_ROOT_PATCH: u32 = 0x0000_0803;
-/// The same plus CSR_ALLOW_UNAPPROVED_KEXTS for the NVIDIA Web Driver patch
-/// set, NVRAM bytes `030A0000` (research-gpu §8).
-pub const SIP_ROOT_PATCH_NVIDIA: u32 = 0x0000_0A03;
+use super::{note, root_patching_planned, PlanContext, RootPatchPlan};
+pub use super::{SIP_ROOT_PATCH, SIP_ROOT_PATCH_NVIDIA, SIP_VOODOOHDA};
 
 /// OpenCanopy icon set shipped in OcBinaryData `Resources/Image`.
 const PICKER_VARIANT: &str = "Acidanthera\\GoldenGate";
 
 pub fn apply(ctx: &PlanContext, plan: &mut BuildPlan) {
-    let root_patch = root_patching_planned(ctx, plan);
+    let display = ctx.display.clone().unwrap_or_default();
+    let root_patch = root_patching_planned(ctx, &display, plan);
     misc_boot(ctx, plan);
     misc_debug(ctx, plan);
     misc_security(ctx, plan, root_patch);
     tools(ctx, plan);
     boot_args(ctx, plan);
-    csr_active_config(ctx, plan, root_patch);
+    csr_active_config(plan, root_patch);
     nvram(ctx, plan);
     platform_info(ctx, plan);
     plan.drivers.extend(drivers(ctx));
@@ -119,25 +112,30 @@ fn misc_debug(ctx: &PlanContext, plan: &mut BuildPlan) {
     int(d, "Target", if ctx.options.debug_opencore { 67 } else { 3 });
 }
 
-fn misc_security(ctx: &PlanContext, plan: &mut BuildPlan, root_patch: bool) {
+fn misc_security(ctx: &PlanContext, plan: &mut BuildPlan, root_patch: RootPatchPlan) {
     let planned = if plan.smbios.secure_boot_model.is_empty() {
         "Disabled"
     } else {
         plan.smbios.secure_boot_model.as_str()
     };
-    // Root-patched systems break the sealed system volume, so Apple Secure
-    // Boot must be off (OCLP security.py; research-gpu §8).
-    let secure_boot_model = if root_patch { "Disabled" } else { planned }.to_string();
-    if root_patch && planned != "Disabled" {
+    // Root-patched systems break the sealed system volume, and the NVIDIA
+    // Web Driver never loads with Apple Secure Boot (OCLP security.py;
+    // research-gpu §8, research-opencore-macos §5.4).
+    let forced = root_patch.secure_boot_disabled();
+    let secure_boot_model = if forced { "Disabled" } else { planned }.to_string();
+    if forced && planned != "Disabled" {
+        let why = if root_patch.oclp() {
+            "root patches modify the system volume"
+        } else {
+            "the NVIDIA Web Driver needs it"
+        };
         plan.notes.push(note(
             NoteLevel::Info,
             "security",
             "Apple Secure Boot disabled",
-            format!(
-                "SecureBootModel is Disabled instead of {planned} because root patches modify the system \
-                 volume."
-            ),
+            format!("SecureBootModel is Disabled instead of {planned} because {why}."),
         ));
+        plan.smbios.secure_boot_model = secure_boot_model.clone();
     }
     let airport_itlwm = plan
         .kexts
@@ -241,37 +239,27 @@ fn boot_args(ctx: &PlanContext, plan: &mut BuildPlan) {
     }
 }
 
-/// SIP stays fully enabled unless OCLP root patching is planned
-/// ([`super::root_patching_planned`]): then `03080000`, or `030A0000` when
-/// the display runs on an NVIDIA Web Driver card.
-fn csr_active_config(ctx: &PlanContext, plan: &mut BuildPlan, root_patch: bool) {
-    if !root_patch {
-        plan.csr_active_config = 0;
+/// SIP stays fully enabled unless the plan patches the system volume or
+/// installs VoodooHDA ([`RootPatchPlan::csr_active_config`]: `030A0000` with
+/// an NVIDIA Web Driver card, `03080000` for root patches, `03000000` for
+/// VoodooHDA alone).
+fn csr_active_config(plan: &mut BuildPlan, root_patch: RootPatchPlan) {
+    plan.csr_active_config = root_patch.csr_active_config();
+    if plan.csr_active_config == 0 {
         return;
     }
-    let web_driver = ctx
-        .display
-        .as_ref()
-        .and_then(|d| ctx.display_gpu(d))
-        .is_some_and(|g| {
-            matches!(
-                g.family,
-                GpuFamily::NvidiaFermi | GpuFamily::NvidiaMaxwell | GpuFamily::NvidiaPascal
-            )
-        });
-    plan.csr_active_config = if web_driver {
-        SIP_ROOT_PATCH_NVIDIA
+    let why = if root_patch.oclp() {
+        "so OpenCore Legacy Patcher (or the AppleHDA restore) can patch the system volume after install. \
+         Updates then download the full installer and the patches must be re-applied after each update."
     } else {
-        SIP_ROOT_PATCH
+        "so the VoodooHDA kext in /Library/Extensions can load."
     };
     plan.notes.push(note(
         NoteLevel::Warning,
         "security",
         "System Integrity Protection lowered",
         format!(
-            "csr-active-config is {:08X} (little endian) so OpenCore Legacy Patcher can apply its root \
-             patches after install. Updates then download the full installer and the patches must be \
-             re-applied after each update.",
+            "csr-active-config is {:08X} (little endian) {why}",
             plan.csr_active_config.swap_bytes()
         ),
     ));
@@ -442,8 +430,8 @@ mod tests {
     use crate::domain::config_writer::{write_config, ConfigInputs};
     use crate::domain::cpu_db;
     use crate::domain::model::{
-        BuildOptions, CpuPlatform, FormFactor, HardwareProfile, KextSelection, PlatformIdentity,
-        ProfileGpu, VmKind,
+        BuildOptions, CpuPlatform, FormFactor, GpuFamily, HardwareProfile, KextSelection,
+        PlatformIdentity, ProfileGpu, VmKind,
     };
     use MacOsVersion::*;
 
@@ -533,21 +521,22 @@ mod tests {
         assert_eq!(int_of(&plan.misc_security, "ExposeSensitiveData"), Some(6));
         assert_eq!(plan.csr_active_config, 0);
 
-        // A root-patch kext from another stage flips SIP and Secure Boot.
+        // The legacy wireless stack from the kexts stage flips SIP and Secure Boot.
         let ctx = PlanContext::new(&p, &o);
         let mut plan = empty_plan(Monterey);
         plan.smbios.secure_boot_model = "Default".into();
         plan.kexts.push(KextSelection {
-            catalog_id: "AMFIPass".into(),
-            bundle: "AMFIPass.kext".into(),
+            catalog_id: "IO80211FamilyLegacy".into(),
+            bundle: "IO80211FamilyLegacy.kext".into(),
             plugins: vec![],
             enabled: true,
-            min_kernel: Some("20.0.0".into()),
+            min_kernel: Some("23.0.0".into()),
             max_kernel: None,
             required: false,
             reason: String::new(),
         });
         apply(&ctx, &mut plan);
+        assert_eq!(plan.smbios.secure_boot_model, "Disabled");
         assert_eq!(plan.csr_active_config, SIP_ROOT_PATCH);
         assert_eq!(
             plan.csr_active_config.to_le_bytes(),
@@ -857,7 +846,8 @@ mod tests {
             for target in targets {
                 let o = options(target);
                 let plan = run_full(p, &o, &display(Some(0), None, false));
-                if p.firmware_uefi == Some(false) {
+                // OpenDuet only on legacy-era boards (compatibility::legacy_boot_only).
+                if p.firmware_uefi == Some(false) && platform != CpuPlatform::AmdBulldozer {
                     assert!(!on(&plan.uefi_input, "KeySupport"));
                     assert!(!on(&plan.uefi_quirks, "RequestBootVarRouting"));
                     assert!(plan.drivers.iter().any(|d| d.path == "OpenUsbKbDxe.efi"));

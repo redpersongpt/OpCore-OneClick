@@ -1,0 +1,114 @@
+{
+  "cpu": {
+    "name": "Intel(R) Core(TM) i5-2520M CPU @ 2.50GHz",
+    "vendor": "intel",
+    "platform": "sandy_bridge",
+    "codename": "Sandy Bridge",
+    "family": 6,
+    "model": 42,
+    "stepping": 7,
+    "cores": 2,
+    "threads": 4,
+    "isMobile": true,
+    "hasAvx2": false,
+    "hasSse42": true,
+    "isHybrid": false
+  },
+  "formFactor": "laptop",
+  "vm": null,
+  "gpus": [
+    {
+      "name": "Intel(R) HD Graphics 3000",
+      "vendor": "intel",
+      "family": "intel_sandy_bridge",
+      "vendorId": "8086",
+      "deviceId": "0126",
+      "subsystemId": "21d317aa",
+      "isIgpu": true,
+      "pciPath": "PciRoot(0x0)/Pci(0x2,0x0)",
+      "acpiPath": "\\_SB.PCI0.VID",
+      "vramMb": null,
+      "disabled": false
+    }
+  ],
+  "audio": {
+    "codecName": "Conexant CX20590",
+    "codecId": 351359086,
+    "controllerVendorId": "8086",
+    "controllerDeviceId": "1c20",
+    "controllerPciPath": "PciRoot(0x0)/Pci(0x1b,0x0)",
+    "layoutId": null
+  },
+  "ethernet": [
+    {
+      "name": "Intel(R) 82579LM Gigabit Network Connection",
+      "bus": "pci",
+      "vendorId": "8086",
+      "deviceId": "1502",
+      "subsystemId": "21ce17aa",
+      "pciPath": "PciRoot(0x0)/Pci(0x19,0x0)",
+      "macAddress": "00:21:CC:6D:12:34"
+    }
+  ],
+  "wifi": {
+    "name": "Intel(R) Centrino(R) Advanced-N 6205",
+    "bus": "pci",
+    "vendorId": "8086",
+    "deviceId": "0085",
+    "subsystemId": "13118086",
+    "pciPath": "PciRoot(0x0)/Pci(0x1c,0x1)/Pci(0x0,0x0)",
+    "macAddress": "8C:70:5A:11:22:33"
+  },
+  "bluetooth": null,
+  "input": {
+    "keyboardBus": "ps2",
+    "touchpadBus": "ps2",
+    "touchpadVendor": "synaptics",
+    "touchpadHid": "LEN0015",
+    "hasTouchscreen": false
+  },
+  "storage": [
+    {
+      "name": "Samsung SSD 860 EVO 500GB",
+      "kind": "sata",
+      "vendorId": null,
+      "deviceId": null,
+      "sizeBytes": 500000000000
+    }
+  ],
+  "motherboardVendor": "LENOVO",
+  "motherboardModel": "4180W1B",
+  "chipset": "QM67",
+  "ramGb": 8,
+  "hasBattery": true,
+  "firmwareUefi": true,
+  "acpi": {
+    "pciRoot": "\\_SB.PCI0",
+    "lpcBridge": "\\_SB.PCI0.LPC",
+    "ecPath": "\\_SB.PCI0.LPC.EC",
+    "ecHasSta": false,
+    "cpuPaths": [
+      "\\_PR.CPU0",
+      "\\_PR.CPU1",
+      "\\_PR.CPU2",
+      "\\_PR.CPU3"
+    ],
+    "cpuUsesAcpi0007": false,
+    "awacPath": null,
+    "awacHasStas": false,
+    "rtcPath": "\\_SB.PCI0.LPC.RTC",
+    "hpetPath": "\\_SB.PCI0.LPC.HPET",
+    "igpuPath": "\\_SB.PCI0.VID",
+    "xhciPaths": [],
+    "rhubPaths": [],
+    "gpioPath": null,
+    "smbusPath": "\\_SB.PCI0.SMBU",
+    "pnlfExists": false,
+    "hasOsiWindows": true,
+    "dsdtOemTableId": "TP-83   ",
+    "dsdtLength": null
+  },
+  "acpiTablesDir": null,
+  "source": "scan",
+  "scanConfidence": 0.92
+}

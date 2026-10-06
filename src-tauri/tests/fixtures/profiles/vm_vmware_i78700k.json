@@ -1,0 +1,74 @@
+{
+  "cpu": {
+    "name": "Intel(R) Core(TM) i7-8700K CPU @ 3.70GHz",
+    "vendor": "intel",
+    "platform": "coffee_lake",
+    "codename": "Coffee Lake-S",
+    "family": 6,
+    "model": 158,
+    "stepping": 10,
+    "cores": 4,
+    "threads": 4,
+    "isMobile": false,
+    "hasAvx2": true,
+    "hasSse42": true,
+    "isHybrid": false
+  },
+  "formFactor": "desktop",
+  "vm": "vmware",
+  "gpus": [
+    {
+      "name": "VMware SVGA 3D",
+      "vendor": "virtual",
+      "family": "virtual_display",
+      "vendorId": "15ad",
+      "deviceId": "0405",
+      "subsystemId": "040515ad",
+      "isIgpu": false,
+      "pciPath": "PciRoot(0x0)/Pci(0xf,0x0)",
+      "acpiPath": null,
+      "vramMb": null,
+      "disabled": false
+    }
+  ],
+  "audio": null,
+  "ethernet": [
+    {
+      "name": "vmxnet3 Ethernet Adapter",
+      "bus": "pci",
+      "vendorId": "15ad",
+      "deviceId": "07b0",
+      "subsystemId": "07b015ad",
+      "pciPath": "PciRoot(0x0)/Pci(0x15,0x0)/Pci(0x0,0x0)",
+      "macAddress": "00:0C:29:12:34:56"
+    }
+  ],
+  "wifi": null,
+  "bluetooth": null,
+  "input": {
+    "keyboardBus": "usb",
+    "touchpadBus": null,
+    "touchpadVendor": null,
+    "touchpadHid": null,
+    "hasTouchscreen": false
+  },
+  "storage": [
+    {
+      "name": "VMware Virtual NVMe Disk",
+      "kind": "nvme",
+      "vendorId": "15ad",
+      "deviceId": "07f0",
+      "sizeBytes": 100000000000
+    }
+  ],
+  "motherboardVendor": "VMware, Inc.",
+  "motherboardModel": "440BX Desktop Reference Platform",
+  "chipset": null,
+  "ramGb": 8,
+  "hasBattery": false,
+  "firmwareUefi": true,
+  "acpi": null,
+  "acpiTablesDir": null,
+  "source": "scan",
+  "scanConfidence": 0.75
+}

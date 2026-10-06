@@ -15,7 +15,8 @@ import { DICTIONARIES, interpolate, translate } from '../i18n';
 import { en } from '../i18n/en';
 import { detectLanguage, LANGUAGES } from '../i18n/lang';
 import { tr } from '../i18n/tr';
-import { COMPONENT_IDS } from '../lib/labels';
+import { BUILD_PHASES } from '../lib/buildProgress';
+import { COMPONENT_IDS, ERROR_HINT_CODES, errorHint } from '../lib/labels';
 import { STEPS } from '../stores/wizard';
 
 const placeholders = (s: string) => [...s.matchAll(/\{(\w+)\}/g)].map((m) => m[1]).sort();
@@ -77,6 +78,7 @@ describe('i18n dictionaries', () => {
       ['recovery.phase', ['resolving', 'downloading', 'verifying', 'complete', 'failed']],
       ['review.verdict', ['passed', 'warnings', 'failed']],
       ['flash.phase', ['prepare', 'partition', 'format', 'copyEfi', 'copyRecovery', 'verify']],
+      ['build.phase', BUILD_PHASES],
       ['trouble.category', TROUBLE_CATEGORIES],
       ['component', COMPONENT_IDS],
     ];
@@ -84,6 +86,13 @@ describe('i18n dictionaries', () => {
       values.map((v) => `${prefix}.${v}`).filter((key) => !(key in en)),
     );
     expect(missing).toEqual([]);
+    expect(ERROR_HINT_CODES.map(errorHint).filter((key) => key === null || !(key in en))).toEqual([]);
+  });
+
+  it('sentences are translated, not copied from English', () => {
+    const words = (s: string) => s.replace(/\{\w+\}/g, '').match(/[A-Za-z]{2,}/g) ?? [];
+    const copied = (Object.keys(en) as (keyof typeof en)[]).filter((key) => words(en[key]).length >= 3 && tr[key] === en[key]);
+    expect(copied).toEqual([]);
   });
 
   it('troubleshooting entries are written in both languages', () => {

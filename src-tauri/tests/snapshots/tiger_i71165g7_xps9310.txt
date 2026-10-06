@@ -1,0 +1,38 @@
+fixture: tiger_i71165g7_xps9310
+cpu: 11th Gen Intel(R) Core(TM) i7-1165G7 @ 2.80GHz | TigerLake (Tiger Lake-UP3) | 4C/8T | avx2 true
+machine: Laptop | Dell Inc. 0DXP1F | chipset 500 Series PCH-LP | uefi true
+gpu: Intel(R) Iris(R) Xe Graphics [8086:9a49 IntelXe igpu]
+audio: Realtek ALC289 [10ec0289]
+net: Killer(R) Wi-Fi 6 AX1650s 160MHz (Intel AX201) [8086:a0f0 Pci]
+net: Intel Wireless Bluetooth AX201 [8087:0026 Usb]
+touchpad: I2c Some(Synaptics) SYNA2B5F
+assessment: Unsupported, recommended none
+summary: No macOS release runs natively on this machine. No GPU can drive a display on macOS Tahoe 26: Intel(R) Iris(R) Xe Graphics has no macOS driver.
+releases:
+  10.13 unsupported | err TARGET_BELOW_CPU_MINIMUM (recoverable)
+  10.14 unsupported | err TARGET_BELOW_CPU_MINIMUM (recoverable)
+  10.15 unsupported | err NO_DISPLAY_PATH (recoverable)
+  11    unsupported | err NO_DISPLAY_PATH (recoverable)
+  12    unsupported | err NO_DISPLAY_PATH (recoverable)
+  13    unsupported | err NO_DISPLAY_PATH (recoverable)
+  14    unsupported | err NO_DISPLAY_PATH (recoverable)
+  15    unsupported | err NO_DISPLAY_PATH (recoverable)
+  26    unsupported root-patch | err NO_DISPLAY_PATH (recoverable)
+report-notes:
+  [blocking] gpu: Not supported on macOS Tahoe 26
+  [warning] audio: Limitation on macOS Tahoe 26
+  [warning] network: No network in macOS Recovery
+  [warning] storage: Intel RST VMD Controller (RAID) cannot be used
+  [warning] platform: BitLocker and dual boot
+  [warning] platform: Sleep
+
+== no recommended release ==
+10.13: [TARGET_BELOW_CPU_MINIMUM] Tiger Lake (11th gen Core mobile) needs macOS Catalina 10.15 or newer.
+10.14: [TARGET_BELOW_CPU_MINIMUM] Tiger Lake (11th gen Core mobile) needs macOS Catalina 10.15 or newer.
+10.15: [NO_DISPLAY_PATH] No graphics device in this machine can show a picture on macOS Catalina 10.15: Intel(R) Iris(R) Xe Graphics (macOS has no driver for it).
+11: [NO_DISPLAY_PATH] No graphics device in this machine can show a picture on macOS Big Sur 11: Intel(R) Iris(R) Xe Graphics (macOS has no driver for it).
+12: [NO_DISPLAY_PATH] No graphics device in this machine can show a picture on macOS Monterey 12: Intel(R) Iris(R) Xe Graphics (macOS has no driver for it).
+13: [NO_DISPLAY_PATH] No graphics device in this machine can show a picture on macOS Ventura 13: Intel(R) Iris(R) Xe Graphics (macOS has no driver for it).
+14: [NO_DISPLAY_PATH] No graphics device in this machine can show a picture on macOS Sonoma 14: Intel(R) Iris(R) Xe Graphics (macOS has no driver for it).
+15: [NO_DISPLAY_PATH] No graphics device in this machine can show a picture on macOS Sequoia 15: Intel(R) Iris(R) Xe Graphics (macOS has no driver for it).
+26: [NO_DISPLAY_PATH] No graphics device in this machine can show a picture on macOS Tahoe 26: Intel(R) Iris(R) Xe Graphics (macOS has no driver for it).

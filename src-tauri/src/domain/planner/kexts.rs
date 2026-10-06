@@ -19,23 +19,18 @@ use crate::domain::model::{
     GpuFamily, InputBus, IntelWifiStrategy, KernelBlock, KextSelection, MacOsVersion, NoteLevel, NvramVariable,
     PlanNote, PlistScalar, PluginSelection, ProfileNic, VmKind,
 };
-use crate::domain::{codec_db, cpu_db, gpu_db};
+use crate::domain::{codec_db, cpu_db};
 
-use super::{DisplayPlan, PlanContext};
+use super::{
+    acpi, root_patching_planned, DisplayPlan, PlanContext, IOSKYWALK_ID, ROOT_PATCH_COMPONENT, VOODOOHDA_COMPONENT,
+};
 
 /// NVRAM GUID of the Apple boot variables (Bluetooth controller info lives here).
 pub const APPLE_NVRAM_GUID: &str = "7C436110-AB2A-4BBB-A880-FE41995C9F82";
 
-/// Catalog id of AMFIPass; its presence in `plan.kexts` means the plan expects
-/// OCLP-style root patches after installation (SIP must allow them).
+/// Catalog id of AMFIPass, added when patched graphics or wireless drivers
+/// are planned ([`super::RootPatchPlan::needs_amfipass`]).
 pub const AMFIPASS_ID: &str = "AMFIPass";
-
-/// True when the plan expects post-install root patches (legacy wireless
-/// stack, GPU drivers removed from the target): AMFIPass is selected. Later
-/// stages use this to relax SIP (`csr-active-config` 0x803).
-pub fn plans_root_patch(plan: &BuildPlan) -> bool {
-    plan.kexts.iter().any(|k| k.catalog_id == AMFIPASS_ID && k.enabled)
-}
 
 /// Select every non-GPU kext for `ctx` and write the properties, boot-args,
 /// NVRAM variables, kernel blocks/patches and notes that come with them.
@@ -52,10 +47,8 @@ pub fn apply(ctx: &PlanContext, display: &DisplayPlan, plan: &mut BuildPlan) {
     usb(ctx, plan);
     input(ctx, plan);
     storage(ctx, plan);
-    if let Some(gpu) = gpu_root_patch(ctx, display) {
-        st.root_patch.push(format!("{gpu} graphics drivers are restored by an OCLP root patch"));
-    }
-    root_patch_support(ctx, plan, &st);
+    aquantia_patches(ctx, plan);
+    root_patch_support(ctx, display, plan);
     restrict_events(ctx, plan);
     network_check(plan, &st);
 }
@@ -71,12 +64,11 @@ struct State {
     wifi_ok: bool,
     /// A NIC already carries `built-in` (only the primary interface gets it).
     builtin_set: bool,
-    /// Why AMFIPass is needed (root patches planned).
-    root_patch: Vec<String>,
 }
 
 // ── Darwin ranges ───────────────────────────────────────────────────────────
 
+const DARWIN_10_13: &str = "17.0.0";
 const DARWIN_10_14: &str = "18.0.0";
 const DARWIN_10_15: &str = "19.0.0";
 const DARWIN_11: &str = "20.0.0";
@@ -85,6 +77,7 @@ const DARWIN_13: &str = "22.0.0";
 const DARWIN_14: &str = "23.0.0";
 const DARWIN_15: &str = "24.0.0";
 const DARWIN_26: &str = "25.0.0";
+const MAX_10_13: &str = "17.99.99";
 const MAX_10_14: &str = "18.99.99";
 const MAX_10_15: &str = "19.99.99";
 const MAX_11: &str = "20.99.99";
@@ -277,61 +270,6 @@ fn is_dell(ctx: &PlanContext) -> bool {
     v.contains("dell") || v.contains("alienware")
 }
 
-/// The internal panel's backlight runs through a supported iGPU, which is
-/// when the acpi stage adds SSDT-PNLF and, from 10.15 on, SSDT-ALS0
-/// (Dortania backlight.md; OpenCorePkg SSDT-ALS0.dsl: "Starting with macOS
-/// 10.15 Ambient Light Sensor presence is required for backlight
-/// functioning"). Mirrors that stage's rule, which runs later.
-fn panel_has_light_sensor(ctx: &PlanContext, display: &DisplayPlan) -> bool {
-    use CpuPlatform as P;
-    use GpuFamily as F;
-    if !ctx.has_panel || ctx.is_vm || ctx.target < MacOsVersion::Catalina {
-        return false;
-    }
-    let gpus = &ctx.profile.gpus;
-    match gpus.iter().position(|g| g.is_igpu) {
-        Some(i) => {
-            let igpu = &gpus[i];
-            let backlight_family = matches!(
-                igpu.family,
-                F::IntelIronLake
-                    | F::IntelSandyBridge
-                    | F::IntelIvyBridge
-                    | F::IntelHaswell
-                    | F::IntelBroadwell
-                    | F::IntelSkylake
-                    | F::IntelKabyLake
-                    | F::IntelCoffeeLake
-                    | F::IntelCometLake
-                    | F::IntelIceLake
-                    | F::AmdApuVega
-            );
-            backlight_family
-                && !igpu.disabled
-                && !display.disabled.contains(&i)
-                && gpu_db::support(igpu).display_capable
-        }
-        // Manual profile without GPUs: go by the CPU generation.
-        None => {
-            gpus.is_empty()
-                && ctx.is_intel()
-                && matches!(
-                    ctx.platform(),
-                    P::Arrandale
-                        | P::SandyBridge
-                        | P::IvyBridge
-                        | P::Haswell
-                        | P::Broadwell
-                        | P::Skylake
-                        | P::KabyLake
-                        | P::CoffeeLake
-                        | P::CometLake
-                        | P::IceLake
-                )
-        }
-    }
-}
-
 fn sensors(ctx: &PlanContext, display: &DisplayPlan, plan: &mut BuildPlan) {
     if ctx.is_vm {
         return;
@@ -400,8 +338,9 @@ fn sensors(ctx: &PlanContext, display: &DisplayPlan, plan: &mut BuildPlan) {
         );
     }
     // Dortania ktext.md: SMCLightSensor only where an ambient light sensor
-    // exists ("can cause issues otherwise"): the real one or SSDT-ALS0.
-    if panel_has_light_sensor(ctx, display) {
+    // exists ("can cause issues otherwise"): the real one or SSDT-ALS0, which
+    // the acpi stage adds by the same rule.
+    if acpi::panel_backlight(ctx, display, plan).is_some_and(|b| b.als0) {
         push(
             plan,
             kext(
@@ -546,6 +485,7 @@ fn audio(ctx: &PlanContext, plan: &mut BuildPlan) {
             "Onboard analog audio will not work with AppleHDA. After installing, VoodooHDA (installed to \
              /Library/Extensions) or a USB audio adapter are the options.",
         );
+        voodoo_hda(ctx, plan, &name);
         return;
     }
     let subsystem = oem_subsystem(&ctx.profile.motherboard_vendor);
@@ -557,6 +497,7 @@ fn audio(ctx: &PlanContext, plan: &mut BuildPlan) {
             "No AppleALC layout",
             format!("AppleALC has no layout for {name}; audio was not configured."),
         );
+        voodoo_hda(ctx, plan, &name);
         return;
     };
     let source = if audio.layout_id.is_some() { "chosen in the hardware editor" } else { "default for this codec" };
@@ -605,16 +546,65 @@ fn audio(ctx: &PlanContext, plan: &mut BuildPlan) {
             "macOS 26 removed AppleHDA, so speakers, headphone jack and microphone stay silent until AppleHDA is \
              restored. AppleALC is kept in the EFI for that. HDMI/DisplayPort and USB audio are unaffected.",
         );
+        if ctx.options.prepare_audio_patch {
+            // The restore is a root patch: settings lowers SIP to 03080000
+            // (research-kexts §4.1 Fix A), which also covers VoodooHDA (Fix B).
+            post_install(
+                plan,
+                ROOT_PATCH_COMPONENT,
+                "Restore AppleHDA on macOS 26",
+                "Restore AppleHDA from macOS 15 with a root-patch tool (OpenCore Legacy Patcher's modern audio patch or \
+                 a community AppleHDA installer) and keep AppleALC in the EFI. The build already sets what it needs: \
+                 SIP partly disabled (csr-active-config 03080000) and SecureBootModel Disabled. Redo it after every \
+                 macOS update. Alternative: VoodooHDA installed to /Library/Extensions (then disable AppleALC).",
+            );
+        } else {
+            post_install(
+                plan,
+                "audio",
+                "Analog audio on macOS 26 needs a root patch",
+                "To restore AppleHDA (or install VoodooHDA) after installing, rebuild the EFI with \"Prepare for \
+                 the macOS 26 audio patch\" turned on. That option partly disables SIP (csr-active-config 03080000) \
+                 and sets SecureBootModel to Disabled, which the patch needs. It is off by default so SIP stays \
+                 fully enabled.",
+            );
+        }
+    }
+}
+
+/// macOS 26 without a codec AppleALC can drive: VoodooHDA installed to
+/// /Library/Extensions is the only analog audio path (research-kexts §4.1:
+/// Kernel->Add injection fails on Darwin 25), with csr-active-config
+/// `03000000` (Dortania tahoe.md), which the settings stage sets for a note
+/// with component [`VOODOOHDA_COMPONENT`].
+fn voodoo_hda(ctx: &PlanContext, plan: &mut BuildPlan, codec: &str) {
+    if ctx.target != MacOsVersion::Tahoe || ctx.is_vm {
+        return;
+    }
+    if !ctx.options.prepare_audio_patch {
         post_install(
             plan,
             "audio",
-            "Restore AppleHDA on macOS 26",
-            "Restore AppleHDA from macOS 15 with a root-patch tool (OpenCore Legacy Patcher's modern audio patch or \
-             a community AppleHDA installer). It needs SIP partly disabled (csr-active-config 03080000), \
-             SecureBootModel Disabled and must be redone after every macOS update. Alternative: VoodooHDA \
-             installed to /Library/Extensions (then disable AppleALC).",
+            "Analog audio on macOS 26 needs VoodooHDA",
+            format!(
+                "{codec} has no AppleALC support and macOS 26 has no AppleHDA, so VoodooHDA installed to \
+                 /Library/Extensions is the only analog audio option. It needs csr-active-config 03000000: rebuild \
+                 the EFI with \"Prepare for the macOS 26 audio patch\" turned on before installing it."
+            ),
         );
+        return;
     }
+    post_install(
+        plan,
+        VOODOOHDA_COMPONENT,
+        "Install VoodooHDA for analog audio",
+        format!(
+            "{codec} has no AppleALC support and macOS 26 has no AppleHDA. Install VoodooHDA.kext to \
+             /Library/Extensions and VoodooHDA.prefPane to ~/Library/PreferencePanes, allow it in Privacy & \
+             Security and reboot twice. The build sets csr-active-config 03000000 for it. VoodooHDA cannot be \
+             injected by OpenCore on macOS 26."
+        ),
+    );
 }
 
 // ── CPU helpers ─────────────────────────────────────────────────────────────
@@ -642,6 +632,20 @@ fn is_intel_hybrid(ctx: &PlanContext) -> bool {
 
 const MCE_BOARD_MODELS: &[&str] = &["MacPro6,1", "MacPro7,1", "iMacPro1,1"];
 
+/// Intel platforms on AppleIntelCPUPowerManagement (no XCPM).
+fn apple_cpu_pm_platform(platform: CpuPlatform) -> bool {
+    matches!(
+        platform,
+        CpuPlatform::Lynnfield
+            | CpuPlatform::Arrandale
+            | CpuPlatform::SandyBridge
+            | CpuPlatform::IvyBridge
+            | CpuPlatform::NehalemHedt
+            | CpuPlatform::SandyBridgeE
+            | CpuPlatform::IvyBridgeE
+    )
+}
+
 fn cpu_helpers(ctx: &PlanContext, plan: &mut BuildPlan) {
     let target = ctx.target;
     if ctx.needs_cryptexfixup {
@@ -660,14 +664,45 @@ fn cpu_helpers(ctx: &PlanContext, plan: &mut BuildPlan) {
         );
         note(plan, NoteLevel::Warning, "cpu", "CPU without AVX2", caveat);
     }
-    if ctx.platform() == CpuPlatform::Penryn && target >= MacOsVersion::Mojave {
-        note(
+    if cpu_db::needs_telemetrap(&ctx.identity, target) {
+        // OCLP's config: telemetrap MinKernel 18.0.0 ("SSE Patcher").
+        push(
             plan,
-            NoteLevel::Warning,
-            "cpu",
-            "telemetrap.kext needed",
-            "Penryn CPUs lack SSE4.2: macOS 10.14 and newer need telemetrap.kext (and the MacPro6,1 SMBIOS), \
-             which is not part of the download catalog. Add it to EFI/OC/Kexts manually.",
+            kext(
+                "telemetrap",
+                "telemetrap.kext",
+                "Stops the SSE4.2-only telemetry plugin from loading: Penryn CPUs lack SSE4.2, which macOS 10.14+ \
+                 expects.",
+            )
+            .min(DARWIN_10_14),
+        );
+        let caveat = cpu_db::ceiling_workaround(ctx.platform())
+            .filter(|w| w.kext == Some("telemetrap.kext"))
+            .map(|w| w.caveat)
+            .unwrap_or("No SSE4.2: macOS 10.14 and newer need telemetrap.kext.");
+        note(plan, NoteLevel::Warning, "cpu", "CPU without SSE4.2 (telemetrap)", caveat);
+    }
+    // macOS 13 removed AppleIntelCPUPowerManagement, which pre-Haswell CPUs
+    // need; OCLP re-injects it with its client from Darwin 22 (OCLP config
+    // "Legacy Power Management (pre-XCPM)"; cpu_db's CryptexFixup caveat).
+    if ctx.is_intel() && !ctx.is_vm && apple_cpu_pm_platform(ctx.platform()) && target >= MacOsVersion::Ventura {
+        push(
+            plan,
+            kext(
+                "AppleIntelCPUPowerManagement",
+                "AppleIntelCPUPowerManagement.kext",
+                "CPU power management for pre-Haswell CPUs, which macOS 13 removed (re-injected).",
+            )
+            .min(DARWIN_13),
+        );
+        push(
+            plan,
+            kext(
+                "AppleIntelCPUPowerManagementClient",
+                "AppleIntelCPUPowerManagementClient.kext",
+                "Helper of the re-injected AppleIntelCPUPowerManagement.",
+            )
+            .min(DARWIN_13),
         );
     }
     if is_intel_hybrid(ctx) {
@@ -794,52 +829,159 @@ fn restrict_events(ctx: &PlanContext, plan: &mut BuildPlan) {
 
 // ── Root patches (AMFIPass) ─────────────────────────────────────────────────
 
-/// The display GPU only has drivers on the target through an OCLP root patch:
-/// past its last native release but within root-patch reach, or a
-/// Polaris/Vega card on a CPU without AVX2 from macOS 13 on (Dortania
-/// ventura.md: their userspace needs AVX2; OCLP restores them). Same rule as
-/// the graphics stage's root-patch check.
-fn gpu_root_patch(ctx: &PlanContext, display: &DisplayPlan) -> Option<String> {
-    let gpu = ctx.profile.gpus.get(display.primary?)?;
-    if gpu.disabled {
-        return None;
-    }
-    let s = gpu_db::support(gpu);
-    let target = ctx.target;
-    let reached = s.min_native.is_some_and(|min| target >= min);
-    let beyond_native = s.max_native.is_some_and(|max| target > max);
-    let patchable = s.max_with_root_patch.is_some_and(|max| target <= max);
-    let without_avx2 = ctx.needs_cryptexfixup
-        && gpu_db::natively_supported_on(gpu, target)
-        && matches!(gpu.family, GpuFamily::AmdPolaris | GpuFamily::AmdLexa | GpuFamily::AmdVega10 | GpuFamily::AmdVega20);
-    let root_patch = s.display_capable && ((reached && beyond_native && patchable) || without_avx2);
-    root_patch.then(|| {
-        let name = gpu.name.trim();
-        if name.is_empty() {
-            gpu_db::family_label(gpu.family).to_string()
-        } else {
-            name.to_string()
+/// AMFIPass, `-amfipassbeta` and `ipc_control_port_options=0` for the root
+/// patches this plan expects ([`super::root_patching_planned`]; every source
+/// is known once this stage has picked the audio and Wi-Fi kexts).
+fn root_patch_support(ctx: &PlanContext, display: &DisplayPlan, plan: &mut BuildPlan) {
+    let rp = root_patching_planned(ctx, display, plan);
+    if rp.needs_amfipass() {
+        let mut why = Vec::new();
+        if rp.graphics {
+            let gpu = ctx.display_gpu(display).map(|g| g.name.trim()).filter(|n| !n.is_empty());
+            why.push(format!(
+                "{} graphics drivers are restored by an OCLP root patch",
+                gpu.unwrap_or("the display GPU's")
+            ));
         }
-    })
+        if rp.wireless {
+            why.push("Modern Wireless root patch for the Wi-Fi card".to_string());
+        }
+        push(
+            plan,
+            kext(AMFIPASS_ID, "AMFIPass.kext", format!("Keeps AMFI enabled after root patching ({}).", why.join("; ")))
+                .min(DARWIN_11),
+        );
+        // research-kexts §1.3: AMFIPass needs its beta flag on Darwin 25.
+        if ctx.target >= MacOsVersion::Tahoe {
+            boot_arg(plan, "-amfipassbeta");
+        }
+    }
+    if rp.needs_ipc_control_port_options(ctx.target) {
+        boot_arg(plan, "ipc_control_port_options=0");
+    }
 }
 
-fn root_patch_support(ctx: &PlanContext, plan: &mut BuildPlan, st: &State) {
-    if st.root_patch.is_empty() {
+/// CaseySJ's Aquantia patch set 1 (CaseySJ/Aquantia-macOS-Patches @ b0f52d8,
+/// `CaseySJ-Aquantia-Patch-Sets-1-and-2.plist`): AppleEthernetAquantiaAqtion
+/// works without AppleVTD on macOS 12.3+ (the README: "should not be used
+/// in Big Sur or Monterey 12.0, 12.1 and 12.2", hence MinKernel 21.4.0 where
+/// the plist says 21.0.0). Set 2 needs Mask/ReplaceMask, so set 1 is used.
+const AQUANTIA_PATCHES: &[(&str, &str, &str, &str, &str, &str)] = &[
+    (
+        "__ZN27AppleEthernetAquantiaAqtion13alloc_rx_ringEj",
+        "Fix alloc_dma_buffer",
+        "4C89EF41B803000000",
+        "4C89EF41B813000000",
+        "21.4.0",
+        "22.99.99",
+    ),
+    (
+        "__ZN27AppleEthernetAquantiaAqtion13alloc_rx_ringEj",
+        "Fix alloc_dma_buffer (Sonoma)",
+        "4889DF41B803000000",
+        "4889DF41B813000000",
+        "23.0.0",
+        "25.99.99",
+    ),
+    (
+        "__ZN27AppleEthernetAquantiaAqtion13alloc_rx_ringEj",
+        "Fix IOBufferMemoryDescriptor::withOptions",
+        "BA00100000BF01000000",
+        "BA00100000BF11000000",
+        "21.4.0",
+        "25.99.99",
+    ),
+    (
+        "__ZN27AppleEthernetAquantiaAqtion13alloc_tx_ringEj",
+        "Fix alloc_dma_buffer",
+        "4C89E741B803000000",
+        "4C89E741B813000000",
+        "21.4.0",
+        "22.99.99",
+    ),
+    (
+        "__ZN27AppleEthernetAquantiaAqtion13alloc_tx_ringEj",
+        "Fix alloc_dma_buffer (Sonoma)",
+        "4889DF41B803000000",
+        "4889DF41B813000000",
+        "23.0.0",
+        "25.99.99",
+    ),
+    (
+        "__ZN27AppleEthernetAquantiaAqtion13alloc_tx_ringEj",
+        "Fix IOBufferMemoryDescriptor::withOptions",
+        "BA00100000BF02000000",
+        "BA00100000BF12000000",
+        "21.4.0",
+        "25.99.99",
+    ),
+    (
+        "__ZN27AppleEthernetAquantiaAqtion14allocAvbPacketEj",
+        "Fix allocAvbPacket",
+        "4C89F741B803000000",
+        "4C89F741B813000000",
+        "21.4.0",
+        "22.99.99",
+    ),
+    (
+        "__ZN27AppleEthernetAquantiaAqtion14allocAvbPacketEj",
+        "Fix allocAvbPacket (Sonoma)",
+        "4889DF41B803000000",
+        "4889DF41B813000000",
+        "23.0.0",
+        "25.99.99",
+    ),
+    (
+        "__ZN27AppleEthernetAquantiaAqtion14allocPtpPacketEj",
+        "Fix allocPtpPacket",
+        "BA00020000BF03000000",
+        "BA00020000BF13000000",
+        "21.4.0",
+        "25.99.99",
+    ),
+];
+
+/// Kernel patches for an Aquantia NIC without AppleVTD on macOS 12+: always
+/// on AMD (no AMD-Vi support), and on Intel when the legacy wireless stack
+/// forces DisableIoMapper (research-amd §11; CaseySJ README: "They were
+/// created for AMD platforms, but work equally well on Intel platforms when
+/// AppleVTD is not enabled").
+fn aquantia_patches(ctx: &PlanContext, plan: &mut BuildPlan) {
+    let io_mapper_off = plan.kernel_blocks.iter().any(|b| b.enabled && b.identifier == IOSKYWALK_ID);
+    let needed = ctx.has_aquantia() && ctx.target >= MacOsVersion::Monterey && (ctx.is_amd() || io_mapper_off);
+    if !needed {
         return;
     }
-    push(
-        plan,
-        kext(
-            AMFIPASS_ID,
-            "AMFIPass.kext",
-            format!("Keeps AMFI enabled after root patching ({}).", st.root_patch.join("; ")),
-        )
-        .min(DARWIN_11),
-    );
-    // research-kexts §1.3: AMFIPass needs its beta flag on Darwin 25.
-    if ctx.target >= MacOsVersion::Tahoe {
-        boot_arg(plan, "-amfipassbeta");
+    for (base, comment, find, replace, min, max) in AQUANTIA_PATCHES {
+        let comment = format!("CaseySJ - {comment}");
+        if plan.kernel_patches.iter().any(|p| p.comment == comment && p.base == *base) {
+            continue;
+        }
+        plan.kernel_patches.push(BinaryPatch {
+            comment,
+            arch: "x86_64".into(),
+            identifier: "com.apple.driver.AppleEthernetAquantiaAqtion".into(),
+            base: (*base).into(),
+            find: (*find).into(),
+            mask: String::new(),
+            replace: (*replace).into(),
+            replace_mask: String::new(),
+            count: 1,
+            limit: 0,
+            skip: 0,
+            min_kernel: (*min).into(),
+            max_kernel: (*max).into(),
+            enabled: true,
+        });
     }
+    note(
+        plan,
+        NoteLevel::Info,
+        "ethernet",
+        "Aquantia kernel patches added",
+        "CaseySJ's Aquantia patches (set 1) let Apple's Aquantia driver work without AppleVTD on macOS 12.3 and \
+         newer; ForceAquantiaEthernet stays on. They are tested with AQC107 and AQC113 cards.",
+    );
 }
 
 // ── Ethernet ────────────────────────────────────────────────────────────────
@@ -934,7 +1076,7 @@ fn choose_nic(ctx: &PlanContext, nic: &ProfileNic, info: &EthernetInfo) -> NicCh
         }
         EthernetDriver::IntelI211 => {
             // Dortania ktext.md: AppleIGB "Requires macOS 12 and above";
-            // SmallTreeIntel82576 1.3.0 "macOS 10.15+" (1.2.5 covers 10.13-10.14).
+            // SmallTreeIntel82576 "macOS 10.13-14(v1.2.5), macOS 10.15+(v1.3.0)".
             if info.preferred_kext == Some("AppleIGB") {
                 if target < MacOsVersion::Monterey {
                     return NicChoice::unsupported(format!(
@@ -946,10 +1088,15 @@ fn choose_nic(ctx: &PlanContext, nic: &ProfileNic, info: &EthernetInfo) -> NicCh
                         .min(DARWIN_12),
                 )
             } else if target < MacOsVersion::Catalina {
-                NicChoice::unsupported(format!(
-                    "{chip}: the SmallTreeIntel82576 build in the catalog (1.3.0) needs macOS 10.15 or newer; on \
-                     10.13-10.14 add SmallTreeIntel82576 1.2.5 manually or use another NIC."
-                ))
+                NicChoice::with(
+                    kext(
+                        "SmallTreeIntel82576-1.2.5",
+                        "SmallTreeIntel82576.kext",
+                        format!("{chip} Ethernet (SmallTreeIntel82576 1.2.5, the build for macOS 10.13-10.14)."),
+                    )
+                    .min(DARWIN_10_13)
+                    .max(MAX_10_14),
+                )
             } else if target >= MacOsVersion::Monterey {
                 NicChoice::with(
                     kext(
@@ -1041,22 +1188,24 @@ fn choose_nic(ctx: &PlanContext, nic: &ProfileNic, info: &EthernetInfo) -> NicCh
             NicChoice::with(kext("AtherosE2200Ethernet", "AtherosE2200Ethernet.kext", format!("{chip} Ethernet.")))
         }
         EthernetDriver::RealtekRtl8111 => {
-            if target < MacOsVersion::Mojave {
-                // Mieze's changelog: 2.3.0 and newer need macOS 10.14.
-                return NicChoice::unsupported(format!(
-                    "{chip}: the RealtekRTL8111 builds in the catalog need macOS 10.14 or newer; on 10.13 use \
-                     RealtekRTL8111 2.2.2 (added manually) or another NIC."
-                ));
-            }
+            // Dortania ktext.md: 2.2.2 needs 10.12+, 2.3.0 and newer 10.14+.
             // Mieze: AMD CPUs cannot use AppleVTD, keep 2.4.2 there.
-            let (id, why) = if ctx.is_amd() {
-                ("RealtekRTL8111-2.4.2", "2.4.2: the AppleVTD build is not for AMD systems")
+            let sel = if target < MacOsVersion::Mojave {
+                kext(
+                    "RealtekRTL8111-2.2.2",
+                    "RealtekRTL8111.kext",
+                    format!("{chip} Ethernet (RealtekRTL8111 2.2.2, the last build for macOS 10.13)."),
+                )
+                .max(MAX_10_13)
             } else {
-                ("RealtekRTL8111", "AppleVTD-capable 3.0.0")
+                let (id, why) = if ctx.is_amd() {
+                    ("RealtekRTL8111-2.4.2", "2.4.2: the AppleVTD build is not for AMD systems")
+                } else {
+                    ("RealtekRTL8111", "AppleVTD-capable 3.0.0")
+                };
+                kext(id, "RealtekRTL8111.kext", format!("{chip} Ethernet (RealtekRTL8111 {why}).")).min(DARWIN_10_14)
             };
-            let mut c = NicChoice::with(
-                kext(id, "RealtekRTL8111.kext", format!("{chip} Ethernet (RealtekRTL8111 {why}).")).min(DARWIN_10_14),
-            );
+            let mut c = NicChoice::with(sel);
             c.spoof = info.device_id_spoof;
             c
         }
@@ -1073,22 +1222,19 @@ fn choose_nic(ctx: &PlanContext, nic: &ProfileNic, info: &EthernetInfo) -> NicCh
         }
         EthernetDriver::NativeAquantia => {
             // research-amd §11: from macOS 12 the Aquantia driver relies on
-            // AppleVTD, which AMD systems never have: it works there only
-            // with CaseySJ's kernel patches, which are not part of the build.
-            let amd_needs_patches = ctx.is_amd() && target >= MacOsVersion::Monterey;
-            let mut c = NicChoice::native(!amd_needs_patches);
-            c.notes.push(format!(
-                "{chip} uses Apple's built-in Aquantia driver; the Kernel quirk ForceAquantiaEthernet must be on \
-                 (set by the quirks stage)."
-            ));
-            if amd_needs_patches {
-                c.notes.push(
-                    "On AMD (no AppleVTD) macOS 12+ also needs CaseySJ's Aquantia kernel patches \
-                     (CaseySJ/Aquantia-macOS-Patches), which are not added automatically; until they are added \
-                     the port does not work."
-                        .into(),
-                );
-            }
+            // AppleVTD, which AMD systems never have: there it works with
+            // CaseySJ's kernel patches (`aquantia_patches`).
+            // OpenCore applies ForceAquantiaEthernet from 10.15.4 on; the quirks
+            // stage sets it from 10.15 (Configuration.tex, CommonPatches.c).
+            let mut c = NicChoice::native(true);
+            c.notes.push(if target >= MacOsVersion::Catalina {
+                format!(
+                    "{chip} uses Apple's built-in Aquantia driver with the Kernel quirk ForceAquantiaEthernet (set \
+                     by the quirks stage)."
+                )
+            } else {
+                format!("{chip} uses Apple's built-in Aquantia driver, which matches it before macOS 10.15.4.")
+            });
             c
         }
         EthernetDriver::NativeBroadcom => {
@@ -1361,7 +1507,6 @@ fn legacy_wireless_intel(ctx: &PlanContext, plan: &mut BuildPlan, st: &mut State
         .max(&max),
     );
     block_skywalk(plan, DARWIN_15, "AirportItlwm legacy wireless stack");
-    st.root_patch.push("legacy wireless stack for Intel Wi-Fi".into());
     st.wifi_ok = true;
     note(
         plan,
@@ -1384,12 +1529,12 @@ fn legacy_wireless_intel(ctx: &PlanContext, plan: &mut BuildPlan, st: &mut State
 }
 
 fn block_skywalk(plan: &mut BuildPlan, min: &str, why: &str) {
-    if plan.kernel_blocks.iter().any(|b| b.identifier == "com.apple.iokit.IOSkywalkFamily") {
+    if plan.kernel_blocks.iter().any(|b| b.identifier == IOSKYWALK_ID) {
         return;
     }
     plan.kernel_blocks.push(KernelBlock {
         comment: format!("Allow IOSkywalkFamily downgrade ({why})"),
-        identifier: "com.apple.iokit.IOSkywalkFamily".into(),
+        identifier: IOSKYWALK_ID.into(),
         strategy: "Exclude".into(),
         min_kernel: min.into(),
         max_kernel: String::new(),
@@ -1504,7 +1649,6 @@ fn broadcom_wifi(
         );
     }
     block_skywalk(plan, DARWIN_14, "legacy Broadcom wireless stack");
-    st.root_patch.push(format!("Modern Wireless patch for the {chip}"));
     note(
         plan,
         NoteLevel::Warning,
@@ -1903,27 +2047,30 @@ fn storage(ctx: &PlanContext, plan: &mut BuildPlan) {
                 )
                 .min(DARWIN_11),
             );
-        } else if rst_mode {
-            note(
-                plan,
-                NoteLevel::Warning,
-                "storage",
-                "SATA controller needs SATA-unsupported.kext",
-                "On macOS 10.15 and older this Intel RST-mode SATA controller needs SATA-unsupported.kext, which is \
-                 not in the download catalog: switch SATA to AHCI in the BIOS, add the kext manually or use an NVMe \
-                 drive.",
-            );
         } else {
             // Dortania ktext.md: CtlnaAHCIPort is a Big Sur+ matter, "Catalina
-            // and older need not concern"; SATA-unsupported only if needed.
-            note(
+            // and older need not concern"; SATA-unsupported's personalities
+            // list exactly the controller ids device_db flags.
+            push(
                 plan,
-                NoteLevel::Info,
-                "storage",
-                "SATA drive not visible?",
-                "If the installer does not show the SATA drive on macOS 10.15 or older, add SATA-unsupported.kext \
-                 (not in the download catalog) to EFI/OC/Kexts.",
+                kext(
+                    "SATA-unsupported",
+                    "SATA-unsupported.kext",
+                    "AHCI injector for an Intel SATA controller macOS 10.15 and older do not match.",
+                )
+                .required_if(rst_mode)
+                .max(MAX_10_15),
             );
+            if rst_mode {
+                note(
+                    plan,
+                    NoteLevel::Info,
+                    "storage",
+                    "SATA controller in RST mode",
+                    "SATA-unsupported.kext makes macOS see the controller; switching SATA to AHCI in the BIOS is \
+                     still the more reliable setup.",
+                );
+            }
         }
     }
 }
@@ -2188,6 +2335,11 @@ mod tests {
         }
     }
 
+    /// AMFIPass is planned (patched graphics or wireless drivers).
+    fn plans_root_patch(plan: &BuildPlan) -> bool {
+        plan.kexts.iter().any(|k| k.catalog_id == AMFIPASS_ID && k.enabled)
+    }
+
     fn find<'a>(plan: &'a BuildPlan, catalog: &str, bundle: &str) -> &'a KextSelection {
         plan.kexts
             .iter()
@@ -2390,7 +2542,12 @@ mod tests {
             .notes
             .iter()
             .any(|n| n.component == "audio" && n.level == NoteLevel::Warning && n.title.contains("macOS 26")));
-        assert!(plan.post_install.iter().any(|n| n.title.contains("AppleHDA")));
+        // SIP stays enabled unless the user opts into the audio root patch.
+        assert!(plan
+            .post_install
+            .iter()
+            .any(|n| n.component == "audio" && n.title.contains("root patch")));
+        assert!(!plan.post_install.iter().any(|n| n.component == ROOT_PATCH_COMPONENT));
         find(&plan, "itlwm", "itlwm.kext");
         // The maintained IntelBluetoothFirmware fork supports macOS 26 itself.
         assert!(arg(&plan, "-ibtcompatbeta").is_none());
@@ -2409,20 +2566,29 @@ mod tests {
         assert_eq!(prop(&big_sur, NIC_PATH, "built-in"), Some(&data(&[1])));
         assert!(!network_warning(&big_sur));
         assert!(!has_catalog(&big_sur, "AppleMCEReporterDisabler"), "AMD needs it from 12.3");
-        // Monterey on AMD: no AppleVTD, so the port needs the CaseySJ patches.
+        assert!(!big_sur.kernel_patches.iter().any(|k| k.comment.starts_with("CaseySJ")));
+        // Monterey on AMD: no AppleVTD, so the port runs on the CaseySJ patches.
         let plan = run(&p, Monterey, "MacPro7,1");
-        assert!(plan
-            .notes
-            .iter()
-            .any(|n| n.component == "ethernet" && n.level == NoteLevel::Warning && n.detail.contains("CaseySJ")));
-        assert!(prop(&plan, NIC_PATH, "built-in").is_none());
-        assert!(network_warning(&plan));
+        let casey: Vec<&BinaryPatch> =
+            plan.kernel_patches.iter().filter(|k| k.comment.starts_with("CaseySJ")).collect();
+        assert_eq!(casey.len(), 9);
+        for k in &casey {
+            assert_eq!(k.identifier, "com.apple.driver.AppleEthernetAquantiaAqtion");
+            assert!(k.base.starts_with("__ZN27AppleEthernetAquantiaAqtion"));
+            assert_eq!(k.find.len(), k.replace.len());
+            assert!(darwin(&k.min_kernel) >= darwin("21.4.0") && k.mask.is_empty());
+        }
+        assert!(has_note(&plan, "ethernet", "CaseySJ"));
+        assert_eq!(prop(&plan, NIC_PATH, "built-in"), Some(&data(&[1])));
+        assert!(!network_warning(&plan));
         assert_eq!(arg(&plan, "revpatch="), Some("revpatch=pci,cpuname"));
         find(&plan, "AppleMCEReporterDisabler", "AppleMCEReporterDisabler.kext");
-        // Intel boards keep AppleVTD, so the native driver counts as working.
+        // Intel boards keep AppleVTD, so the native driver needs no patches.
         let mut intel = machine(P::CometLake, FormFactor::Desktop, Some("Z490"), "ASUS");
         intel.ethernet = p.ethernet.clone();
-        assert!(!network_warning(&run(&intel, Monterey, "iMac20,1")));
+        let plan = run(&intel, Monterey, "iMac20,1");
+        assert!(!network_warning(&plan));
+        assert!(!plan.kernel_patches.iter().any(|k| k.comment.starts_with("CaseySJ")));
     }
 
     #[test]
@@ -2470,13 +2636,13 @@ mod tests {
     }
 
     #[test]
-    fn rtl8111_on_high_sierra_has_no_usable_build() {
+    fn rtl8111_on_high_sierra_uses_the_2_2_2_build() {
         let mut p = machine(P::Haswell, FormFactor::Desktop, Some("Z97"), "Gigabyte");
         p.ethernet = vec![pci("10ec", "8168", Some(NIC_PATH))];
         let plan = run(&p, HighSierra, "iMac15,1");
-        assert!(!plan.kexts.iter().any(|k| k.bundle == "RealtekRTL8111.kext"));
-        assert!(has_note(&plan, "ethernet", "10.14"));
-        assert!(network_warning(&plan));
+        let rtl = find(&plan, "RealtekRTL8111-2.2.2", "RealtekRTL8111.kext");
+        assert_eq!(range(rtl), (None, Some("17.99.99")));
+        assert!(!network_warning(&plan));
         // Intel desktop: the 3.0.0 build is used from Mojave on.
         let plan = run(&p, Mojave, "iMac15,1");
         find(&plan, "RealtekRTL8111", "RealtekRTL8111.kext");
@@ -3003,7 +3169,10 @@ mod tests {
             .any(|n| n.component == "storage" && n.level == NoteLevel::Warning && n.detail.contains("PM981")));
         let catalina = run(&p, Catalina, "MacBookPro14,1");
         assert!(!has_catalog(&catalina, "CtlnaAHCIPort"));
-        assert!(has_note(&catalina, "storage", "SATA-unsupported"));
+        let sata = find(&catalina, "SATA-unsupported", "SATA-unsupported.kext");
+        assert!(!sata.required);
+        assert_eq!(range(sata), (None, Some("19.99.99")));
+        assert!(!has_catalog(&plan, "SATA-unsupported"));
     }
 
     #[test]
@@ -3155,8 +3324,11 @@ mod tests {
         p.ethernet = vec![pci("8086", "1539", Some(NIC_PATH))];
         let mojave = run(&p, Mojave, "iMac19,1");
         assert!(!has_catalog(&mojave, "SmallTreeIntel82576") && !has_catalog(&mojave, "AppleIGB"));
-        assert!(has_note(&mojave, "ethernet", "1.2.5"));
-        assert!(network_warning(&mojave));
+        let old = find(&mojave, "SmallTreeIntel82576-1.2.5", "SmallTreeIntel82576.kext");
+        assert_eq!(range(old), (Some("17.0.0"), Some("18.99.99")));
+        assert!(!network_warning(&mojave));
+        let catalina = run(&p, Catalina, "iMac19,1");
+        assert!(has_catalog(&catalina, "SmallTreeIntel82576") && !has_catalog(&catalina, "SmallTreeIntel82576-1.2.5"));
         // 82580: only AppleIGB, which needs macOS 12.
         p.ethernet = vec![pci("8086", "150e", Some(NIC_PATH))];
         let big_sur = run(&p, BigSur, "iMac19,1");
@@ -3251,7 +3423,7 @@ mod tests {
     }
 
     #[test]
-    fn rst_mode_sata_warns_before_big_sur() {
+    fn rst_mode_sata_gets_sata_unsupported_before_big_sur() {
         let mut p = machine(P::CoffeeLake, FormFactor::Laptop, None, "Dell Inc.");
         p.storage = vec![ProfileStorage {
             name: "Intel RST".into(),
@@ -3261,10 +3433,11 @@ mod tests {
             size_bytes: None,
         }];
         let plan = run(&p, Catalina, "MacBookPro15,2");
-        assert!(plan.notes.iter().any(|n| n.level == NoteLevel::Warning && n.title.contains("SATA-unsupported")));
+        assert!(find(&plan, "SATA-unsupported", "SATA-unsupported.kext").required);
+        assert!(has_note(&plan, "storage", "RST"));
         p.storage[0].device_id = Some("a353".into());
         let plan = run(&p, Catalina, "MacBookPro15,2");
-        assert!(plan.notes.iter().any(|n| n.component == "storage" && n.level == NoteLevel::Info));
+        assert!(!find(&plan, "SATA-unsupported", "SATA-unsupported.kext").required);
         assert!(!plan.notes.iter().any(|n| n.component == "storage" && n.level == NoteLevel::Warning));
         find(&run(&p, BigSur, "MacBookPro15,2"), "CtlnaAHCIPort", "CtlnaAHCIPort.kext");
     }

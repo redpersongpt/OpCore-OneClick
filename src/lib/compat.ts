@@ -3,12 +3,16 @@ import { compareMacos } from './macos';
 
 /**
  * - `ok`: the selected release is supported for this hardware.
- * - `expert`: support is only partial or unconfirmed (release not marked as
- *   supported, a blocking note, or a contradictory overall verdict); the user
- *   may continue only after an explicit expert override.
+ * - `expert`: the release runs only through workarounds (CryptexFixup or
+ *   telemetrap past the CPU's native ceiling, post-install root patches), or a
+ *   supported release comes with a blocking note or a contradictory verdict;
+ *   the user may continue only after an explicit expert confirmation.
  * - `blocked`: this hardware cannot run the selected release.
  */
 export type CompatGate = 'ok' | 'expert' | 'blocked';
+
+/** How a release the report does not support can be reached. */
+export type Reach = 'expert' | 'blocked';
 
 export function findOption(report: CompatibilityReport | null, version: MacOsVersion | null): MacOsOption | null {
   if (!report || !version) return null;
@@ -26,7 +30,17 @@ export function compatGate(report: CompatibilityReport | null, version: MacOsVer
   if (option.supported) {
     return hasBlockingNotes(report.notes) || report.level === 'unsupported' ? 'expert' : 'ok';
   }
-  return report.level === 'unsupported' ? 'blocked' : 'expert';
+  return reachOf(report);
+}
+
+/**
+ * For a report evaluated for a release that is not supported: the backend
+ * rates a release reachable through workarounds "partial" (an expert option);
+ * "unsupported" or "unknown" (the CPU or its core count is not known) leave
+ * nothing to override.
+ */
+export function reachOf(report: CompatibilityReport): Reach {
+  return report.level === 'partial' && !hasBlockingNotes(report.notes) ? 'expert' : 'blocked';
 }
 
 /** Target to preselect when the user has not chosen one. */

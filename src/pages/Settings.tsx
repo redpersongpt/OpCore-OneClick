@@ -7,7 +7,7 @@ import { ErrorPanel } from '../components/feedback/ErrorPanel';
 import { Badge } from '../components/ui/Badge';
 import { Banner } from '../components/ui/Banner';
 import { Button } from '../components/ui/Button';
-import { Field, Select } from '../components/ui/Field';
+import { Field, Select, Toggle } from '../components/ui/Field';
 import { Modal } from '../components/ui/Modal';
 import { KeyValue, Section } from '../components/ui/Section';
 import { LANGUAGES, useI18n, type Lang } from '../i18n';
@@ -18,9 +18,13 @@ import { useApp } from '../stores/app';
 import { useBuild } from '../stores/build';
 import { useCompat } from '../stores/compat';
 import { useDeploy } from '../stores/deploy';
-import { afterCacheCleared } from '../stores/flow';
+import { afterCacheCleared, setOptions } from '../stores/flow';
 import { useHardware } from '../stores/hardware';
+import { useTasks } from '../stores/tasks';
 import { useWizard } from '../stores/wizard';
+
+/** Errors that only mean "another operation is using the files right now". */
+const BUSY_CODES = ['BUSY', 'BUILD_IN_PROGRESS', 'FLASH_IN_PROGRESS', 'RECOVERY_IN_PROGRESS'];
 
 type Busy = 'export' | 'cache' | 'recovery' | 'state' | 'report' | null;
 
@@ -34,7 +38,10 @@ export default function Settings() {
   const updateChecking = useApp((s) => s.updateChecking);
   const updateError = useApp((s) => s.updateError);
   const checkUpdates = useApp((s) => s.checkUpdates);
-  const locked = useWizard((s) => s.locks.length > 0);
+  const wizardLocked = useWizard((s) => s.locks.length > 0);
+  const taskRunning = useTasks((s) => Object.values(s.tasks).some((task) => task.status === 'running'));
+  const locked = wizardLocked || taskRunning;
+  const useLatest = useBuild((s) => s.draft.useLatestReleases);
 
   const [sessionId, setSessionId] = useState<string | null>(null);
   const [log, setLog] = useState('');
@@ -42,6 +49,7 @@ export default function Settings() {
   const [busy, setBusy] = useState<Busy>(null);
   const [status, setStatus] = useState<string | null>(null);
   const [error, setError] = useState<AppError | null>(null);
+  const [busyNotice, setBusyNotice] = useState(false);
 
   const loadLog = useCallback(async () => {
     setLogLoading(true);
@@ -61,6 +69,7 @@ export default function Settings() {
     if (!open) return;
     setStatus(null);
     setError(null);
+    setBusyNotice(false);
     void loadLog();
   }, [open, loadLog]);
 
@@ -68,11 +77,14 @@ export default function Settings() {
     setBusy(kind);
     setStatus(null);
     setError(null);
+    setBusyNotice(false);
     try {
       const message = await action();
       if (message) setStatus(message);
     } catch (err) {
-      setError(toAppError(err));
+      const appError = toAppError(err);
+      if (BUSY_CODES.includes(appError.code)) setBusyNotice(true);
+      else setError(appError);
     } finally {
       setBusy(null);
     }
@@ -144,6 +156,21 @@ export default function Settings() {
               />
             )}
           </Field>
+        </Section>
+
+        <Section title={t('settings.downloads')}>
+          <Toggle
+            checked={useLatest}
+            onChange={(value) => setOptions({ useLatestReleases: value })}
+            label={t('settings.latest')}
+            description={t('settings.latestHint')}
+            disabled={locked}
+          />
+          <ul className="mt-2 list-disc space-y-0.5 pl-9 text-xs text-fg-3">
+            <li>{t('settings.latestOff')}</li>
+            <li>{t('settings.latestOn')}</li>
+            <li>{t('settings.latestFails')}</li>
+          </ul>
         </Section>
 
         <Section title={t('settings.about')}>
@@ -223,6 +250,11 @@ export default function Settings() {
           </div>
           {locked && <p className="mt-2 text-xs text-fg-3">{t('settings.lockedHint')}</p>}
           {status && <Banner tone="success" className="mt-3">{status}</Banner>}
+          {busyNotice && (
+            <Banner tone="warning" className="mt-3" title={t('settings.busyTitle')}>
+              {t('settings.busyBody')}
+            </Banner>
+          )}
           {error && (
             <div className="mt-3">
               <ErrorPanel error={error} compact />

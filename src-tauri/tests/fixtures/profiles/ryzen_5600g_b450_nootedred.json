@@ -1,0 +1,81 @@
+{
+  "cpu": {
+    "name": "AMD Ryzen 5 5600G with Radeon Graphics",
+    "vendor": "amd",
+    "platform": "amd_zen3",
+    "codename": "Cezanne",
+    "family": 25,
+    "model": 80,
+    "stepping": 0,
+    "cores": 6,
+    "threads": 12,
+    "isMobile": false,
+    "hasAvx2": true,
+    "hasSse42": true,
+    "isHybrid": false
+  },
+  "formFactor": "desktop",
+  "vm": null,
+  "gpus": [
+    {
+      "name": "AMD Radeon(TM) Graphics",
+      "vendor": "amd",
+      "family": "amd_apu_vega",
+      "vendorId": "1002",
+      "deviceId": "1638",
+      "subsystemId": "7c951462",
+      "isIgpu": true,
+      "pciPath": "PciRoot(0x0)/Pci(0x8,0x1)/Pci(0x0,0x0)",
+      "acpiPath": "\\_SB.PCI0.GP17.VGA",
+      "vramMb": 512,
+      "disabled": false
+    }
+  ],
+  "audio": {
+    "codecName": "Realtek ALC892",
+    "codecId": 283904146,
+    "controllerVendorId": "1022",
+    "controllerDeviceId": "15e3",
+    "controllerPciPath": "PciRoot(0x0)/Pci(0x8,0x1)/Pci(0x0,0x6)",
+    "layoutId": null
+  },
+  "ethernet": [
+    {
+      "name": "Realtek PCIe GbE Family Controller (RTL8111H)",
+      "bus": "pci",
+      "vendorId": "10ec",
+      "deviceId": "8168",
+      "subsystemId": "7b891462",
+      "pciPath": "PciRoot(0x0)/Pci(0x1,0x2)/Pci(0x0,0x2)/Pci(0x6,0x0)/Pci(0x0,0x0)",
+      "macAddress": "00:D8:61:AB:CD:04"
+    }
+  ],
+  "wifi": null,
+  "bluetooth": null,
+  "input": {
+    "keyboardBus": "usb",
+    "touchpadBus": null,
+    "touchpadVendor": null,
+    "touchpadHid": null,
+    "hasTouchscreen": false
+  },
+  "storage": [
+    {
+      "name": "WDC WDS500G3X0C-00SJG0 (SN750)",
+      "kind": "nvme",
+      "vendorId": "15b7",
+      "deviceId": "5006",
+      "sizeBytes": 500000000000
+    }
+  ],
+  "motherboardVendor": "Micro-Star International Co., Ltd.",
+  "motherboardModel": "B450M MORTAR MAX (MS-7B89)",
+  "chipset": "B450",
+  "ramGb": 16,
+  "hasBattery": false,
+  "firmwareUefi": true,
+  "acpi": null,
+  "acpiTablesDir": null,
+  "source": "scan",
+  "scanConfidence": 0.92
+}

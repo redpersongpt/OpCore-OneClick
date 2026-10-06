@@ -1,0 +1,119 @@
+{
+  "cpu": {
+    "name": "AMD Ryzen 9 7950X 16-Core Processor",
+    "vendor": "amd",
+    "platform": "amd_zen4",
+    "codename": "Raphael",
+    "family": 25,
+    "model": 97,
+    "stepping": 2,
+    "cores": 16,
+    "threads": 32,
+    "isMobile": false,
+    "hasAvx2": true,
+    "hasSse42": true,
+    "isHybrid": false
+  },
+  "formFactor": "desktop",
+  "vm": null,
+  "gpus": [
+    {
+      "name": "AMD Radeon(TM) Graphics",
+      "vendor": "amd",
+      "family": "amd_apu_rdna",
+      "vendorId": "1002",
+      "deviceId": "164e",
+      "subsystemId": "88771043",
+      "isIgpu": true,
+      "pciPath": "PciRoot(0x0)/Pci(0x8,0x1)/Pci(0x0,0x0)",
+      "acpiPath": "\\_SB.PCI0.GP17.VGA",
+      "vramMb": null,
+      "disabled": false
+    },
+    {
+      "name": "AMD Radeon RX 6950 XT",
+      "vendor": "amd",
+      "family": "amd_navi21",
+      "vendorId": "1002",
+      "deviceId": "73a5",
+      "subsystemId": "e4581da2",
+      "isIgpu": false,
+      "pciPath": "PciRoot(0x0)/Pci(0x3,0x1)/Pci(0x0,0x0)/Pci(0x0,0x0)/Pci(0x0,0x0)",
+      "acpiPath": "\\_SB.PCI0.GPP0.SWUS.SWDS.VGA",
+      "vramMb": 16384,
+      "disabled": false
+    }
+  ],
+  "audio": null,
+  "ethernet": [
+    {
+      "name": "Intel(R) Ethernet Controller I225-V",
+      "bus": "pci",
+      "vendorId": "8086",
+      "deviceId": "15f3",
+      "subsystemId": "87d21043",
+      "pciPath": "PciRoot(0x0)/Pci(0x2,0x1)/Pci(0x0,0x0)/Pci(0x8,0x0)/Pci(0x0,0x0)",
+      "macAddress": "08:BF:B8:12:34:56"
+    },
+    {
+      "name": "Marvell AQtion 10Gbit Network Adapter (AQC113CS)",
+      "bus": "pci",
+      "vendorId": "1d6a",
+      "deviceId": "04c0",
+      "subsystemId": "87d21043",
+      "pciPath": "PciRoot(0x0)/Pci(0x2,0x2)/Pci(0x0,0x0)",
+      "macAddress": "08:BF:B8:12:34:57"
+    }
+  ],
+  "wifi": {
+    "name": "MediaTek Wi-Fi 6E MT7922 160MHz",
+    "bus": "pci",
+    "vendorId": "14c3",
+    "deviceId": "0616",
+    "subsystemId": "e0d613d3",
+    "pciPath": "PciRoot(0x0)/Pci(0x2,0x1)/Pci(0x0,0x0)/Pci(0x9,0x0)/Pci(0x0,0x0)",
+    "macAddress": "F4:26:79:11:22:33"
+  },
+  "bluetooth": {
+    "name": "MediaTek Bluetooth MT7922",
+    "bus": "usb",
+    "vendorId": "0489",
+    "deviceId": "e0d8",
+    "subsystemId": null,
+    "pciPath": null,
+    "macAddress": null
+  },
+  "input": {
+    "keyboardBus": "usb",
+    "touchpadBus": null,
+    "touchpadVendor": null,
+    "touchpadHid": null,
+    "hasTouchscreen": false
+  },
+  "storage": [
+    {
+      "name": "Samsung SSD 980 PRO 2TB",
+      "kind": "nvme",
+      "vendorId": "144d",
+      "deviceId": "a80a",
+      "sizeBytes": 2000000000000
+    },
+    {
+      "name": "WD_BLACK SN770 1TB",
+      "kind": "nvme",
+      "vendorId": "15b7",
+      "deviceId": "5017",
+      "sizeBytes": 1000000000000
+    }
+  ],
+  "motherboardVendor": "ASUSTeK COMPUTER INC.",
+  "motherboardModel": "ROG CROSSHAIR X670E HERO",
+  "chipset": "X670E",
+  "ramGb": 64,
+  "hasBattery": false,
+  "firmwareUefi": true,
+  "acpi": null,
+  "acpiTablesDir": null,
+  "source": "scan",
+  "scanConfidence": 0.92
+}

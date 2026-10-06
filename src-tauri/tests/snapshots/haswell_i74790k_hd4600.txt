@@ -1,0 +1,126 @@
+fixture: haswell_i74790k_hd4600
+cpu: Intel(R) Core(TM) i7-4790K CPU @ 4.00GHz | Haswell (Haswell) | 4C/8T | avx2 true
+machine: Desktop | ASUSTeK COMPUTER INC. Z97-A | chipset Z97 | uefi true
+gpu: Intel(R) HD Graphics 4600 [8086:0412 IntelHaswell igpu]
+audio: Realtek ALC892 [10ec0892]
+net: Intel(R) Ethernet Connection (2) I218-V [8086:15a1 Pci]
+assessment: Supported, recommended 12
+summary: macOS Monterey 12 is fully supported. This machine can run macOS High Sierra 10.13 to macOS Monterey 12. It is the recommended release.
+releases:
+  10.13 supported   | ok iMac14,4 sbm=Disabled csr=00000000 gpu=WhateverGreen kexts=9 ssdts=2
+  10.14 supported   | ok iMac14,4 sbm=Disabled csr=00000000 gpu=WhateverGreen kexts=10 ssdts=2
+  10.15 supported   | ok iMac14,4 sbm=Disabled csr=00000000 gpu=WhateverGreen kexts=10 ssdts=2
+  11    supported   | ok iMac14,4 sbm=Default csr=00000000 gpu=WhateverGreen kexts=10 ssdts=2
+  12    supported   | ok iMac16,2 sbm=Default csr=00000000 gpu=WhateverGreen kexts=10 ssdts=2
+  13    expert      root-patch | ok iMac18,1 sbm=Disabled csr=00000803 gpu=WhateverGreen kexts=12 ssdts=2
+  14    expert      root-patch | ok iMac19,1 sbm=Disabled csr=00000803 gpu=WhateverGreen kexts=12 ssdts=2
+  15    expert      root-patch | ok iMac19,1 sbm=Disabled csr=00000803 gpu=WhateverGreen kexts=12 ssdts=2
+  26    expert      root-patch | ok iMac20,1 sbm=Disabled csr=00000803 gpu=WhateverGreen kexts=12 ssdts=2
+report-notes:
+  [warning] platform: BitLocker and dual boot
+
+== plan for macOS Monterey 12 (recommended) ==
+smbios: iMac16,2 | alternatives: iMac18,1 iMac19,1 iMac20,1
+secure-boot-model: Default
+csr-active-config: 00000000
+boot-args: -v keepsyms=1 debug=0x100
+kexts:
+  + Lilu.kext (Lilu) required
+  + VirtualSMC.kext (VirtualSMC) required
+  + WhateverGreen.kext (WhateverGreen) required
+  + SMCProcessor.kext (VirtualSMC)
+  + SMCSuperIO.kext (VirtualSMC)
+  + AppleALC.kext (AppleALC) required
+  + IntelMausi.kext (IntelMausi) required
+  + USBToolBox.kext (USBToolBox) required
+  + UTBDefault.kext (USBToolBox) required
+  + NVMeFix.kext (NVMeFix) [18.0.0..]
+ssdts:
+  SSDT-PLUG.aml <- opencore SSDT-PLUG.aml
+  SSDT-EC-DESKTOP.aml <- dortania SSDT-EC-DESKTOP.aml
+device-properties:
+  PciRoot(0x0)/Pci(0x2,0x0)
+    AAPL,ig-platform-id = <0300220D>
+    framebuffer-patch-enable = <01000000>
+    framebuffer-stolenmem = <00003001>
+    framebuffer-fbmem = <00009000>
+  PciRoot(0x0)/Pci(0x1b,0x0)
+    layout-id = <01000000>
+  PciRoot(0x0)/Pci(0x19,0x0)
+    built-in = <01>
+acpi-quirks:
+  on: ResetLogoStatus
+  off: FadtEnableReset NormalizeHeaders RebaseRegions ResetHwSig SyncTableIds
+booter-quirks:
+  on: AvoidRuntimeDefrag EnableSafeModeSlide EnableWriteUnprotector FixupAppleEfiImages ProvideCustomSlide SetupVirtualMap
+  off: DevirtualiseMmio ProtectMemoryRegions ProtectUefiServices RebuildAppleMemoryMap SyncRuntimePermissions
+  set: ResizeAppleGpuBars=-1
+kernel-quirks:
+  on: AppleXcpmCfgLock DisableIoMapper DisableLinkeditJettison PanicNoKextDump PowerTimeoutKernelPanic
+  off: AppleCpuPmCfgLock AppleXcpmExtraMsrs AppleXcpmForceBoost CustomSMBIOSGuid DisableIoMapperMapping DisableRtcChecksum ExtendBTFeatureFlags ForceAquantiaEthernet ForceSecureBootScheme IncreasePciBarSize LapicKernelPanic ProvideCurrentCpuInfo ThirdPartyDrives XhciPortLimit
+  set: SetApfsTrimTimeout=-1
+kernel-emulate:
+  off: DummyPowerManagement
+  set: Cpuid1Data=<> Cpuid1Mask=<>
+misc-boot:
+  on: ShowPicker
+  off: HideAuxiliary PickerAudioAssist PollAppleHotKeys
+  set: ConsoleAttributes=0 HibernateMode="None" LauncherOption="Disabled" LauncherPath="Default" PickerAttributes=17 PickerMode="External" PickerVariant="Acidanthera\GoldenGate" TakeoffDelay=0 Timeout=5
+misc-security:
+  on: AllowSetDefault BlacklistAppleUpdate
+  off: AuthRestart EnablePassword
+  set: ApECID=0 DmgLoading="Signed" ExposeSensitiveData=6 ScanPolicy=0 SecureBootModel="Default" Vault="Optional"
+tools: OpenShell.efi ControlMsrE2.efi
+nvram:
+  on: WriteFlash
+  off: LegacyOverwrite
+platform-info:
+  on: Automatic UpdateDataHub UpdateNVRAM UpdateSMBIOS
+  off: CustomMemory UseRawUuidEncoding
+  set: UpdateSMBIOSMode="Create"
+drivers: OpenRuntime.efi HfsPlus.efi OpenCanopy.efi ResetNvramEntry.efi
+uefi-quirks:
+  on: EnableVectorAcceleration IgnoreInvalidFlexRatio RequestBootVarRouting
+  off: DisableSecurityPolicy ForceOcWriteFlash ReleaseUsbOwnership UnblockFsConnect
+  set: ResizeGpuBars=-1
+uefi-apfs:
+  on: EnableJumpstart HideVerbose
+  off: GlobalConnect JumpstartHotPlug
+  set: MinDate=0 MinVersion=0
+uefi-output:
+  on: ProvideConsoleGop
+  off: DirectGopRendering ForceResolution ReconnectOnResChange
+  set: GopPassThrough="Disabled" Resolution="Max" TextRenderer="BuiltinGraphics" UIScale=0
+uefi-input:
+  on: KeySupport
+  off: KeyFiltering KeySwap PointerSupport
+  set: KeyForgetThreshold=5 KeySupportMode="Auto" TimerResolution=50000
+bios: CSM (Compatibility Support Module) = disable (required)
+bios: Secure Boot = disable (required)
+bios: Fast Boot = disable (required)
+bios: OS Type = Windows 8.1/10 UEFI Mode (or Other OS)
+bios: SATA Mode = AHCI (required)
+bios: EHCI/XHCI Hand-off = enable (required)
+bios: Above 4G Decoding = enable
+bios: CFG Lock (MSR 0xE2 write protection) = disable
+bios: VT-d (Intel Virtualization for Directed I/O) = disable
+bios: VT-x (Intel Virtualization Technology) = enable
+bios: Execute Disable Bit = enable (required)
+bios: Intel Platform Trust Technology (PTT) = disable
+bios: Hyper-Threading = enable
+bios: DVMT Pre-Allocated = 64MB
+bios: Serial / Parallel port = disable
+notes:
+  [info] smbios: iMac16,2 stops at macOS 12.7.6
+  [info] gpu: Display: Intel(R) HD Graphics 4600
+  [info] acpi: Generic prebuilt SSDTs
+  [info] cpu: CFG Lock
+  [info] boot: Verbose boot is on
+post-install:
+  [info] boot: Copy the EFI to the internal drive
+  [info] usb: Map the USB ports
+  [info] bootloader: Boot picker after install
+  [info] audio: Try other layout-ids if a jack or the microphone is silent
+  [info] smbios: Check the serial number before using iServices
+  [info] boot: Turn off verbose boot
+  [warning] platform: Dual boot with Windows

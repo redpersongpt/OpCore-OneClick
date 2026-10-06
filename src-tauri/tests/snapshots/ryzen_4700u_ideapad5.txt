@@ -1,0 +1,154 @@
+fixture: ryzen_4700u_ideapad5
+cpu: AMD Ryzen 7 4700U with Radeon Graphics | AmdZen2 (Renoir) | 8C/8T | avx2 true
+machine: Laptop | LENOVO LNVNB161216 | chipset - | uefi true
+gpu: AMD Radeon(TM) Graphics [1002:1636 AmdApuVega igpu]
+audio: Realtek ALC257 [10ec0257]
+net: Intel Wi-Fi 6 AX200 160MHz [8086:2723 Pci]
+net: Intel Wireless Bluetooth AX200 [8087:0029 Usb]
+touchpad: I2c Some(Elan) ELAN0634
+assessment: Partial, recommended 15
+summary: macOS Sequoia 15 works with caveats. This machine can run macOS Catalina 10.15 to macOS Tahoe 26. It is the recommended release.
+releases:
+  10.13 unsupported | err NO_DISPLAY_PATH (recoverable)
+  10.14 unsupported | err NO_DISPLAY_PATH (recoverable)
+  10.15 supported   | ok MacBookPro16,2 sbm=Default csr=00000000 gpu=NootedRed kexts=23 ssdts=4
+  11    supported   | ok MacBookPro16,2 sbm=Default csr=00000000 gpu=NootedRed kexts=24 ssdts=4
+  12    supported   | ok MacBookPro16,2 sbm=Default csr=00000000 gpu=NootedRed kexts=24 ssdts=4
+  13    supported   | ok MacBookPro16,2 sbm=Default csr=00000000 gpu=NootedRed kexts=24 ssdts=4
+  14    supported   | ok MacBookPro16,2 sbm=Disabled csr=00000000 gpu=NootedRed kexts=24 ssdts=4
+  15    supported   | ok MacBookPro16,2 sbm=Disabled csr=00000000 gpu=NootedRed kexts=24 ssdts=4
+  26    supported   root-patch | ok MacBookPro16,2 sbm=Disabled csr=00000000 gpu=NootedRed kexts=24 ssdts=4
+report-notes:
+  [warning] network: No network in macOS Recovery
+  [warning] storage: SAMSUNG MZALQ512HALU-000L2 (PM991) cannot be used
+  [warning] platform: BitLocker and dual boot
+
+== plan for macOS Sequoia 15 (recommended) ==
+smbios: MacBookPro16,2 | alternatives: MacBookPro15,2
+secure-boot-model: Disabled
+csr-active-config: 00000000
+boot-args: revpatch=cpuname,sbvmm -v keepsyms=1 debug=0x100
+amd-core-count: 8
+kexts:
+  + Lilu.kext (Lilu) required
+  + VirtualSMC.kext (VirtualSMC) required
+  + NootedRed.kext (NootedRed) required
+  + SMCRadeonSensors.kext (SMCRadeonSensors)
+  + AMDRyzenCPUPowerManagement.kext (AMDRyzenCPUPowerManagement)
+  + SMCAMDProcessor.kext (SMCAMDProcessor)
+  + SMCBatteryManager.kext (VirtualSMC) required
+  + ECEnabler.kext (ECEnabler)
+  + BrightnessKeys.kext (BrightnessKeys)
+  + SMCLightSensor.kext (VirtualSMC)
+  + AppleALC.kext (AppleALC) required
+  + ForgedInvariant.kext (ForgedInvariant)
+  + itlwm.kext (itlwm)
+  + IntelBluetoothFirmware.kext (IntelBluetoothFirmware)
+  + IntelBTPatcher.kext (IntelBluetoothFirmware)
+  + BlueToolFixup.kext (BrcmPatchRAM) [21.0.0..]
+  + USBToolBox.kext (USBToolBox) required
+  + UTBDefault.kext (USBToolBox) required
+  + GenericUSBXHCI.kext (GenericUSBXHCI) [20.0.0..]
+  + VoodooPS2Controller.kext (VoodooPS2Controller) required
+      - VoodooInput.kext
+      + VoodooPS2Keyboard.kext
+      + VoodooPS2Trackpad.kext
+      + VoodooPS2Mouse.kext
+  + VoodooI2C.kext (VoodooI2C) required
+      + VoodooGPIO.kext
+      + VoodooI2CServices.kext
+      + VoodooInput.kext
+  + VoodooI2CHID.kext (VoodooI2C) required
+  + NVMeFix.kext (NVMeFix) [18.0.0..]
+  + RestrictEvents.kext (RestrictEvents)
+ssdts:
+  SSDT-EC-USBX.aml <- machine (353 bytes)
+  SSDT-XOSI.aml <- machine (417 bytes) (optional)
+  SSDT-PNLF.aml <- machine (105 bytes) (optional)
+  SSDT-ALS0.aml <- machine (166 bytes) (optional)
+acpi-patches:
+  + _OSI to XOSI rename - requires SSDT-XOSI.aml [5F4F5349 -> 584F5349]
+device-properties:
+  PciRoot(0x0)/Pci(0x8,0x1)/Pci(0x0,0x6)
+    layout-id = <0B000000>
+acpi-quirks:
+  on: ResetLogoStatus
+  off: FadtEnableReset NormalizeHeaders RebaseRegions ResetHwSig SyncTableIds
+booter-quirks:
+  on: AvoidRuntimeDefrag EnableSafeModeSlide FixupAppleEfiImages ProvideCustomSlide RebuildAppleMemoryMap SetupVirtualMap SyncRuntimePermissions
+  off: DevirtualiseMmio EnableWriteUnprotector ProtectMemoryRegions ProtectUefiServices
+  set: ResizeAppleGpuBars=-1
+kernel-quirks:
+  on: DisableLinkeditJettison PanicNoKextDump PowerTimeoutKernelPanic ProvideCurrentCpuInfo
+  off: AppleCpuPmCfgLock AppleXcpmCfgLock AppleXcpmExtraMsrs AppleXcpmForceBoost CustomSMBIOSGuid DisableIoMapper DisableIoMapperMapping DisableRtcChecksum ExtendBTFeatureFlags ForceAquantiaEthernet ForceSecureBootScheme IncreasePciBarSize LapicKernelPanic ThirdPartyDrives XhciPortLimit
+  set: SetApfsTrimTimeout=0
+kernel-emulate:
+  on: DummyPowerManagement
+  set: Cpuid1Data=<> Cpuid1Mask=<>
+misc-boot:
+  on: ShowPicker
+  off: HideAuxiliary PickerAudioAssist PollAppleHotKeys
+  set: ConsoleAttributes=0 HibernateMode="None" LauncherOption="Disabled" LauncherPath="Default" PickerAttributes=17 PickerMode="External" PickerVariant="Acidanthera\GoldenGate" TakeoffDelay=0 Timeout=5
+misc-security:
+  on: AllowSetDefault BlacklistAppleUpdate
+  off: AuthRestart EnablePassword
+  set: ApECID=0 DmgLoading="Signed" ExposeSensitiveData=6 ScanPolicy=0 SecureBootModel="Disabled" Vault="Optional"
+tools: OpenShell.efi
+nvram-add: 7C436110-AB2A-4BBB-A880-FE41995C9F82:bluetoothExternalDongleFailed = <00>
+nvram-add: 7C436110-AB2A-4BBB-A880-FE41995C9F82:bluetoothInternalControllerInfo = <0000000000000000000000000000>
+nvram-delete: 7C436110-AB2A-4BBB-A880-FE41995C9F82:bluetoothExternalDongleFailed
+nvram-delete: 7C436110-AB2A-4BBB-A880-FE41995C9F82:bluetoothInternalControllerInfo
+nvram:
+  on: WriteFlash
+  off: LegacyOverwrite
+platform-info:
+  on: Automatic UpdateDataHub UpdateNVRAM UpdateSMBIOS
+  off: CustomMemory UseRawUuidEncoding
+  set: UpdateSMBIOSMode="Create"
+drivers: OpenRuntime.efi HfsPlus.efi OpenCanopy.efi ResetNvramEntry.efi
+uefi-quirks:
+  on: ReleaseUsbOwnership RequestBootVarRouting
+  off: DisableSecurityPolicy EnableVectorAcceleration ForceOcWriteFlash IgnoreInvalidFlexRatio UnblockFsConnect
+  set: ResizeGpuBars=-1
+uefi-apfs:
+  on: EnableJumpstart HideVerbose
+  off: GlobalConnect JumpstartHotPlug
+  set: MinDate=0 MinVersion=0
+uefi-output:
+  on: ProvideConsoleGop
+  off: DirectGopRendering ForceResolution ReconnectOnResChange
+  set: GopPassThrough="Disabled" Resolution="Max" TextRenderer="BuiltinGraphics" UIScale=0
+uefi-input:
+  on: KeySupport
+  off: KeyFiltering KeySwap PointerSupport
+  set: KeyForgetThreshold=5 KeySupportMode="Auto" TimerResolution=50000
+bios: CSM (Compatibility Support Module) = disable (required)
+bios: Secure Boot = disable (required)
+bios: Fast Boot = disable (required)
+bios: SATA Mode = AHCI (required)
+bios: EHCI/XHCI Hand-off = enable (required)
+bios: Above 4G Decoding = enable
+bios: Resizable BAR (Re-Size BAR Support) = disable
+bios: SVM Mode (AMD-V) = enable
+bios: IOMMU (AMD-Vi) = disable (required)
+bios: UMA Frame Buffer Size = 512MB (1GB recommended) (required)
+bios: Sleep State = S3 if available
+notes:
+  [warning] storage: SAMSUNG MZALQ512HALU-000L2 (PM991)
+  [warning] network: No network in macOS Recovery
+  [info] gpu: Display: AMD Radeon(TM) Graphics
+  [info] input: I2C input devices
+  [info] firmware: Early boot hang fallback
+  [info] storage: Boot-time TRIM off for Samsung NVMe
+  [info] boot: Verbose boot is on
+post-install:
+  [info] boot: Copy the EFI to the internal drive
+  [info] usb: Map the USB ports
+  [info] wifi: Install HeliPort for Intel Wi-Fi
+  [info] bootloader: Boot picker after install
+  [info] power: Tune sleep settings
+  [info] audio: Try other layout-ids if a jack or the microphone is silent
+  [info] smbios: Check the serial number before using iServices
+  [info] boot: Turn off verbose boot
+  [info] cpu: Apps that expect an Intel CPU
+  [warning] platform: Dual boot with Windows

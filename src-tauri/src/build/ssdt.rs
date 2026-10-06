@@ -4,6 +4,7 @@
 
 use std::path::Path;
 
+use crate::domain::acpi;
 use crate::domain::model::{AcpiPatch, SsdtSource};
 use crate::error::AppError;
 use crate::services::ocvalidate::check_aml;
@@ -45,16 +46,22 @@ pub fn check_table(bytes: &[u8]) -> Result<(), AppError> {
     check_aml(bytes).map_err(|why| AppError::new("SSDT_INVALID", why))
 }
 
-/// Disable the ACPI patches that only make sense with `file_name` loaded
-/// (their comment names it, e.g. "_OSI to XOSI rename - requires
-/// SSDT-XOSI.aml"). Returns how many were disabled.
-pub fn disable_dependent_patches(patches: &mut [AcpiPatch], file_name: &str) -> usize {
+/// Disable the ACPI patches that only make sense with `file_name` loaded:
+/// their comment names it ("EC0 _STA to XSTA rename (SSDT-EC.aml)", "_OSI to
+/// XOSI rename - requires SSDT-XOSI.aml") and none of the `present` tables
+/// that may need the same rename. Returns how many were disabled.
+pub fn disable_dependent_patches(patches: &mut [AcpiPatch], file_name: &str, present: &[String]) -> usize {
     let needle = file_name.to_ascii_lowercase();
     let stem = needle.trim_end_matches(".aml");
     let mut count = 0;
     for patch in patches.iter_mut().filter(|p| p.enabled) {
         let comment = patch.comment.to_ascii_lowercase();
-        if comment.contains(&needle) || comment.split(|c: char| c.is_whitespace() || c == ',').any(|w| w == stem) {
+        let names_it = acpi::tables_named_in(&comment).contains(&needle.as_str())
+            || comment.split(|c: char| c.is_whitespace() || matches!(c, ',' | '(' | ')')).any(|w| w == stem);
+        let still_needed = acpi::tables_named_in(&patch.comment)
+            .iter()
+            .any(|t| present.iter().any(|p| p.eq_ignore_ascii_case(t)));
+        if names_it && !still_needed {
             patch.enabled = false;
             count += 1;
         }
@@ -110,6 +117,7 @@ mod tests {
             oem_table_id: None,
             count: 0,
             enabled: true,
+            ..Default::default()
         }
     }
 
@@ -139,12 +147,20 @@ mod tests {
         let mut patches = vec![
             patch("_OSI to XOSI rename - requires SSDT-XOSI.aml"),
             patch("EC0 to EC rename"),
-            patch("GPI0 _STA to XSTA rename"),
+            patch("GPI0 _STA to XSTA rename (SSDT-GPI0.aml)"),
+            patch("RTC _STA to XSTA rename (SSDT-AWAC.aml, SSDT-RTC0.aml)"),
         ];
-        assert_eq!(disable_dependent_patches(&mut patches, "SSDT-XOSI.aml"), 1);
+        assert_eq!(disable_dependent_patches(&mut patches, "SSDT-XOSI.aml", &[]), 1);
         assert!(!patches[0].enabled);
         assert!(patches[1].enabled && patches[2].enabled);
-        assert_eq!(disable_dependent_patches(&mut patches, "SSDT-EC.aml"), 0);
+        assert_eq!(disable_dependent_patches(&mut patches, "SSDT-EC.aml", &[]), 0);
+        // A rename another loaded table also needs stays on.
+        let present = ["SSDT-RTC0.aml".to_string()];
+        assert_eq!(disable_dependent_patches(&mut patches, "SSDT-AWAC.aml", &present), 0);
+        assert!(patches[3].enabled);
+        assert_eq!(disable_dependent_patches(&mut patches, "ssdt-awac.aml", &[]), 1);
+        assert_eq!(disable_dependent_patches(&mut patches, "SSDT-GPI0.aml", &[]), 1);
+        assert!(patches[1].enabled);
         assert_eq!(source_id(&SsdtSource::Dortania { file: "x".into() }), "dortania");
     }
 }

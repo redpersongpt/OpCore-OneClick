@@ -7,14 +7,17 @@ import { Banner } from '../components/ui/Banner';
 import { Button } from '../components/ui/Button';
 import { Progress } from '../components/ui/Progress';
 import { PageHeader, Section, StepActions } from '../components/ui/Section';
+import { HostNotices } from '../components/hardware/HostNotices';
 import { useProfileDialogs } from '../hooks/useProfileDialogs';
 import { useT } from '../i18n';
 import { formatPercent } from '../lib/format';
+import { blocksBuild, holdsScanStep, isAppleSiliconHost, profileNotices, scanNotices } from '../lib/host';
 import { profileHeadline } from '../lib/profile';
 import { profileSource } from '../lib/verdict';
+import { useApp } from '../stores/app';
 import { runScan, startDemo, startManual } from '../stores/flow';
 import { useHardware } from '../stores/hardware';
-import { TASK_KINDS, useTasks } from '../stores/tasks';
+import { isCancellable, TASK_KINDS, useTasks } from '../stores/tasks';
 import { useWizard } from '../stores/wizard';
 
 export default function Scan() {
@@ -25,36 +28,50 @@ export default function Scan() {
   const scanError = useHardware((s) => s.scanError);
   const scanAttempted = useHardware((s) => s.scanAttempted);
   const ioError = useHardware((s) => s.ioError);
+  const scanCancelled = useHardware((s) => s.scanCancelled);
+  const cancelScan = useHardware((s) => s.cancelScan);
   const isDemo = useHardware((s) => s.isDemo);
+  const info = useApp((s) => s.info);
   const complete = useWizard((s) => s.complete);
-  const scanTask = useTasks((s) => s.latest(TASK_KINDS.scan));
+  const running = useTasks((s) => s.running(TASK_KINDS.scan));
+  const cancelState = useTasks((s) => (running ? s.cancels[running.taskId] : undefined));
   const { busy, doImport } = useProfileDialogs();
+  // An Apple silicon Mac cannot use an OpenCore EFI: scanning it is only useful on request.
+  const appleHost = isAppleSiliconHost(info);
 
   const scan = async () => {
-    if (await runScan()) complete('scan');
+    if (!(await runScan())) return;
+    const after = useHardware.getState();
+    // Stay here when the result needs the user's attention before moving on.
+    if (!holdsScanStep(scanNotices(after.detected, after.profile))) complete('scan');
   };
 
   useEffect(() => {
     // Runs once per session: scanAttempted flips synchronously when the scan starts.
-    if (!profile && !scanning && !scanAttempted) void scan();
-  }, [profile, scanning, scanAttempted]);
+    if (!profile && !scanning && !scanAttempted && !appleHost) void scan();
+  }, [profile, scanning, scanAttempted, appleHost]);
 
   if (scanning) {
-    const running = scanTask?.status === 'running' ? scanTask : null;
+    const canCancel = isCancellable(running) && cancelState === undefined;
     return (
       <>
         <PageHeader title={t('scan.title')} subtitle={t('scan.subtitle')} />
-        <LoadingState message={running?.message || t('scan.scanning')}>
+        <LoadingState message={t('scan.scanning')}>
           <div className="w-64">
             <Progress value={running?.progress ?? null} label={t('scan.scanning')} />
             {formatPercent(running?.progress) && (
               <p className="mt-1 text-xs tabular-nums text-fg-3">{formatPercent(running?.progress)}</p>
             )}
           </div>
+          <Button size="sm" variant="ghost" onClick={() => void cancelScan()} disabled={!canCancel}>
+            {cancelState === 'requested' ? t('task.cancelling') : t('common.cancel')}
+          </Button>
         </LoadingState>
       </>
     );
   }
+
+  const importOther = () => void doImport();
 
   const alternatives = (
     <div className="grid grid-cols-2 gap-3">
@@ -86,6 +103,10 @@ export default function Scan() {
       <>
         <PageHeader title={t('scan.title')} subtitle={t('scan.subtitle')} />
         <div className="space-y-4">
+          {appleHost && !scanError && (
+            <HostNotices notices={['apple_silicon']} onImport={importOther} onManual={startManual} importing={busy === 'import'} />
+          )}
+          {scanCancelled && !scanError && <Banner tone="info">{t('scan.cancelled')}</Banner>}
           {scanError ? (
             <ErrorPanel
               error={scanError}
@@ -100,8 +121,8 @@ export default function Scan() {
             <Section>
               <div className="flex items-center gap-3">
                 <ScanSearch size={18} className="text-fg-3" aria-hidden />
-                <p className="flex-1 text-base text-fg-2">{t('scan.idle')}</p>
-                <Button variant="primary" onClick={() => void scan()}>
+                <p className="flex-1 text-base text-fg-2">{appleHost ? t('scan.idleAppleHost') : t('scan.idle')}</p>
+                <Button variant={appleHost ? 'secondary' : 'primary'} onClick={() => void scan()}>
                   {t('scan.start')}
                 </Button>
               </div>
@@ -122,14 +143,19 @@ export default function Scan() {
   }
 
   const warnings = detected?.warnings ?? [];
+  const notices = profileNotices(detected, profile);
+  const unusable = blocksBuild(notices);
 
   return (
     <>
-      <PageHeader title={t('scan.title')} subtitle={t('scan.doneSubtitle')} />
+      <PageHeader title={t('scan.title')} subtitle={unusable ? t('scan.unusableSubtitle') : t('scan.doneSubtitle')} />
       <div className="space-y-4">
         {isDemo && <Banner tone="warning" title={t('scan.demoActive')}>{t('scan.demoActiveBody')}</Banner>}
         {/* A failed re-scan keeps the previous profile; say so instead of failing silently. */}
         {scanError && <ErrorPanel error={scanError} title={t('scan.rescanFailed')} compact />}
+        {scanCancelled && <Banner tone="info">{t('scan.rescanCancelled')}</Banner>}
+        <HostNotices notices={notices} onImport={importOther} onManual={startManual} importing={busy === 'import'} />
+        {ioError && <ErrorPanel error={ioError} title={t('scan.importFailed')} compact />}
         <Section>
           <div className="flex items-center gap-3">
             <Cpu size={18} className="text-fg-3" aria-hidden />
@@ -140,9 +166,15 @@ export default function Scan() {
                 {profile.source === 'scan' && ` · ${t('scan.confidence', { value: formatPercent(profile.scanConfidence) ?? '?' })}`}
               </p>
             </div>
-            <Badge tone="success" dot>
-              {t('scan.ready')}
-            </Badge>
+            {unusable ? (
+              <Badge tone="danger" dot>
+                {t('scan.unusable')}
+              </Badge>
+            ) : (
+              <Badge tone="success" dot>
+                {t('scan.ready')}
+              </Badge>
+            )}
           </div>
         </Section>
         {warnings.length > 0 && (
@@ -162,7 +194,7 @@ export default function Scan() {
           </Button>
         }
       >
-        <Button variant="primary" onClick={() => complete('scan')}>
+        <Button variant="primary" onClick={() => complete('scan')} disabled={unusable}>
           {t('common.continue')}
         </Button>
       </StepActions>

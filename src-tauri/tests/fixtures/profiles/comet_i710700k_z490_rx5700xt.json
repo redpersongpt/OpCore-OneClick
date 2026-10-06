@@ -1,0 +1,151 @@
+{
+  "cpu": {
+    "name": "Intel(R) Core(TM) i7-10700K CPU @ 3.80GHz",
+    "vendor": "intel",
+    "platform": "comet_lake",
+    "codename": "Comet Lake-S",
+    "family": 6,
+    "model": 165,
+    "stepping": 5,
+    "cores": 8,
+    "threads": 16,
+    "isMobile": false,
+    "hasAvx2": true,
+    "hasSse42": true,
+    "isHybrid": false
+  },
+  "formFactor": "desktop",
+  "vm": null,
+  "gpus": [
+    {
+      "name": "Intel(R) UHD Graphics 630",
+      "vendor": "intel",
+      "family": "intel_comet_lake",
+      "vendorId": "8086",
+      "deviceId": "9bc5",
+      "subsystemId": "86941043",
+      "isIgpu": true,
+      "pciPath": "PciRoot(0x0)/Pci(0x2,0x0)",
+      "acpiPath": "\\_SB.PC00.GFX0",
+      "vramMb": null,
+      "disabled": false
+    },
+    {
+      "name": "AMD Radeon RX 5700 XT",
+      "vendor": "amd",
+      "family": "amd_navi10",
+      "vendorId": "1002",
+      "deviceId": "731f",
+      "subsystemId": "e4111da2",
+      "isIgpu": false,
+      "pciPath": "PciRoot(0x0)/Pci(0x1,0x0)/Pci(0x0,0x0)/Pci(0x0,0x0)/Pci(0x0,0x0)",
+      "acpiPath": "\\_SB.PC00.PEG0.PEGP",
+      "vramMb": 8192,
+      "disabled": false
+    }
+  ],
+  "audio": {
+    "codecName": "Realtek S1220A",
+    "codecId": 283906408,
+    "controllerVendorId": "8086",
+    "controllerDeviceId": "06c8",
+    "controllerPciPath": "PciRoot(0x0)/Pci(0x1f,0x3)",
+    "layoutId": null
+  },
+  "ethernet": [
+    {
+      "name": "Intel(R) Ethernet Controller I225-V",
+      "bus": "pci",
+      "vendorId": "8086",
+      "deviceId": "15f3",
+      "subsystemId": "87d21043",
+      "pciPath": "PciRoot(0x0)/Pci(0x1c,0x0)/Pci(0x0,0x0)",
+      "macAddress": "24:4B:FE:12:34:56"
+    }
+  ],
+  "wifi": {
+    "name": "Intel(R) Wi-Fi 6 AX201 160MHz",
+    "bus": "pci",
+    "vendorId": "8086",
+    "deviceId": "06f0",
+    "subsystemId": "00748086",
+    "pciPath": "PciRoot(0x0)/Pci(0x14,0x3)",
+    "macAddress": "D0:AB:D5:11:22:33"
+  },
+  "bluetooth": {
+    "name": "Intel Wireless Bluetooth AX201",
+    "bus": "usb",
+    "vendorId": "8087",
+    "deviceId": "0026",
+    "subsystemId": null,
+    "pciPath": null,
+    "macAddress": null
+  },
+  "input": {
+    "keyboardBus": "usb",
+    "touchpadBus": null,
+    "touchpadVendor": null,
+    "touchpadHid": null,
+    "hasTouchscreen": false
+  },
+  "storage": [
+    {
+      "name": "Samsung SSD 980 PRO 2TB",
+      "kind": "nvme",
+      "vendorId": "144d",
+      "deviceId": "a80a",
+      "sizeBytes": 2000000000000
+    }
+  ],
+  "motherboardVendor": "ASUSTeK COMPUTER INC.",
+  "motherboardModel": "ROG STRIX Z490-E GAMING",
+  "chipset": "Z490",
+  "ramGb": 32,
+  "hasBattery": false,
+  "firmwareUefi": true,
+  "acpi": {
+    "pciRoot": "\\_SB.PC00",
+    "lpcBridge": "\\_SB.PC00.LPCB",
+    "ecPath": null,
+    "ecHasSta": false,
+    "cpuPaths": [
+      "\\_SB.PR00",
+      "\\_SB.PR01",
+      "\\_SB.PR02",
+      "\\_SB.PR03",
+      "\\_SB.PR04",
+      "\\_SB.PR05",
+      "\\_SB.PR06",
+      "\\_SB.PR07",
+      "\\_SB.PR08",
+      "\\_SB.PR09",
+      "\\_SB.PR0A",
+      "\\_SB.PR0B",
+      "\\_SB.PR0C",
+      "\\_SB.PR0D",
+      "\\_SB.PR0E",
+      "\\_SB.PR0F"
+    ],
+    "cpuUsesAcpi0007": false,
+    "awacPath": "\\_SB.AWAC",
+    "awacHasStas": true,
+    "rtcPath": "\\_SB.PC00.LPCB.RTC",
+    "hpetPath": "\\_SB.PC00.LPCB.HPET",
+    "igpuPath": "\\_SB.PC00.GFX0",
+    "xhciPaths": [
+      "\\_SB.PC00.XHCI"
+    ],
+    "rhubPaths": [
+      "\\_SB.PC00.XHCI.RHUB"
+    ],
+    "gpioPath": "\\_SB.GPI0",
+    "smbusPath": "\\_SB.PC00.SBUS",
+    "pnlfExists": false,
+    "hasOsiWindows": true,
+    "dsdtOemTableId": "A M I   ",
+    "dsdtLength": 301000
+  },
+  "acpiTablesDir": null,
+  "source": "scan",
+  "scanConfidence": 0.92
+}

@@ -1,0 +1,149 @@
+fixture: threadripper_3970x_trx40_rx6900xt
+cpu: AMD Ryzen Threadripper 3970X 32-Core Processor | AmdZen2 (Castle Peak) | 32C/64T | avx2 true
+machine: Desktop | ASUSTeK COMPUTER INC. ROG ZENITH II EXTREME ALPHA | chipset TRX40 | uefi true
+gpu: AMD Radeon RX 6900 XT [1002:73bf AmdNavi21]
+audio: Realtek S1220A [10ec1168]
+net: Aquantia AQC107 NBase-T/IEEE 802.3bz Ethernet Controller [1d6a:07b1 Pci]
+net: Intel(R) I211 Gigabit Network Connection [8086:1539 Pci]
+net: Intel Wi-Fi 6 AX200 160MHz [8086:2723 Pci]
+net: Intel Wireless Bluetooth AX200 [8087:0029 Usb]
+assessment: Partial, recommended 15
+summary: macOS Sequoia 15 works with caveats. This machine can run macOS Big Sur 11 to macOS Tahoe 26. It is the recommended release.
+releases:
+  10.13 unsupported | err NO_DISPLAY_PATH (recoverable)
+  10.14 unsupported | err NO_DISPLAY_PATH (recoverable)
+  10.15 unsupported | err NO_DISPLAY_PATH (recoverable)
+  11    supported   | ok MacPro7,1 sbm=Default csr=00000000 gpu=WhateverGreen kexts=16 ssdts=1
+  12    supported   | ok MacPro7,1 sbm=Default csr=00000000 gpu=WhateverGreen kexts=17 ssdts=1
+  13    supported   | ok MacPro7,1 sbm=Default csr=00000000 gpu=WhateverGreen kexts=17 ssdts=1
+  14    supported   | ok MacPro7,1 sbm=Disabled csr=00000000 gpu=WhateverGreen kexts=17 ssdts=1
+  15    supported   | ok MacPro7,1 sbm=Disabled csr=00000000 gpu=WhateverGreen kexts=17 ssdts=1
+  26    supported   root-patch | ok MacPro7,1 sbm=Disabled csr=00000000 gpu=WhateverGreen kexts=17 ssdts=1
+report-notes:
+  [warning] platform: BitLocker and dual boot
+
+== plan for macOS Sequoia 15 (recommended) ==
+smbios: MacPro7,1 | alternatives: iMacPro1,1
+secure-boot-model: Disabled
+csr-active-config: 00000000
+boot-args: revpatch=pci,cpuname,sbvmm -v keepsyms=1 debug=0x100
+amd-core-count: 32
+kexts:
+  + Lilu.kext (Lilu) required
+  + VirtualSMC.kext (VirtualSMC) required
+  + WhateverGreen.kext (WhateverGreen) required
+  + SMCRadeonSensors.kext (SMCRadeonSensors)
+  + AMDRyzenCPUPowerManagement.kext (AMDRyzenCPUPowerManagement)
+  + SMCAMDProcessor.kext (SMCAMDProcessor)
+  + AppleALC.kext (AppleALC) required
+  + AppleMCEReporterDisabler.kext (AppleMCEReporterDisabler) [19.0.0..] required
+  + AppleIGB.kext (AppleIGB) [21.0.0..]
+  + itlwm.kext (itlwm)
+  + IntelBluetoothFirmware.kext (IntelBluetoothFirmware)
+  + IntelBTPatcher.kext (IntelBluetoothFirmware)
+  + BlueToolFixup.kext (BrcmPatchRAM) [21.0.0..]
+  + USBToolBox.kext (USBToolBox) required
+  + UTBDefault.kext (USBToolBox) required
+  + NVMeFix.kext (NVMeFix) [18.0.0..]
+  + RestrictEvents.kext (RestrictEvents)
+ssdts:
+  SSDT-EC-USBX-DESKTOP.aml <- dortania SSDT-EC-USBX-DESKTOP.aml
+device-properties:
+  PciRoot(0x0)/Pci(0x8,0x1)/Pci(0x0,0x4)
+    layout-id = <01000000>
+  PciRoot(0x1)/Pci(0x1,0x2)/Pci(0x0,0x0)
+    built-in = <01>
+acpi-quirks:
+  on: ResetLogoStatus
+  off: FadtEnableReset NormalizeHeaders RebaseRegions ResetHwSig SyncTableIds
+booter-quirks:
+  on: AvoidRuntimeDefrag DevirtualiseMmio EnableSafeModeSlide FixupAppleEfiImages ProvideCustomSlide RebuildAppleMemoryMap SyncRuntimePermissions
+  off: EnableWriteUnprotector ProtectMemoryRegions ProtectUefiServices SetupVirtualMap
+  set: ResizeAppleGpuBars=-1
+kernel-quirks:
+  on: DisableLinkeditJettison ForceAquantiaEthernet PanicNoKextDump PowerTimeoutKernelPanic ProvideCurrentCpuInfo
+  off: AppleCpuPmCfgLock AppleXcpmCfgLock AppleXcpmExtraMsrs AppleXcpmForceBoost CustomSMBIOSGuid DisableIoMapper DisableIoMapperMapping DisableRtcChecksum ExtendBTFeatureFlags ForceSecureBootScheme IncreasePciBarSize LapicKernelPanic ThirdPartyDrives XhciPortLimit
+  set: SetApfsTrimTimeout=0
+kernel-emulate:
+  on: DummyPowerManagement
+  set: Cpuid1Data=<> Cpuid1Mask=<>
+kernel-patches:
+  + CaseySJ - Fix alloc_dma_buffer (com.apple.driver.AppleEthernetAquantiaAqtion) [21.4.0..22.99.99]
+  + CaseySJ - Fix alloc_dma_buffer (Sonoma) (com.apple.driver.AppleEthernetAquantiaAqtion) [23.0.0..25.99.99]
+  + CaseySJ - Fix IOBufferMemoryDescriptor::withOptions (com.apple.driver.AppleEthernetAquantiaAqtion) [21.4.0..25.99.99]
+  + CaseySJ - Fix alloc_dma_buffer (com.apple.driver.AppleEthernetAquantiaAqtion) [21.4.0..22.99.99]
+  + CaseySJ - Fix alloc_dma_buffer (Sonoma) (com.apple.driver.AppleEthernetAquantiaAqtion) [23.0.0..25.99.99]
+  + CaseySJ - Fix IOBufferMemoryDescriptor::withOptions (com.apple.driver.AppleEthernetAquantiaAqtion) [21.4.0..25.99.99]
+  + CaseySJ - Fix allocAvbPacket (com.apple.driver.AppleEthernetAquantiaAqtion) [21.4.0..22.99.99]
+  + CaseySJ - Fix allocAvbPacket (Sonoma) (com.apple.driver.AppleEthernetAquantiaAqtion) [23.0.0..25.99.99]
+  + CaseySJ - Fix allocPtpPacket (com.apple.driver.AppleEthernetAquantiaAqtion) [21.4.0..25.99.99]
+misc-boot:
+  on: ShowPicker
+  off: HideAuxiliary PickerAudioAssist PollAppleHotKeys
+  set: ConsoleAttributes=0 HibernateMode="None" LauncherOption="Disabled" LauncherPath="Default" PickerAttributes=17 PickerMode="External" PickerVariant="Acidanthera\GoldenGate" TakeoffDelay=0 Timeout=5
+misc-security:
+  on: AllowSetDefault BlacklistAppleUpdate
+  off: AuthRestart EnablePassword
+  set: ApECID=0 DmgLoading="Signed" ExposeSensitiveData=6 ScanPolicy=0 SecureBootModel="Disabled" Vault="Optional"
+tools: OpenShell.efi
+nvram-add: 7C436110-AB2A-4BBB-A880-FE41995C9F82:bluetoothExternalDongleFailed = <00>
+nvram-add: 7C436110-AB2A-4BBB-A880-FE41995C9F82:bluetoothInternalControllerInfo = <0000000000000000000000000000>
+nvram-delete: 7C436110-AB2A-4BBB-A880-FE41995C9F82:bluetoothExternalDongleFailed
+nvram-delete: 7C436110-AB2A-4BBB-A880-FE41995C9F82:bluetoothInternalControllerInfo
+nvram:
+  on: WriteFlash
+  off: LegacyOverwrite
+platform-info:
+  on: Automatic UpdateDataHub UpdateNVRAM UpdateSMBIOS
+  off: CustomMemory UseRawUuidEncoding
+  set: UpdateSMBIOSMode="Create"
+drivers: OpenRuntime.efi HfsPlus.efi OpenCanopy.efi ResetNvramEntry.efi
+uefi-quirks:
+  on: EnableVectorAcceleration RequestBootVarRouting
+  off: DisableSecurityPolicy ForceOcWriteFlash IgnoreInvalidFlexRatio ReleaseUsbOwnership UnblockFsConnect
+  set: ResizeGpuBars=-1
+uefi-apfs:
+  on: EnableJumpstart HideVerbose
+  off: GlobalConnect JumpstartHotPlug
+  set: MinDate=0 MinVersion=0
+uefi-output:
+  on: ProvideConsoleGop
+  off: DirectGopRendering ForceResolution ReconnectOnResChange
+  set: GopPassThrough="Disabled" Resolution="Max" TextRenderer="BuiltinGraphics" UIScale=0
+uefi-input:
+  on: KeySupport
+  off: KeyFiltering KeySwap PointerSupport
+  set: KeyForgetThreshold=5 KeySupportMode="Auto" TimerResolution=50000
+bios: CSM (Compatibility Support Module) = disable (required)
+bios: Secure Boot = disable (required)
+bios: Fast Boot = disable (required)
+bios: OS Type = Windows 8.1/10 UEFI Mode (or Other OS)
+bios: SATA Mode = AHCI (required)
+bios: EHCI/XHCI Hand-off = enable (required)
+bios: Above 4G Decoding = enable (required)
+bios: Resizable BAR (Re-Size BAR Support) = disable
+bios: SVM Mode (AMD-V) = enable
+bios: IOMMU (AMD-Vi) = disable (required)
+bios: Serial / Parallel port = disable
+notes:
+  [warning] ethernet: Aquantia 10GbE
+  [info] gpu: Display: AMD Radeon RX 6900 XT
+  [info] ethernet: Aquantia AQC107 Ethernet
+  [info] ethernet: Intel I211 Ethernet
+  [info] storage: Samsung SSD 970 EVO Plus 1TB
+  [info] ethernet: Aquantia kernel patches added
+  [info] acpi: Generic prebuilt SSDTs
+  [info] firmware: SetupVirtualMap off
+  [info] storage: Boot-time TRIM off for Samsung NVMe
+  [info] boot: Verbose boot is on
+post-install:
+  [info] boot: Copy the EFI to the internal drive
+  [info] usb: Map the USB ports
+  [info] wifi: Install HeliPort for Intel Wi-Fi
+  [info] firmware: Threadripper MMIO whitelist
+  [info] bootloader: Boot picker after install
+  [info] audio: Try other layout-ids if a jack or the microphone is silent
+  [info] smbios: Check the serial number before using iServices
+  [info] boot: Turn off verbose boot
+  [info] cpu: Apps that expect an Intel CPU
+  [warning] platform: Dual boot with Windows

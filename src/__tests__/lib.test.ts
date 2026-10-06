@@ -1,13 +1,15 @@
 import { describe, expect, it } from 'vitest';
 import type { DiskInfo, FirmwareCheck } from '../bridge/types';
-import { compatGate, defaultTarget, sortedVersions } from '../lib/compat';
+import { compatGate, defaultTarget, reachOf, sortedVersions } from '../lib/compat';
 import { confirmPhrase, deviceName, diskBlock, minimumDiskBytes, MIN_BYTES_WITH_RECOVERY, phraseMatches } from '../lib/disk';
 import { checkState, probeFor } from '../lib/firmware';
 import { formatBytes, formatCodecId, formatPercent, formatVram, maskSecret, normalizePciId, parseCodecId, parseCount } from '../lib/format';
 import { buildIssueUrl, MAX_DIAGNOSTICS, redact } from '../lib/issue';
 import { compareMacos, macosLabel } from '../lib/macos';
 import { stableStringify } from '../lib/stable';
+import { blocksBuild, holdsScanStep, isAppleSiliconHost, profileNotices, scanNotices } from '../lib/host';
 import { validationVerdict } from '../lib/verdict';
+import { demoScanResult } from '../lib/demo';
 import { option, report } from './fixtures';
 
 describe('compatibility gate', () => {
@@ -16,10 +18,10 @@ describe('compatibility gate', () => {
     expect(compatGate(report('15', 'partial'), '15')).toBe('ok');
   });
 
-  it('asks for the expert override when the backend is unsure', () => {
-    const notSupported = report('26', 'partial', [option('15'), option('26', false)]);
-    expect(compatGate(notSupported, '26')).toBe('expert');
-    expect(compatGate(report('15', 'unknown', [option('15', false)]), '15')).toBe('expert');
+  it('asks for the expert confirmation for workaround releases and doubtful verdicts', () => {
+    // CryptexFixup / telemetrap past the CPU ceiling: the backend rates the release "partial".
+    const workaround = report('26', 'partial', [option('15'), option('26', false, { notes: ['No AVX2: macOS 13+ installs only with CryptexFixup.'] })]);
+    expect(compatGate(workaround, '26')).toBe('expert');
     const blockingNote = report('15', 'supported', undefined, [{ level: 'blocking', component: 'gpu', title: 't', detail: 'd' }]);
     expect(compatGate(blockingNote, '15')).toBe('expert');
     // A supported release with a contradictory overall verdict is never silently allowed.
@@ -28,6 +30,12 @@ describe('compatibility gate', () => {
 
   it('blocks unsupported hardware and unknown versions', () => {
     expect(compatGate(report('26', 'unsupported', [option('26', false)]), '26')).toBe('blocked');
+    // Unknown CPU or core count: nothing to override, the profile must be completed.
+    expect(compatGate(report('15', 'unknown', [option('15', false)]), '15')).toBe('blocked');
+    expect(reachOf(report('26', 'partial', [option('26', false)]))).toBe('expert');
+    expect(
+      reachOf(report('26', 'partial', [option('26', false)], [{ level: 'blocking', component: 'cpu', title: 't', detail: 'd' }])),
+    ).toBe('blocked');
     expect(compatGate(report('15'), '10.13')).toBe('blocked');
     expect(compatGate(null, '15')).toBe('blocked');
   });
@@ -198,5 +206,66 @@ describe('bug report URL', () => {
     expect(body.length).toBeLessThan(MAX_DIAGNOSTICS + 300);
     expect(body).toContain('(truncated)');
     expect(url.startsWith('https://github.com/redpersongpt/OpCore-OneClick/issues/new?')).toBe(true);
+  });
+});
+
+describe('scan host notices', () => {
+  const scan = (hostOs: string, patch: { biosVendor?: string | null; warnings?: string[]; acpi?: string | null } = {}) => {
+    const demo = demoScanResult();
+    return {
+      detected: {
+        ...demo.detected,
+        hostOs,
+        warnings: patch.warnings ?? [],
+        acpiTablesDir: patch.acpi ?? null,
+        firmware: { ...demo.detected.firmware, biosVendor: patch.biosVendor ?? null },
+      },
+      profile: { ...demo.profile, source: 'scan' },
+    };
+  };
+
+  it('recognises Apple silicon, real Macs, Hackintoshes and Linux without ACPI access', () => {
+    const apple = scan('macos');
+    apple.profile.cpu = { ...apple.profile.cpu, vendor: 'apple', platform: 'apple_silicon' };
+    expect(scanNotices(apple.detected, apple.profile)).toEqual(['apple_silicon']);
+
+    const mac = scan('macos', { biosVendor: 'Apple' });
+    expect(scanNotices(mac.detected, mac.profile)).toEqual(['real_mac']);
+    const hack = scan('macos', { biosVendor: 'Apple', warnings: ['Booted through OpenCore (1.0.8): device ids and SMBIOS reflect the running configuration'] });
+    expect(scanNotices(hack.detected, hack.profile)).toEqual(['hackintosh']);
+
+    const linux = scan('linux');
+    expect(scanNotices(linux.detected, linux.profile)).toEqual(['linux_acpi']);
+    const root = scan('linux', { acpi: '/tmp/acpi/scan-1' });
+    expect(scanNotices(root.detected, root.profile)).toEqual([]);
+    expect(scanNotices(scan('windows').detected, scan('windows').profile)).toEqual([]);
+
+    // An imported profile says nothing about this computer.
+    expect(scanNotices(linux.detected, { ...linux.profile, source: 'imported' })).toEqual([]);
+  });
+
+  it('flags an imported Apple silicon profile, which no EFI can be built for', () => {
+    const apple = scan('macos');
+    const imported = { ...apple.profile, source: 'imported', cpu: { ...apple.profile.cpu, vendor: 'apple' as const, platform: 'apple_silicon' as const } };
+    expect(profileNotices(null, imported)).toEqual(['apple_profile']);
+    expect(blocksBuild(profileNotices(null, imported))).toBe(true);
+    // A scan of this Mac is described as such.
+    expect(profileNotices(apple.detected, { ...imported, source: 'scan' })).toEqual(['apple_silicon']);
+    expect(blocksBuild(['apple_silicon'])).toBe(true);
+    expect(blocksBuild(['real_mac', 'linux_acpi', 'hackintosh'])).toBe(false);
+    const pc = scan('windows');
+    expect(profileNotices(null, { ...pc.profile, source: 'manual' })).toEqual([]);
+  });
+
+  it('holds the scan step only for notices that need a decision', () => {
+    expect(holdsScanStep(['apple_silicon'])).toBe(true);
+    expect(holdsScanStep(['real_mac'])).toBe(true);
+    expect(holdsScanStep(['linux_acpi'])).toBe(true);
+    // A Hackintosh rebuilding its own EFI moves on; the hardware step repeats the warning.
+    expect(holdsScanStep(['hackintosh'])).toBe(false);
+    expect(holdsScanStep([])).toBe(false);
+    expect(isAppleSiliconHost({ version: '5', opencoreVersion: '1.0.8', hostOs: 'macos', arch: 'aarch64' })).toBe(true);
+    expect(isAppleSiliconHost({ version: '5', opencoreVersion: '1.0.8', hostOs: 'macos', arch: 'x86_64' })).toBe(false);
+    expect(isAppleSiliconHost(null)).toBe(false);
   });
 });

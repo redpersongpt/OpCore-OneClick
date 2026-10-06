@@ -1512,3 +1512,25 @@ fn corrupted_tables_never_panic() {
         }
     }
 }
+
+#[test]
+fn patch_comments_name_their_tables() {
+    let mut c = String::from("EC0 _STA to XSTA rename");
+    super::name_required_table(&mut c, "SSDT-EC.aml");
+    assert_eq!(c, "EC0 _STA to XSTA rename (SSDT-EC.aml)");
+    super::name_required_table(&mut c, "SSDT-EC.aml");
+    super::name_required_table(&mut c, "SSDT-USBX.aml");
+    assert_eq!(c, "EC0 _STA to XSTA rename (SSDT-EC.aml, SSDT-USBX.aml)");
+    assert_eq!(super::tables_named_in(&c), ["SSDT-EC.aml", "SSDT-USBX.aml"]);
+
+    let mut xosi = String::from("_OSI to XOSI rename - requires SSDT-XOSI.aml");
+    super::name_required_table(&mut xosi, "SSDT-XOSI.aml");
+    assert_eq!(xosi, "_OSI to XOSI rename - requires SSDT-XOSI.aml");
+    super::name_required_table(&mut xosi, "SSDT-GPI0.aml");
+    assert_eq!(xosi, "_OSI to XOSI rename - requires SSDT-XOSI.aml (SSDT-GPI0.aml)");
+
+    let mut text = String::from("Rename (to make room)");
+    super::name_required_table(&mut text, "SSDT-AWAC.aml");
+    assert_eq!(text, "Rename (to make room) (SSDT-AWAC.aml)");
+    assert!(super::tables_named_in("no table here").is_empty());
+}

@@ -1,0 +1,117 @@
+fixture: fx8350_990fx_rx570
+cpu: AMD FX(tm)-8350 Eight-Core Processor | AmdBulldozer (Vishera) | 8C/8T | avx2 false
+machine: Desktop | Gigabyte Technology Co., Ltd. GA-990FXA-UD3 | chipset 990FX | uefi true
+gpu: Radeon RX 570 Series [1002:67df AmdPolaris]
+audio: Realtek ALC889 [10ec0889]
+net: Realtek PCIe GBE Family Controller (RTL8111E) [10ec:8168 Pci]
+assessment: Supported, recommended 12
+summary: macOS Monterey 12 is fully supported. This machine can run macOS High Sierra 10.13 to macOS Monterey 12. It is the recommended release.
+releases:
+  10.13 supported   | ok iMacPro1,1 sbm=Default csr=00000000 gpu=WhateverGreen kexts=9 ssdts=1
+  10.14 supported   | ok iMacPro1,1 sbm=Default csr=00000000 gpu=WhateverGreen kexts=10 ssdts=1
+  10.15 supported   | ok MacPro7,1 sbm=Default csr=00000000 gpu=WhateverGreen kexts=10 ssdts=1
+  11    supported   | ok MacPro7,1 sbm=Default csr=00000000 gpu=WhateverGreen kexts=10 ssdts=1
+  12    supported   | ok MacPro7,1 sbm=Default csr=00000000 gpu=WhateverGreen kexts=11 ssdts=1
+  13    expert      root-patch | ok MacPro7,1 sbm=Disabled csr=00000803 gpu=WhateverGreen kexts=13 ssdts=1
+  14    expert      root-patch | ok MacPro7,1 sbm=Disabled csr=00000803 gpu=WhateverGreen kexts=13 ssdts=1
+  15    expert      root-patch | ok MacPro7,1 sbm=Disabled csr=00000803 gpu=WhateverGreen kexts=13 ssdts=1
+  26    expert      root-patch | ok MacPro7,1 sbm=Disabled csr=00000803 gpu=WhateverGreen kexts=13 ssdts=1
+report-notes:
+  [warning] platform: BitLocker and dual boot
+
+== plan for macOS Monterey 12 (recommended) ==
+smbios: MacPro7,1 | alternatives: iMacPro1,1
+secure-boot-model: Default
+csr-active-config: 00000000
+boot-args: revpatch=pci,cpuname -v keepsyms=1 debug=0x100
+amd-core-count: 8
+kexts:
+  + Lilu.kext (Lilu) required
+  + VirtualSMC.kext (VirtualSMC) required
+  + WhateverGreen.kext (WhateverGreen) required
+  + SMCRadeonSensors.kext (SMCRadeonSensors)
+  + AppleALC.kext (AppleALC) required
+  + AppleMCEReporterDisabler.kext (AppleMCEReporterDisabler) [19.0.0..] required
+  + RealtekRTL8111.kext (RealtekRTL8111-2.4.2) [18.0.0..] required
+  + USBToolBox.kext (USBToolBox) required
+  + UTBDefault.kext (USBToolBox) required
+  + XLNCUSBFix.kext (XLNCUSBFix)
+  + RestrictEvents.kext (RestrictEvents)
+ssdts:
+  SSDT-EC-USBX-DESKTOP.aml <- dortania SSDT-EC-USBX-DESKTOP.aml
+device-properties:
+  PciRoot(0x0)/Pci(0x14,0x2)
+    layout-id = <01000000>
+  PciRoot(0x0)/Pci(0x15,0x0)/Pci(0x0,0x0)
+    built-in = <01>
+acpi-quirks:
+  on: ResetLogoStatus
+  off: FadtEnableReset NormalizeHeaders RebaseRegions ResetHwSig SyncTableIds
+booter-quirks:
+  on: AvoidRuntimeDefrag EnableSafeModeSlide EnableWriteUnprotector FixupAppleEfiImages ProvideCustomSlide SetupVirtualMap
+  off: DevirtualiseMmio ProtectMemoryRegions ProtectUefiServices RebuildAppleMemoryMap SyncRuntimePermissions
+  set: ResizeAppleGpuBars=-1
+kernel-quirks:
+  on: DisableLinkeditJettison PanicNoKextDump PowerTimeoutKernelPanic ProvideCurrentCpuInfo
+  off: AppleCpuPmCfgLock AppleXcpmCfgLock AppleXcpmExtraMsrs AppleXcpmForceBoost CustomSMBIOSGuid DisableIoMapper DisableIoMapperMapping DisableRtcChecksum ExtendBTFeatureFlags ForceAquantiaEthernet ForceSecureBootScheme IncreasePciBarSize LapicKernelPanic ThirdPartyDrives XhciPortLimit
+  set: SetApfsTrimTimeout=-1
+kernel-emulate:
+  on: DummyPowerManagement
+  set: Cpuid1Data=<> Cpuid1Mask=<>
+misc-boot:
+  on: ShowPicker
+  off: HideAuxiliary PickerAudioAssist PollAppleHotKeys
+  set: ConsoleAttributes=0 HibernateMode="None" LauncherOption="Disabled" LauncherPath="Default" PickerAttributes=17 PickerMode="External" PickerVariant="Acidanthera\GoldenGate" TakeoffDelay=0 Timeout=5
+misc-security:
+  on: AllowSetDefault BlacklistAppleUpdate
+  off: AuthRestart EnablePassword
+  set: ApECID=0 DmgLoading="Signed" ExposeSensitiveData=6 ScanPolicy=0 SecureBootModel="Default" Vault="Optional"
+tools: OpenShell.efi
+nvram:
+  on: WriteFlash
+  off: LegacyOverwrite
+platform-info:
+  on: Automatic UpdateDataHub UpdateNVRAM UpdateSMBIOS
+  off: CustomMemory UseRawUuidEncoding
+  set: UpdateSMBIOSMode="Create"
+drivers: OpenRuntime.efi HfsPlusLegacy.efi OpenCanopy.efi ResetNvramEntry.efi
+uefi-quirks:
+  on: EnableVectorAcceleration RequestBootVarRouting
+  off: DisableSecurityPolicy ForceOcWriteFlash IgnoreInvalidFlexRatio ReleaseUsbOwnership UnblockFsConnect
+  set: ResizeGpuBars=-1
+uefi-apfs:
+  on: EnableJumpstart HideVerbose
+  off: GlobalConnect JumpstartHotPlug
+  set: MinDate=0 MinVersion=0
+uefi-output:
+  on: ProvideConsoleGop
+  off: DirectGopRendering ForceResolution ReconnectOnResChange
+  set: GopPassThrough="Disabled" Resolution="Max" TextRenderer="BuiltinGraphics" UIScale=0
+uefi-input:
+  on: KeySupport
+  off: KeyFiltering KeySwap PointerSupport
+  set: KeyForgetThreshold=5 KeySupportMode="Auto" TimerResolution=50000
+bios: CSM (Compatibility Support Module) = disable (required)
+bios: Secure Boot = disable (required)
+bios: Fast Boot = disable (required)
+bios: OS Type = Windows 8.1/10 UEFI Mode (or Other OS)
+bios: SATA Mode = AHCI (required)
+bios: EHCI/XHCI Hand-off = enable (required)
+bios: Above 4G Decoding = enable
+bios: SVM Mode (AMD-V) = enable
+bios: IOMMU (AMD-Vi) = disable (required)
+bios: Serial / Parallel port = disable
+notes:
+  [info] gpu: Display: Radeon RX 570 Series
+  [info] ethernet: Realtek RTL8111/8168 Ethernet
+  [info] acpi: Generic prebuilt SSDTs
+  [info] boot: Verbose boot is on
+post-install:
+  [info] boot: Copy the EFI to the internal drive
+  [info] usb: Map the USB ports
+  [info] bootloader: Boot picker after install
+  [info] audio: Try other layout-ids if a jack or the microphone is silent
+  [info] smbios: Check the serial number before using iServices
+  [info] boot: Turn off verbose boot
+  [info] cpu: Apps that expect an Intel CPU
+  [warning] platform: Dual boot with Windows

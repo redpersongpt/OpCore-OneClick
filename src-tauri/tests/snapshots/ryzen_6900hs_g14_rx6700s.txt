@@ -1,0 +1,38 @@
+fixture: ryzen_6900hs_g14_rx6700s
+cpu: AMD Ryzen 9 6900HS with Radeon Graphics | AmdZen3 (Rembrandt) | 8C/16T | avx2 true
+machine: Laptop | ASUSTeK COMPUTER INC. GA402RJ | chipset - | uefi true
+gpu: AMD Radeon(TM) Graphics (680M) [1002:1681 AmdApuRdna igpu]
+gpu: AMD Radeon RX 6700S [1002:73ef AmdNavi23]
+audio: Realtek ALC294 [10ec0294]
+net: MediaTek Wi-Fi 6E MT7922 160MHz [14c3:0616 Pci]
+net: MediaTek Bluetooth MT7922 [13d3:3568 Usb]
+touchpad: I2c Some(Other) ASUE140D
+assessment: Unsupported, recommended none
+summary: No macOS release runs natively on this machine. No GPU can drive a display on macOS Tahoe 26: AMD Radeon(TM) Graphics (680M) has no macOS driver; AMD Radeon RX 6700S is a laptop dGPU that cannot drive the screen.
+releases:
+  10.13 unsupported | err NO_DISPLAY_PATH (recoverable)
+  10.14 unsupported | err NO_DISPLAY_PATH (recoverable)
+  10.15 unsupported | err NO_DISPLAY_PATH (recoverable)
+  11    unsupported | err NO_DISPLAY_PATH (recoverable)
+  12    unsupported | err NO_DISPLAY_PATH (recoverable)
+  13    unsupported | err NO_DISPLAY_PATH (recoverable)
+  14    unsupported | err NO_DISPLAY_PATH (recoverable)
+  15    unsupported | err NO_DISPLAY_PATH (recoverable)
+  26    unsupported root-patch | err NO_DISPLAY_PATH (recoverable)
+report-notes:
+  [blocking] gpu: Not supported on macOS Tahoe 26
+  [warning] audio: Limitation on macOS Tahoe 26
+  [warning] wifi: Wi-Fi card not supported
+  [warning] network: No network in macOS Recovery
+  [warning] platform: BitLocker and dual boot
+
+== no recommended release ==
+10.13: [NO_DISPLAY_PATH] No graphics device in this machine can show a picture on macOS High Sierra 10.13: AMD Radeon(TM) Graphics (680M) (macOS has no driver for it); AMD Radeon RX 6700S (its drivers start with macOS Monterey 12).
+10.14: [NO_DISPLAY_PATH] No graphics device in this machine can show a picture on macOS Mojave 10.14: AMD Radeon(TM) Graphics (680M) (macOS has no driver for it); AMD Radeon RX 6700S (its drivers start with macOS Monterey 12).
+10.15: [NO_DISPLAY_PATH] No graphics device in this machine can show a picture on macOS Catalina 10.15: AMD Radeon(TM) Graphics (680M) (macOS has no driver for it); AMD Radeon RX 6700S (its drivers start with macOS Monterey 12).
+11: [NO_DISPLAY_PATH] No graphics device in this machine can show a picture on macOS Big Sur 11: AMD Radeon(TM) Graphics (680M) (macOS has no driver for it); AMD Radeon RX 6700S (its drivers start with macOS Monterey 12).
+12: [NO_DISPLAY_PATH] No graphics device in this machine can show a picture on macOS Monterey 12: AMD Radeon(TM) Graphics (680M) (macOS has no driver for it); AMD Radeon RX 6700S (laptop discrete GPUs cannot drive the internal panel).
+13: [NO_DISPLAY_PATH] No graphics device in this machine can show a picture on macOS Ventura 13: AMD Radeon(TM) Graphics (680M) (macOS has no driver for it); AMD Radeon RX 6700S (laptop discrete GPUs cannot drive the internal panel).
+14: [NO_DISPLAY_PATH] No graphics device in this machine can show a picture on macOS Sonoma 14: AMD Radeon(TM) Graphics (680M) (macOS has no driver for it); AMD Radeon RX 6700S (laptop discrete GPUs cannot drive the internal panel).
+15: [NO_DISPLAY_PATH] No graphics device in this machine can show a picture on macOS Sequoia 15: AMD Radeon(TM) Graphics (680M) (macOS has no driver for it); AMD Radeon RX 6700S (laptop discrete GPUs cannot drive the internal panel).
+26: [NO_DISPLAY_PATH] No graphics device in this machine can show a picture on macOS Tahoe 26: AMD Radeon(TM) Graphics (680M) (macOS has no driver for it); AMD Radeon RX 6700S (laptop discrete GPUs cannot drive the internal panel).
