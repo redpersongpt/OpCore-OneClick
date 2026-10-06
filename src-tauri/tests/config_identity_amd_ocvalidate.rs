@@ -172,6 +172,7 @@ fn base_plan(model: &str, target: MacOsVersion) -> BuildPlan {
         nvram_add: Vec::new(),
         nvram_delete: Vec::new(),
         nvram_settings: settings(&[("WriteFlash", PlistScalar::Bool(true))]),
+        nvram_legacy_schema: Default::default(),
         platform_info: SettingMap::new(),
         drivers: vec![
             driver("HfsPlus.efi"),

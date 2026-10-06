@@ -11,11 +11,11 @@ releases:
   10.14 supported   | ok iMac18,1 sbm=Disabled csr=00000000 gpu=WhateverGreen kexts=10 ssdts=2
   10.15 supported   | ok iMac18,1 sbm=Disabled csr=00000000 gpu=WhateverGreen kexts=10 ssdts=2
   11    supported   | ok iMac18,1 sbm=Default csr=00000000 gpu=WhateverGreen kexts=10 ssdts=2
-  12    supported   | ok iMac18,1 sbm=Default csr=00000000 gpu=WhateverGreen kexts=10 ssdts=2
-  13    expert      | ok iMac18,1 sbm=Default csr=00000000 gpu=WhateverGreen kexts=11 ssdts=2
-  14    expert      | ok iMac19,1 sbm=Disabled csr=00000000 gpu=WhateverGreen kexts=12 ssdts=2
-  15    expert      | ok iMac19,1 sbm=Disabled csr=00000000 gpu=WhateverGreen kexts=12 ssdts=2
-  26    expert      root-patch | ok iMac20,1 sbm=Disabled csr=00000000 gpu=WhateverGreen kexts=12 ssdts=2
+  12    supported   | ok iMac18,1 sbm=Default csr=00000000 gpu=WhateverGreen kexts=11 ssdts=2
+  13    expert      | ok iMac18,1 sbm=Default csr=00000000 gpu=WhateverGreen kexts=12 ssdts=2
+  14    expert      | ok iMac19,1 sbm=Disabled csr=00000000 gpu=WhateverGreen kexts=13 ssdts=2
+  15    expert      | ok iMac19,1 sbm=Disabled csr=00000000 gpu=WhateverGreen kexts=13 ssdts=2
+  26    expert      root-patch | ok iMac20,1 sbm=Disabled csr=00000000 gpu=WhateverGreen kexts=13 ssdts=2
 report-notes:
   [warning] platform: BitLocker and dual boot
 
@@ -31,6 +31,7 @@ kexts:
   + SMCProcessor.kext (VirtualSMC)
   + SMCSuperIO.kext (VirtualSMC)
   + AppleALC.kext (AppleALC) required
+  + NoAVXFSCompressionTypeZlib.kext (NoAVXFSCompressionTypeZlib) [21.5.0..21.99.99] required
   + RealtekRTL8111.kext (RealtekRTL8111) [18.0.0..] required
   + USBToolBox.kext (USBToolBox) required
   + UTBDefault.kext (USBToolBox) required

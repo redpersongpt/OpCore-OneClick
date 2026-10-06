@@ -5,8 +5,8 @@
 //! SIP / Secure Boot values follow [`super::root_patching_planned`].
 
 use crate::domain::model::{
-    BuildPlan, CpuPlatform as P, DriverPlan, MacOsVersion, NoteLevel, PickerStyle, PlistScalar,
-    SettingMap,
+    BuildPlan, CpuPlatform as P, DriverPlan, InputBus, MacOsVersion, NoteLevel, PickerStyle,
+    PlistScalar, SettingMap,
 };
 
 use super::{note, root_patching_planned, PlanContext, RootPatchPlan};
@@ -272,6 +272,16 @@ fn nvram(ctx: &PlanContext, plan: &mut BuildPlan) {
     let n = &mut plan.nvram_settings;
     flag(n, "LegacyOverwrite", x99);
     flag(n, "WriteFlash", !x99);
+    if ctx.legacy_bios {
+        for guid in [
+            "36C28AB5-6566-4C50-9EBD-CBB920F83843",
+            "7C436110-AB2A-4BBB-A880-FE41995C9F82",
+            "8BE4DF61-93CA-11D2-AA0D-00E098032B8C",
+        ] {
+            plan.nvram_legacy_schema
+                .insert(guid.into(), vec!["*".into()]);
+        }
+    }
 }
 
 fn platform_info(ctx: &PlanContext, plan: &mut BuildPlan) {
@@ -361,16 +371,28 @@ pub fn drivers(ctx: &PlanContext) -> Vec<DriverPlan> {
     if ctx.legacy_bios {
         // Dortania legacy pages: OpenUsbKbDxe "if your firmware does not support UEFI".
         list.push(driver(
-            "OpenUsbKbDxe.efi",
+            if ctx.profile.input.keyboard_bus == InputBus::Ps2 {
+                "Ps2KeyboardDxe.efi"
+            } else {
+                "OpenUsbKbDxe.efi"
+            },
             "opencore",
-            "USB keyboard in the picker on legacy BIOS",
+            "Keyboard in the picker on legacy BIOS",
         ));
     }
-    list.push(driver(
-        "ResetNvramEntry.efi",
-        "opencore",
-        "Reset NVRAM picker entry",
-    ));
+    if !(ctx.is_laptop
+        && ctx
+            .profile
+            .motherboard_vendor
+            .to_ascii_lowercase()
+            .contains("lenovo"))
+    {
+        list.push(driver(
+            "ResetNvramEntry.efi",
+            "opencore",
+            "Reset NVRAM picker entry",
+        ));
+    }
     list
 }
 
@@ -415,7 +437,11 @@ fn uefi(ctx: &PlanContext, plan: &mut BuildPlan) {
     flag(i, "KeyFiltering", false);
     int(i, "KeyForgetThreshold", 5);
     // OpenUsbKbDxe replaces KeySupport on legacy BIOS (ocvalidate rejects both).
-    flag(i, "KeySupport", !ctx.legacy_bios);
+    flag(
+        i,
+        "KeySupport",
+        !ctx.legacy_bios || ctx.profile.input.keyboard_bus == InputBus::Ps2,
+    );
     text(i, "KeySupportMode", "Auto");
     flag(i, "KeySwap", false);
     flag(i, "PointerSupport", false);

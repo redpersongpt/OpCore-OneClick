@@ -87,6 +87,7 @@ pub fn features_from_flags(flags: &[String]) -> Vec<String> {
         ("sse4a", "sse4a"),
         ("avx", "avx"),
         ("avx2", "avx2"),
+        ("rdrand", "rdrand"),
         ("avx512f", "avx512f"),
         ("vmx", "vmx"),
         ("svm", "svm"),

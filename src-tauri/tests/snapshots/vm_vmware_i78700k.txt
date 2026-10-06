@@ -7,14 +7,14 @@ assessment: Partial, recommended 26
 summary: macOS Tahoe 26 works with caveats. This machine can run macOS High Sierra 10.13 to macOS Tahoe 26. It is the recommended release.
 releases:
   10.13 supported   | ok iMacPro1,1 sbm=Disabled csr=00000000 gpu=none kexts=2 ssdts=1
-  10.14 supported   | ok iMacPro1,1 sbm=Disabled csr=00000000 gpu=none kexts=3 ssdts=1
-  10.15 supported   | ok iMacPro1,1 sbm=Disabled csr=00000000 gpu=none kexts=3 ssdts=1
-  11    supported   | ok iMacPro1,1 sbm=Default csr=00000000 gpu=none kexts=3 ssdts=1
-  12    supported   | ok iMacPro1,1 sbm=Default csr=00000000 gpu=none kexts=3 ssdts=1
-  13    supported   | ok iMacPro1,1 sbm=Default csr=00000000 gpu=none kexts=3 ssdts=1
-  14    supported   | ok iMacPro1,1 sbm=Disabled csr=00000000 gpu=none kexts=4 ssdts=1
-  15    supported   | ok iMacPro1,1 sbm=Disabled csr=00000000 gpu=none kexts=4 ssdts=1
-  26    supported   | ok MacPro7,1 sbm=Disabled csr=00000000 gpu=none kexts=4 ssdts=1
+  10.14 supported   | ok iMacPro1,1 sbm=Disabled csr=00000000 gpu=none kexts=2 ssdts=1
+  10.15 supported   | ok iMacPro1,1 sbm=Disabled csr=00000000 gpu=none kexts=2 ssdts=1
+  11    supported   | ok iMacPro1,1 sbm=Default csr=00000000 gpu=none kexts=2 ssdts=1
+  12    supported   | ok iMacPro1,1 sbm=Default csr=00000000 gpu=none kexts=2 ssdts=1
+  13    supported   | ok iMacPro1,1 sbm=Default csr=00000000 gpu=none kexts=2 ssdts=1
+  14    supported   | ok iMacPro1,1 sbm=Disabled csr=00000000 gpu=none kexts=3 ssdts=1
+  15    supported   | ok iMacPro1,1 sbm=Disabled csr=00000000 gpu=none kexts=3 ssdts=1
+  26    supported   | ok MacPro7,1 sbm=Disabled csr=00000000 gpu=none kexts=3 ssdts=1
 
 == plan for macOS Tahoe 26 (recommended) ==
 smbios: MacPro7,1 | alternatives: -
@@ -24,7 +24,6 @@ boot-args: revpatch=pci,sbvmm -v keepsyms=1 debug=0x100
 kexts:
   + Lilu.kext (Lilu) required
   + VirtualSMC.kext (VirtualSMC) required
-  + NVMeFix.kext (NVMeFix) [18.0.0..]
   + RestrictEvents.kext (RestrictEvents)
 ssdts:
   SSDT-EC-USBX-DESKTOP.aml <- dortania SSDT-EC-USBX-DESKTOP.aml
@@ -83,9 +82,9 @@ bios: Secure Boot (VM firmware) = disable (required)
 notes:
   [info] gpu: Display: VMware SVGA 3D
   [info] ethernet: VMware vmxnet3 Ethernet
-  [info] acpi: Generic prebuilt SSDTs
 post-install:
   [info] boot: Copy the EFI to the internal drive
   [info] bootloader: Boot picker after install
+  [info] vm: Prepare the virtual installer disks
   [info] boot: Turn off verbose boot
   [info] storage: Leave FileVault off

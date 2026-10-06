@@ -362,7 +362,7 @@ fn vm_settings(kind: VmKind) -> Vec<BiosSetting> {
         setting(
             "VM firmware",
             "UEFI",
-            "OpenCore boots as a UEFI application (OVMF on QEMU/KVM).",
+            "OpenCore boots as a UEFI application. On QEMU/KVM use OVMF.",
         ),
         setting(
             "Secure Boot (VM firmware)",
@@ -373,13 +373,13 @@ fn vm_settings(kind: VmKind) -> Vec<BiosSetting> {
     match kind {
         VmKind::Kvm => out.push(setting(
             "CPU model",
-            "host (Intel) or a Haswell/Skylake-class model",
-            "macOS needs a CPU model it knows; AMD hosts must present an Intel model with AVX2 for macOS 13+.",
+            "Keep the scanned CPU vendor and vCPU topology",
+            "AMD guests use AMD_Vanilla with the scanned core count. If switching to an Intel model such as Haswell/Skylake, rescan and rebuild the EFI.",
         )),
         VmKind::HyperV => out.push(setting(
             "VM generation",
             "Generation 2",
-            "MacHyperVSupport targets Generation 2 (UEFI) VMs.",
+            "OpenCore needs UEFI (Generation 2). Windows Server 2016 Gen2 hosts are unsupported; MacHyperVSupport itself also supports Gen1.",
         )),
         _ => {}
     }
@@ -688,7 +688,7 @@ pub fn recommended_settings(profile: &HardwareProfile, target: MacOsVersion) -> 
             "512MB (1GB recommended)",
             true,
             "NootedRed needs at least 512MB of carved-out video memory. Some laptops hide the option; then the \
-             default has to do.",
+             default must still meet the minimum. Increase it with a board-appropriate UMA unlock tool if necessary; below 512MB this graphics path will not work.",
         );
     }
     if desktop && !display_is_igpu && display_gpu.is_some() {

@@ -15,10 +15,6 @@ use crate::domain::chipset_db::{self, ChipsetInfo};
 use crate::domain::model::{BinaryPatch, HardwareProfile, NoteLevel, PlanNote};
 use crate::error::AppError;
 
-/// Boards the AMD_Vanilla README lists for the hot-plug port patch.
-const HOTPLUG_BOARDS: &[&str] =
-    &["CROSSHAIR X670E HERO", "CROSSHAIR X670E GENE", "CROSSHAIR X670E EXTREME", "PROART X670E-CREATOR"];
-
 /// Chipset of the board, from the profile's chipset name or the board model.
 pub fn chipset(profile: &HardwareProfile) -> Option<ChipsetInfo> {
     profile
@@ -37,9 +33,7 @@ pub fn pat_choice(chipset: Option<&ChipsetInfo>) -> PatPatch {
 
 /// The board is one of those the hot-plug port patch was made for.
 pub fn wants_hotplug_fix(profile: &HardwareProfile, chipset: Option<&ChipsetInfo>) -> bool {
-    let am5 = chipset.is_some_and(ChipsetInfo::is_am5);
-    let board = profile.motherboard_model.to_ascii_uppercase().replace("ROG ", "");
-    am5 && profile.wifi.is_some() && HOTPLUG_BOARDS.iter().any(|b| board.contains(b))
+    chipset_db::needs_amd_hotplug_fix(profile, chipset)
 }
 
 /// Patches ready to append to `Kernel->Patch`, plus notes for the user.

@@ -105,7 +105,7 @@ platform-info:
   on: Automatic UpdateDataHub UpdateNVRAM UpdateSMBIOS
   off: CustomMemory UseRawUuidEncoding
   set: UpdateSMBIOSMode="Create"
-drivers: OpenRuntime.efi HfsPlus.efi OpenCanopy.efi ResetNvramEntry.efi
+drivers: OpenRuntime.efi HfsPlus.efi OpenCanopy.efi
 uefi-quirks:
   on: ReleaseUsbOwnership RequestBootVarRouting
   off: DisableSecurityPolicy EnableVectorAcceleration ForceOcWriteFlash IgnoreInvalidFlexRatio UnblockFsConnect
@@ -138,6 +138,7 @@ bios: Hyper-Threading = enable
 bios: DVMT Pre-Allocated = 64MB
 bios: Thunderbolt / USB4 = disable for the install
 notes:
+  [warning] nvram: Avoid Reset NVRAM on Lenovo laptops
   [info] smbios: MacBookPro15,2 stops at macOS 15.8.1
   [info] gpu: Skylake graphics run as Kaby Lake
   [info] gpu: Backlight

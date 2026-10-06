@@ -12,12 +12,12 @@ releases:
   10.13 unsupported | err NO_DISPLAY_PATH (recoverable)
   10.14 unsupported | err NO_DISPLAY_PATH (recoverable)
   10.15 supported   | ok MacBookPro16,2 sbm=Default csr=00000000 gpu=NootedRed kexts=23 ssdts=4
-  11    supported   | ok MacBookPro16,2 sbm=Default csr=00000000 gpu=NootedRed kexts=24 ssdts=4
-  12    supported   | ok MacBookPro16,2 sbm=Default csr=00000000 gpu=NootedRed kexts=24 ssdts=4
-  13    supported   | ok MacBookPro16,2 sbm=Default csr=00000000 gpu=NootedRed kexts=24 ssdts=4
-  14    supported   | ok MacBookPro16,2 sbm=Disabled csr=00000000 gpu=NootedRed kexts=24 ssdts=4
-  15    supported   | ok MacBookPro16,2 sbm=Disabled csr=00000000 gpu=NootedRed kexts=24 ssdts=4
-  26    supported   root-patch | ok MacBookPro16,2 sbm=Disabled csr=00000000 gpu=NootedRed kexts=24 ssdts=4
+  11    supported   | ok MacBookPro16,2 sbm=Default csr=00000000 gpu=NootedRed kexts=23 ssdts=4
+  12    supported   | ok MacBookPro16,2 sbm=Default csr=00000000 gpu=NootedRed kexts=23 ssdts=4
+  13    supported   | ok MacBookPro16,2 sbm=Default csr=00000000 gpu=NootedRed kexts=23 ssdts=4
+  14    supported   | ok MacBookPro16,2 sbm=Disabled csr=00000000 gpu=NootedRed kexts=23 ssdts=4
+  15    supported   | ok MacBookPro16,2 sbm=Disabled csr=00000000 gpu=NootedRed kexts=23 ssdts=4
+  26    supported   root-patch | ok MacBookPro16,2 sbm=Disabled csr=00000000 gpu=NootedRed kexts=23 ssdts=4
 report-notes:
   [warning] network: No network in macOS Recovery
   [warning] storage: SAMSUNG MZALQ512HALU-000L2 (PM991) cannot be used
@@ -48,7 +48,7 @@ kexts:
   + BlueToolFixup.kext (BrcmPatchRAM) [21.0.0..]
   + USBToolBox.kext (USBToolBox) required
   + UTBDefault.kext (USBToolBox) required
-  + GenericUSBXHCI.kext (GenericUSBXHCI) [20.0.0..]
+  - GenericUSBXHCI.kext (GenericUSBXHCI) [20.0.0..24.99.99]
   + VoodooPS2Controller.kext (VoodooPS2Controller) required
       - VoodooInput.kext
       + VoodooPS2Keyboard.kext
@@ -105,7 +105,7 @@ platform-info:
   on: Automatic UpdateDataHub UpdateNVRAM UpdateSMBIOS
   off: CustomMemory UseRawUuidEncoding
   set: UpdateSMBIOSMode="Create"
-drivers: OpenRuntime.efi HfsPlus.efi OpenCanopy.efi ResetNvramEntry.efi
+drivers: OpenRuntime.efi HfsPlus.efi OpenCanopy.efi
 uefi-quirks:
   on: ReleaseUsbOwnership RequestBootVarRouting
   off: DisableSecurityPolicy EnableVectorAcceleration ForceOcWriteFlash IgnoreInvalidFlexRatio UnblockFsConnect
@@ -134,10 +134,12 @@ bios: IOMMU (AMD-Vi) = disable (required)
 bios: UMA Frame Buffer Size = 512MB (1GB recommended) (required)
 bios: Sleep State = S3 if available
 notes:
+  [warning] usb: Ryzen XHCI workaround is optional
   [warning] storage: SAMSUNG MZALQ512HALU-000L2 (PM991)
   [warning] network: No network in macOS Recovery
+  [warning] nvram: Avoid Reset NVRAM on Lenovo laptops
   [info] gpu: Display: AMD Radeon(TM) Graphics
-  [info] input: I2C input devices
+  [info] input: AMD I2C input devices
   [info] firmware: Early boot hang fallback
   [info] storage: Boot-time TRIM off for Samsung NVMe
   [info] boot: Verbose boot is on
@@ -145,6 +147,8 @@ post-install:
   [info] boot: Copy the EFI to the internal drive
   [info] usb: Map the USB ports
   [info] wifi: Install HeliPort for Intel Wi-Fi
+  [info] gpu: NootedRed display settings
+  [info] cpu: Rebuild before upgrading to macOS 26
   [info] bootloader: Boot picker after install
   [info] power: Tune sleep settings
   [info] audio: Try other layout-ids if a jack or the microphone is silent

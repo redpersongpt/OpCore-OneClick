@@ -14,8 +14,7 @@ releases:
   15    unsupported | err APPLE_SILICON
   26    unsupported | err APPLE_SILICON
 report-notes:
-  [blocking] cpu: Not supported on macOS Sequoia 15
-  [warning] network: No network in macOS Recovery
+  [blocking] cpu: Not supported on any macOS release
 
 == no recommended release ==
 10.13: [APPLE_SILICON] This Mac already runs macOS natively; OpenCore EFIs are for Intel/AMD PCs.

@@ -12,11 +12,11 @@ releases:
   10.14 unsupported | err TARGET_BELOW_CPU_MINIMUM (recoverable)
   10.15 unsupported | err NO_DISPLAY_PATH (recoverable)
   11    unsupported | err NO_DISPLAY_PATH (recoverable)
-  12    supported   | ok MacPro7,1 sbm=Default csr=00000000 gpu=WhateverGreen kexts=12 ssdts=3
-  13    supported   | ok MacPro7,1 sbm=Default csr=00000000 gpu=WhateverGreen kexts=13 ssdts=3
-  14    supported   | ok MacPro7,1 sbm=Disabled csr=00000000 gpu=WhateverGreen kexts=13 ssdts=3
-  15    supported   | ok MacPro7,1 sbm=Disabled csr=00000000 gpu=WhateverGreen kexts=13 ssdts=3
-  26    supported   root-patch | ok MacPro7,1 sbm=Disabled csr=00000000 gpu=WhateverGreen kexts=14 ssdts=3
+  12    supported   | ok MacPro7,1 sbm=Default csr=00000000 gpu=WhateverGreen kexts=11 ssdts=3
+  13    supported   | ok MacPro7,1 sbm=Default csr=00000000 gpu=WhateverGreen kexts=12 ssdts=3
+  14    supported   | ok MacPro7,1 sbm=Disabled csr=00000000 gpu=WhateverGreen kexts=12 ssdts=3
+  15    supported   | ok MacPro7,1 sbm=Disabled csr=00000000 gpu=WhateverGreen kexts=12 ssdts=3
+  26    supported   root-patch | ok MacPro7,1 sbm=Disabled csr=00000000 gpu=WhateverGreen kexts=13 ssdts=3
 report-notes:
   [warning] platform: BitLocker and dual boot
 
@@ -33,7 +33,7 @@ kexts:
   + SMCProcessor.kext (VirtualSMC)
   + SMCSuperIO.kext (VirtualSMC)
   + AppleALC.kext (AppleALC) required
-  + CpuTopologyRebuild.kext (CpuTopologyRebuild)
+  - CpuTopologyRebuild.kext (CpuTopologyRebuild)
   + AppleIGC.kext (AppleIGC) [19.0.0..] required
   + USBToolBox.kext (USBToolBox) required
   + UTBDefault.kext (USBToolBox) required
@@ -44,6 +44,8 @@ ssdts:
   SSDT-EC-USBX.aml <- machine (353 bytes)
   SSDT-AWAC.aml <- machine (75 bytes)
 device-properties:
+  PciRoot(0x0)/Pci(0x2,0x0)
+    class-code = <FFFFFFFF>
   PciRoot(0x0)/Pci(0x1f,0x3)
     layout-id = <0D000000>
   PciRoot(0x0)/Pci(0x1c,0x2)/Pci(0x0,0x0)
@@ -124,7 +126,8 @@ post-install:
   [info] boot: Copy the EFI to the internal drive
   [info] usb: Map the USB ports
   [info] bootloader: Boot picker after install
+  [info] cpu: Check CPU frequency vectors
   [info] audio: Try other layout-ids if a jack or the microphone is silent
   [info] smbios: Check the serial number before using iServices
-  [info] boot: Turn off verbose boot
+  [info] cpu: Enable hybrid CPU topology after installation
   [warning] platform: Dual boot with Windows

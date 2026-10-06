@@ -46,6 +46,7 @@ function Q($n,$b){try{$r[$n]=@(& $b)}catch{$r.errors+=('{0}: {1}' -f $n,$_.Excep
 function D($d){if($d){try{$d.ToUniversalTime().ToString('MM/dd/yyyy',[Globalization.CultureInfo]::InvariantCulture)}catch{}}}
 Q cpu {Get-CimInstance Win32_Processor|Select-Object Name,Manufacturer,Description,NumberOfCores,NumberOfLogicalProcessors,MaxClockSpeed}
 Q system {Get-CimInstance Win32_ComputerSystem|Select-Object Manufacturer,Model,TotalPhysicalMemory,HypervisorPresent}
+Q product {Get-CimInstance Win32_ComputerSystemProduct|Select-Object Version}
 Q board {Get-CimInstance Win32_BaseBoard|Select-Object Manufacturer,Product}
 Q enclosure {Get-CimInstance Win32_SystemEnclosure|Select-Object Manufacturer,ChassisTypes}
 Q bios {Get-CimInstance Win32_BIOS|Select-Object Manufacturer,SMBIOSBIOSVersion,@{n='ReleaseDate';e={D $_.ReleaseDate}}}
@@ -329,7 +330,15 @@ pub fn parse(json: &str) -> Result<Inventory, AppError> {
             })
             .collect(),
         system_manufacturer: text(&system, "Manufacturer"),
-        system_model: text(&system, "Model"),
+        system_model: if text(&system, "Manufacturer")
+            .is_some_and(|v| v.to_ascii_lowercase().contains("lenovo"))
+        {
+            text(&first("product"), "Version")
+                .and_then(|v| clean_dmi(&v))
+                .or_else(|| text(&system, "Model"))
+        } else {
+            text(&system, "Model")
+        },
         hypervisor_present: system.get("HypervisorPresent").and_then(Value::as_bool),
         total_physical_memory: number(&system, "TotalPhysicalMemory"),
         board_manufacturer: text(&board, "Manufacturer"),

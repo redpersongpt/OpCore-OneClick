@@ -8,9 +8,7 @@
 
 use crate::contracts::note;
 use crate::domain::compatibility::{self, ModernStandby};
-use crate::domain::model::{
-    BuildPlan, CpuPlatform, GpuFamily, MacOsVersion, NoteLevel, PlanNote, PlistScalar,
-};
+use crate::domain::model::{BuildPlan, CpuPlatform, GpuFamily, MacOsVersion, NoteLevel, PlanNote};
 use crate::domain::{codec_db, device_db};
 
 use super::{
@@ -158,6 +156,16 @@ fn legacy_wireless(ctx: &PlanContext, plan: &BuildPlan) -> bool {
 /// steps by topic).
 pub fn apply(ctx: &PlanContext, display: &DisplayPlan, plan: &mut BuildPlan) {
     add_plan_notes(ctx, plan);
+    if ctx.target == MacOsVersion::Tahoe
+        && plan.csr_active_config == 0x803
+        && plan.smbios.secure_boot_model == "Disabled"
+    {
+        for step in &mut plan.post_install {
+            if step.component == "audio" && step.detail.contains("rebuild") {
+                step.detail = "The EFI already has SIP lowered (03080000) and SecureBootModel Disabled for root patching. Restore AppleHDA and keep AppleALC, or install VoodooHDA to /Library/Extensions and disable AppleALC. No EFI rebuild is needed; repeat the root patch after macOS updates.".into();
+            }
+        }
+    }
     let steps = post_install_steps(ctx, display, plan);
     plan.post_install.extend(steps);
 
@@ -206,6 +214,71 @@ fn add_plan_notes(ctx: &PlanContext, plan: &mut BuildPlan) {
         return;
     }
     let profile = ctx.profile;
+    let board = format!(
+        "{} {}",
+        profile.motherboard_vendor, profile.motherboard_model
+    )
+    .to_ascii_uppercase();
+    let chipset = &ctx.chipset;
+    let mut warn = |component: &str, title: &str, detail: &str| {
+        plan.notes
+            .push(note(NoteLevel::Warning, component, title, detail));
+    };
+    if board.contains("ASUS")
+        && chipset
+            .as_ref()
+            .is_some_and(|c| matches!(c.name.as_str(), "Z97" | "H97"))
+        && ctx.target >= MacOsVersion::BigSur
+    {
+        warn("nvram", "ASUS 9-series NVRAM restriction",
+            "ASUS Z97/H97 firmware from October 2014 onward can whitelist NVRAM variables. Big Sur and newer installers may fail near 20% with 'device is write locked' or loop at stage 2. Verify native NVRAM first. Options are correctly configured emulated NVRAM, installing on another machine and moving the disk, or an expert firmware repair using an older NvramSmi module.");
+    }
+    if ctx.platform() == CpuPlatform::NehalemHedt && ctx.target >= MacOsVersion::Ventura {
+        warn("usb", "X58/ICH10 USB 1.1 devices need a hub",
+            "Ventura removed UHCI/OHCI USB 1.1 drivers. Connect the keyboard and mouse through a USB 2.0 hub or supported USB 3.0 card during installation; apply OCLP's USB 1.1 root patch afterwards.");
+    }
+    if chipset.as_ref().is_some_and(|c| c.is_am5()) {
+        warn("acpi", "Check AM5 BIOS compatibility",
+            "Some late-2023 and newer AGESA BIOS releases, especially ASUS/MSI X670E/B650E firmware preparing for Ryzen 8000, introduce CPVS and conditional ACPI scopes that prevent macOS boot. Use board-specific ACPI patches (CorpNewt or validated etorix am5_patches), or a compatible older BIOS if it supports this CPU. Do not apply another board's DSDT blindly.");
+    }
+    if matches!(
+        ctx.platform(),
+        CpuPlatform::AmdBulldozer | CpuPlatform::AmdJaguar
+    ) {
+        warn("cpu", "AMD 15h/16h firmware exceptions",
+            "For an 'X64 Exception Type' boot failure, first disable CSM. Some firmware is incompatible with ProvideCurrentCpuInfo; the fallback on Big Sur or older is the legacy 15h_16h AMD_Vanilla patch set at commit 06a9a7f3.");
+        if ctx.target == MacOsVersion::Mojave {
+            warn("cpu", "Mojave on AMD 15h/16h",
+                "The first boot can restart after Data & Privacy, and some web pages can crash. Consult the AMD_Vanilla README's InsanelyMac UPDATE-2 and UPDATE-5 fixes.");
+        }
+    }
+    if ctx.is_amd() && ctx.target <= MacOsVersion::Mojave {
+        warn("cpu", "32-bit apps do not work with AMD_Vanilla",
+            "On macOS 10.13 and 10.14 these kernel patches do not support 32-bit applications. A custom kernel is a separate workaround and loses iMessage support.");
+    }
+    if chipset
+        .as_ref()
+        .is_some_and(|c| c.name.eq_ignore_ascii_case("TRX40"))
+    {
+        warn("cpu", "TRX40 PAT patches are disabled",
+            "AMD_Vanilla recommends disabling PAT patches for GPU performance on TRX40. Test this EFI on a USB drive first; re-enable the Algrey PAT patches if boot or graphics fail.");
+    }
+    if crate::domain::chipset_db::needs_amd_hotplug_fix(profile, chipset.as_ref()) {
+        warn("pci", "AM5 PCI hotplug fix is enabled",
+            "The IOPCIIsHotplugPort patch is enabled for this AM5 board's onboard Thunderbolt/USB4 and Wi-Fi combination.");
+    }
+    if plan
+        .kexts
+        .iter()
+        .any(|k| k.catalog_id == "CpuTopologyRebuild")
+    {
+        plan.post_install.push(note(NoteLevel::Info, "cpu", "Enable hybrid CPU topology after installation",
+            "CpuTopologyRebuild is disabled in the installer EFI. ProvideCurrentCpuInfo handles initial boot. After removing -v, enable CpuTopologyRebuild in Kernel → Add; verbose boot with this kext can cause random hangs."));
+    }
+    if matches!(plan.smbios.model.as_str(), "iMac20,1" | "MacPro7,1") && ctx.is_intel() {
+        plan.post_install.push(note(NoteLevel::Info, "cpu", "Check CPU frequency vectors",
+            "These SMBIOS frequency vectors can reduce CPU performance. Compare benchmarks with SSDT-PLUG disabled to diagnose it, then restore it. If affected, add CPUFriend and a CPUFriendDataProvider matched to this CPU; Dortania bugtracker issue 190 describes the Haswell-QoS provider used on Comet/Rocket/Alder Lake."));
+    }
     let ethernet_ok = profile.ethernet.iter().any(|nic| {
         let info = device_db::ethernet_info(nic);
         info.driver != device_db::EthernetDriver::Unsupported
@@ -227,7 +300,7 @@ fn add_plan_notes(ctx: &PlanContext, plan: &mut BuildPlan) {
             "No network in macOS Recovery",
             &format!(
                 "{why} The installer downloads macOS from Apple, so connect a supported Ethernet adapter (a USB \
-                 adapter with an ASIX or Realtek chip works) for the install."
+                 CDC-ECM/NCM class or supported Realtek RTL8153/RTL8156 adapter works) for the install."
             ),
         ));
     }
@@ -239,6 +312,35 @@ fn add_plan_notes(ctx: &PlanContext, plan: &mut BuildPlan) {
             "This laptop generation usually only offers Modern Standby (S0ix); macOS needs S3 sleep. Look for an \
              S3 / \"Linux\" sleep option in the BIOS, otherwise disable sleep after installing.",
         ));
+    }
+    if ctx.is_laptop
+        && profile
+            .motherboard_vendor
+            .to_ascii_lowercase()
+            .contains("lenovo")
+    {
+        plan.notes.push(note(NoteLevel::Warning, "nvram", "Avoid Reset NVRAM on Lenovo laptops",
+            "Some Lenovo firmware becomes unbootable after an NVRAM reset (OpenCore bugtracker issue 995). ResetNvramEntry is omitted from this EFI; do not use other NVRAM reset tools without checking the exact model."));
+    }
+    if ctx.is_hedt
+        && matches!(plan.smbios.model.as_str(), "iMacPro1,1" | "MacPro7,1")
+        && profile.gpus.iter().any(|g| {
+            !g.disabled
+                && matches!(
+                    g.family,
+                    GpuFamily::AmdGcn1
+                        | GpuFamily::AmdGcn2
+                        | GpuFamily::AmdGcn3
+                        | GpuFamily::NvidiaKepler
+                )
+        })
+    {
+        plan.notes.push(note(NoteLevel::Warning, "gpu", "Workstation graphics and DRM",
+            "iMacPro1,1/MacPro7,1 expect Polaris, Vega or Navi for hardware video decoding and DRM. With an older card, consider MacPro6,1 on releases that support it, or upgrade the display GPU; root patches do not guarantee DRM."));
+    }
+    if ctx.platform() == CpuPlatform::CoffeeLake && ctx.target == MacOsVersion::HighSierra {
+        plan.notes.push(note(NoteLevel::Warning, "gpu", "Coffee Lake graphics on High Sierra",
+            "Coffee Lake iGPU support requires the MacBookPro15,x-specific macOS 10.13.6 build (17G2208 or newer), not a generic High Sierra recovery image. Mojave or newer is the safer installer target."));
     }
     if has_boot_arg(plan, "-v") {
         plan.notes.push(note(
@@ -258,6 +360,28 @@ fn post_install_steps(ctx: &PlanContext, display: &DisplayPlan, plan: &BuildPlan
     let mut add = |level: NoteLevel, component: &str, title: &str, detail: &str| {
         steps.push(note(level, component, title, detail));
     };
+    if let Some(vm) = profile.vm {
+        let detail = match vm {
+            crate::domain::model::VmKind::Kvm => "Attach the OpenCore EFI as a virtual boot disk and the converted BaseSystem recovery image on an AHCI bus (raw or qcow2). Keep the scanned CPU vendor and vCPU topology; rebuild after changing them. On the KVM host enable ignore_msrs=1 and report_ignored_msrs=0. Expose invtsc and vmware-cpuid-freq=on; an Intel guest model must use vendor=GenuineIntel. For input use usb-tablet or PS/2, not virtio-tablet-pci. Use a VGA-capable adapter such as vmware-svga; non-VGA virtio-gpu-pci may expose only a Blt-only GOP that macOS cannot draw to.",
+            crate::domain::model::VmKind::HyperV => "Attach OpenCore and recovery as VHDX disks to a Generation 2 VM (qemu-img convert -O vhdx). MacHyperVFramebuffer adds synthetic display/resolution support; on macOS 11+ install it to /Library/Extensions with kext signing disabled in SIP. It does not provide Metal acceleration. DDA GPU passthrough needs a supported Windows Server host.",
+            crate::domain::model::VmKind::Vmware => "Attach OpenCore and recovery as virtual disks (VMDK) or suitable bootable ISO media. With the OC4VM approach use firmware=efi, smc.present=FALSE and guestOS=darwin*-64 in the VMX, and disable virtual firmware Secure Boot; VirtualSMC supplies the SMC. Install VMware Tools from darwin.iso for the SVGA display driver. Workstation/Player does not offer PCI GPU passthrough or Metal acceleration.",
+            _ => "Attach the OpenCore EFI and recovery image using virtual disks supported by the hypervisor, and select OpenCore first in its UEFI boot order.",
+        };
+        add(
+            NoteLevel::Info,
+            "vm",
+            "Prepare the virtual installer disks",
+            detail,
+        );
+    }
+    if !ctx.is_vm && ctx.platform() == CpuPlatform::Penryn {
+        add(NoteLevel::Info, "acpi", "Check HPET if CPU power management panics",
+            "For an AppleIntelCPUPowerManagement panic, check that HPET is enabled in firmware. Run SSDTTime FixHPET on this PC and include both its SSDT and patches if an IRQ conflict is found. Do not apply another board's HPET patch; DummyPowerManagement is only a diagnostic fallback and disables CPU power management.");
+    }
+    if !ctx.is_vm && ctx.platform() == CpuPlatform::ArrowLake && target == MacOsVersion::Tahoe {
+        add(NoteLevel::Warning, "acpi", "Check the 800-series ACPI patch if Tahoe stalls",
+            "Board-specific reports differ. If Tahoe hangs, test disabling 'Remove conditional ACPI scope declaration (Intel 800-series)' on a spare boot EFI. A successful OpenCore MOD report did not need it; this does not establish a universal setting for every 800-series BIOS.");
+    }
     let oclp = if target == MacOsVersion::Tahoe {
         "OpenCore Legacy Patcher 3.0 or newer"
     } else {
@@ -414,10 +538,6 @@ fn post_install_steps(ctx: &PlanContext, display: &DisplayPlan, plan: &BuildPlan
         .drivers
         .iter()
         .any(|d| d.enabled && d.path.eq_ignore_ascii_case("OpenVariableRuntimeDxe.efi"))
-        || matches!(
-            plan.nvram_settings.get("LegacyOverwrite"),
-            Some(PlistScalar::Bool(true))
-        )
         || compatibility::legacy_boot_only(profile);
     if emulated_nvram && !covered(existing, None, &["launchd.command", "logouthook"]) {
         add(
@@ -425,7 +545,7 @@ fn post_install_steps(ctx: &PlanContext, display: &DisplayPlan, plan: &BuildPlan
             "nvram",
             NVRAM_SCRIPT,
             "This machine uses emulated NVRAM. Install OpenCore's Utilities/LogoutHook/Launchd.command (run it \
-             with the install argument) so NVRAM changes are saved to nvram.plist at shutdown.",
+             with the install argument) so NVRAM changes are saved to nvram.plist at shutdown. During installation select macOS Installer manually on each restart, then select the target system disk when installation completes.",
         );
     }
 

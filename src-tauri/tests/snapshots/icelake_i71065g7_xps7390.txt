@@ -11,13 +11,13 @@ summary: macOS Sequoia 15 works with caveats. This machine can run macOS Catalin
 releases:
   10.13 unsupported | err TARGET_BELOW_CPU_MINIMUM (recoverable)
   10.14 unsupported | err TARGET_BELOW_CPU_MINIMUM (recoverable)
-  10.15 supported   | ok MacBookAir9,1 sbm=Default csr=00000000 gpu=WhateverGreen kexts=20 ssdts=7
-  11    supported   | ok MacBookAir9,1 sbm=Default csr=00000000 gpu=WhateverGreen kexts=20 ssdts=7
-  12    supported   | ok MacBookAir9,1 sbm=Default csr=00000000 gpu=WhateverGreen kexts=20 ssdts=7
-  13    supported   | ok MacBookAir9,1 sbm=Default csr=00000000 gpu=WhateverGreen kexts=20 ssdts=7
-  14    supported   | ok MacBookAir9,1 sbm=Disabled csr=00000000 gpu=WhateverGreen kexts=21 ssdts=7
-  15    supported   | ok MacBookAir9,1 sbm=Disabled csr=00000000 gpu=WhateverGreen kexts=21 ssdts=7
-  26    supported   root-patch | ok MacBookPro16,2 sbm=Disabled csr=00000000 gpu=WhateverGreen kexts=21 ssdts=7
+  10.15 supported   | ok MacBookAir9,1 sbm=Default csr=00000000 gpu=WhateverGreen kexts=21 ssdts=7
+  11    supported   | ok MacBookAir9,1 sbm=Default csr=00000000 gpu=WhateverGreen kexts=21 ssdts=7
+  12    supported   | ok MacBookAir9,1 sbm=Default csr=00000000 gpu=WhateverGreen kexts=21 ssdts=7
+  13    supported   | ok MacBookAir9,1 sbm=Default csr=00000000 gpu=WhateverGreen kexts=21 ssdts=7
+  14    supported   | ok MacBookAir9,1 sbm=Disabled csr=00000000 gpu=WhateverGreen kexts=22 ssdts=7
+  15    supported   | ok MacBookAir9,1 sbm=Disabled csr=00000000 gpu=WhateverGreen kexts=22 ssdts=7
+  26    supported   root-patch | ok MacBookPro16,2 sbm=Disabled csr=00000000 gpu=WhateverGreen kexts=22 ssdts=7
 report-notes:
   [warning] network: No network in macOS Recovery
   [warning] platform: BitLocker and dual boot
@@ -58,6 +58,7 @@ kexts:
       + VoodooGPIO.kext
       + VoodooI2CServices.kext
       - VoodooInput.kext
+  + VoodooI2CHID.kext (VoodooI2C)
   + NVMeFix.kext (NVMeFix) [18.0.0..]
   + RestrictEvents.kext (RestrictEvents)
 ssdts:

@@ -19,7 +19,7 @@ releases:
   15    unsupported | err CPU_UNSUPPORTED
   26    unsupported | err CPU_UNSUPPORTED
 report-notes:
-  [blocking] cpu: Not supported on macOS Sequoia 15
+  [blocking] cpu: Not supported on any macOS release
   [warning] network: No network in macOS Recovery
   [warning] storage: SanDisk DA4064 eMMC 64GB cannot be used
   [warning] platform: BitLocker and dual boot

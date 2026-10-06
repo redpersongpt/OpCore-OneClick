@@ -658,8 +658,7 @@ pub fn ethernet_info(nic: &ProfileNic) -> EthernetInfo {
             }
         }
         VENDOR_VMWARE if device == 0x07B0 => EthernetInfo::new(D::NativeIntel, "VMware vmxnet3")
-            .min(MacOsVersion::BigSur)
-            .note("vmxnet3 has a built-in driver from macOS 11; use the e1000e/82545EM adapter type for older guests."),
+            .note("AppleVmxnet3Ethernet is built into OS X 10.11 and newer, including every supported target."),
         VENDOR_VIRTIO if matches!(device, 0x1000 | 0x1041) => EthernetInfo::new(D::NativeIntel, "VirtIO network")
             .min(MacOsVersion::BigSur)
             .note("VirtIO networking has a built-in driver from macOS 11; use vmxnet3 or e1000-82545em for older guests."),

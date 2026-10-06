@@ -102,6 +102,7 @@ bios: SVM Mode (AMD-V) = enable
 bios: IOMMU (AMD-Vi) = disable (required)
 bios: Serial / Parallel port = disable
 notes:
+  [warning] cpu: AMD 15h/16h firmware exceptions
   [info] gpu: Display: Radeon RX 570 Series
   [info] ethernet: Realtek RTL8111/8168 Ethernet
   [info] acpi: Generic prebuilt SSDTs
@@ -109,6 +110,7 @@ notes:
 post-install:
   [info] boot: Copy the EFI to the internal drive
   [info] usb: Map the USB ports
+  [info] cpu: Rebuild before upgrading to macOS 26
   [info] bootloader: Boot picker after install
   [info] audio: Try other layout-ids if a jack or the microphone is silent
   [info] smbios: Check the serial number before using iServices

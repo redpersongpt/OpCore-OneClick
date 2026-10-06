@@ -422,7 +422,7 @@ fn gpu_unavailable_reason(
         return format!("{name} is disabled in the profile");
     }
     if !can_drive_display(profile, index) {
-        return format!("{name} is a laptop dGPU that cannot drive the screen");
+        return format!("{name} has unverified laptop display routing; if a MUX supports dGPU-only mode, select it in firmware and disable the iGPU in the hardware editor");
     }
     let s = gpu_db::support(gpu);
     if !s.display_capable {
@@ -545,6 +545,28 @@ fn cpu_caveats(
     version: MacOsVersion,
     e: &mut Eval,
 ) {
+    if profile.cpu.lacks_avx() && version >= MacOsVersion::Sequoia {
+        e.major.push(("cpu", "macOS 15.2+ WebKit/JavaScriptCore apps can crash without OCLP's non-AVX jsc workaround; the pinned upstream RestrictEvents does not include it.".into()));
+    }
+    if ident.vendor == CpuVendor::Amd && version <= MacOsVersion::Mojave {
+        e.minor.push((
+            "cpu",
+            "AMD_Vanilla does not support 32-bit apps on macOS 10.13/10.14.".into(),
+        ));
+    }
+    if profile.cpu.platform == CpuPlatform::NehalemHedt
+        && version >= MacOsVersion::Ventura
+        && profile.vm.is_none()
+    {
+        e.major.push(("usb", "X58/ICH10: Ventura removed USB 1.1 UHCI/OHCI drivers. Use a USB 2.0 hub or USB 3.0 card for keyboard/mouse during install, then apply the OCLP USB 1.1 root patch.".into()));
+    }
+    if profile.cpu.lacks_avx() && version == MacOsVersion::Monterey {
+        e.minor.push((
+            "cpu",
+            "macOS 12.4+ needs the included NoAVXFSCompressionTypeZlib decompression workaround."
+                .into(),
+        ));
+    }
     // Known platforms past their AVX2 ceiling are already an expert option;
     // this covers VMs with an unidentified CPU model.
     if macos_db::requires_avx2(version) && !ident.has_avx2 && e.workarounds.is_empty() {
@@ -587,6 +609,9 @@ fn display_caveats(profile: &HardwareProfile, version: MacOsVersion, e: &mut Eva
         DisplayPath::Native(i) => {
             let gpu = &profile.gpus[i];
             let name = gpu_label(gpu);
+            if gpu.family == GpuFamily::AmdApuVega && gpu.vram_mb.is_some_and(|mb| mb < 512) {
+                e.major.push(("gpu", "NootedRed requires at least 512 MiB UMA (1 GiB recommended). Increase UMA Frame Buffer Size before booting; if it cannot be changed, the graphics path is unusable.".into()));
+            }
             match gpu.family {
                 GpuFamily::VirtualDisplay => e.minor.push((
                     "gpu",
@@ -613,7 +638,11 @@ fn display_caveats(profile: &HardwareProfile, version: MacOsVersion, e: &mut Eva
             ) {
                 e.minor.push((
                     "gpu",
-                    format!("{name} relies on a community driver (NootRX/NootedRed) instead of WhateverGreen."),
+                    if gpu_db::weg_spoof_alternative(gpu).is_some() && gpu.pci_path.is_some() {
+                        format!("{name} uses a WhateverGreen device-id spoof; NootRX is the alternative.")
+                    } else {
+                        format!("{name} relies on a community driver (NootRX/NootedRed) instead of WhateverGreen.")
+                    },
                 ));
             }
         }
@@ -629,7 +658,7 @@ fn display_caveats(profile: &HardwareProfile, version: MacOsVersion, e: &mut Eva
             e.workarounds.push((
                 "gpu",
                 format!(
-                    "{name} has no native driver on this release: graphics acceleration only comes back with \
+                    "{name} cannot use this release's graphics drivers as shipped: acceleration requires \
                      OpenCore Legacy Patcher root patches after install (lowered SIP, AMFIPass, SecureBootModel \
                      Disabled), repeated after every update. Not recommended for daily use.{oclp}"
                 ),
@@ -713,7 +742,7 @@ fn network_caveats(profile: &HardwareProfile, version: MacOsVersion, e: &mut Eva
         if info.driver == BluetoothDriver::IntelBluetooth && version == MacOsVersion::Tahoe {
             e.minor.push((
                 "bluetooth",
-                "Intel Bluetooth on macOS 26 needs the -ibtcompatbeta boot argument.".into(),
+                "The pinned IntelBluetoothFirmware 2.5.1 fork supports macOS 26 without -ibtcompatbeta; that flag is for upstream 2.4.0.".into(),
             ));
         }
     }
@@ -791,7 +820,9 @@ fn cpu_component(profile: &HardwareProfile, ident: &CpuIdentity, focus: MacOsVer
             }
         }
     };
-    notes.extend(info.notes.iter().map(|n| n.to_string()));
+    if profile.vm.is_none() {
+        notes.extend(info.notes.iter().map(|n| n.to_string()));
+    }
     if info.has_avx2 && !ident.has_avx2 && info.supported {
         if let Some(w) = cpu_db::ceiling_workaround_for(ident) {
             notes.push(w.caveat.to_string());
@@ -840,6 +871,9 @@ fn gpu_components(profile: &HardwareProfile, focus: MacOsVersion) -> Vec<Compone
         .map(|(i, gpu)| {
             let s = gpu_db::support(gpu);
             let mut notes = Vec::new();
+            if gpu.family == GpuFamily::AmdApuVega && gpu.vram_mb.is_some_and(|mb| mb < 512) {
+                notes.push("Insufficient UMA memory: set at least 512 MiB (1 GiB recommended) in the BIOS before booting NootedRed; the current allocation will not work.".into());
+            }
             let level = if gpu.disabled {
                 notes.push("Disabled in the profile: macOS will not use it.".into());
                 if s.display_capable {
@@ -849,8 +883,7 @@ fn gpu_components(profile: &HardwareProfile, focus: MacOsVersion) -> Vec<Compone
                 }
             } else if !can_drive_display(profile, i) {
                 notes.push(
-                    "Laptop dGPU without a display MUX: macOS cannot drive the internal screen through it, so it \
-                     is turned off."
+                    "Laptop display routing is not verified. macOS cannot switch GPUs. If this laptop has a MUX, select dGPU-only and disable the iGPU in the hardware editor; otherwise the dGPU cannot drive the internal panel."
                         .into(),
                 );
                 SupportLevel::Unsupported
@@ -992,6 +1025,15 @@ fn ethernet_works(profile: &HardwareProfile, focus: MacOsVersion) -> bool {
 fn network_components(profile: &HardwareProfile, focus: MacOsVersion) -> Vec<Component> {
     let mut out = Vec::new();
     for nic in &profile.ethernet {
+        if profile.vm == Some(VmKind::HyperV) {
+            out.push(component(
+                "ethernet",
+                "Hyper-V synthetic network",
+                SupportLevel::Supported,
+                vec!["MacHyperVSupport provides the synthetic network adapter.".into()],
+            ));
+            continue;
+        }
         let info = device_db::ethernet_info(nic);
         let level = if info.driver == EthernetDriver::Unsupported {
             SupportLevel::Unsupported
@@ -1076,9 +1118,14 @@ fn network_components(profile: &HardwareProfile, focus: MacOsVersion) -> Vec<Com
             "network",
             "No network in macOS Recovery",
             "The installer downloads macOS from Apple, but no network adapter here works in macOS Recovery. \
-             Connect a supported Ethernet adapter (USB adapters with ASIX/Realtek chips work) for the install.",
+             Connect a supported Ethernet adapter (use a CDC-ECM/NCM class or supported Realtek RTL8153/RTL8156 USB adapter) for the install.",
         );
-        if profile.wifi.is_some() && profile.ethernet.is_empty() {
+        if profile
+            .wifi
+            .as_ref()
+            .is_some_and(|n| device_db::wifi_driver(n) != WifiDriver::Unsupported)
+            && profile.ethernet.is_empty()
+        {
             issue.detail.push_str(" Wi-Fi works after installation.");
         }
         if let Some(first) = out.first_mut() {
@@ -1271,10 +1318,9 @@ fn vm_label(kind: VmKind) -> &'static str {
 fn vm_notes(kind: VmKind) -> &'static str {
     match kind {
         VmKind::Kvm => {
-            "QEMU/KVM: use OVMF (UEFI), a CPU model macOS knows (host or Haswell/Skylake class; AMD hosts need an \
-             Intel model) and vmxnet3, e1000-82545em or VirtIO networking."
+            "QEMU/KVM: use OVMF (UEFI) and keep the scanned CPU vendor and vCPU topology. An AuthenticAMD guest needs AMD patches with the scanned physical core count. If changing to an Intel CPU model, rescan and rebuild the EFI. Use vmxnet3, e1000-82545em or VirtIO networking."
         }
-        VmKind::Vmware => "VMware: macOS guests need a patched (unlocked) VMware Workstation/Player on PCs.",
+        VmKind::Vmware => "VMware: use EFI firmware, disable guest Secure Boot, and configure the guest SMC consistently with VirtualSMC. Guest OS availability and setup depend on the VMware product and host. Install VMware Tools for SVGA resolution support; Workstation/Player has no PCI passthrough.",
         VmKind::HyperV => "Hyper-V: a Generation 2 VM with Secure Boot off; MacHyperVSupport provides the drivers.",
         VmKind::VirtualBox => "VirtualBox: macOS guests run without graphics acceleration and are slow.",
         VmKind::Parallels => "Parallels: macOS guests are only supported on Mac hosts.",
@@ -1531,11 +1577,13 @@ pub fn assess(profile: &HardwareProfile, target: Option<MacOsVersion>) -> Compat
 
     let mut components: Vec<Component> = vec![cpu_component(profile, &ident, focus)];
     components.extend(gpu_components(profile, focus));
-    components.extend(audio_component(profile, focus));
-    components.extend(network_components(profile, focus));
-    components.extend(input_component(profile));
-    components.push(storage_component(profile));
-    components.push(platform_component(profile, focus));
+    if !is_apple(profile) {
+        components.extend(audio_component(profile, focus));
+        components.extend(network_components(profile, focus));
+        components.extend(input_component(profile));
+        components.push(storage_component(profile));
+        components.push(platform_component(profile, focus));
+    }
 
     // Notes for the selected (or focus) release: blocking, then warnings, then info.
     let mut notes: Vec<PlanNote> = Vec::new();
@@ -1545,7 +1593,14 @@ pub fn assess(profile: &HardwareProfile, target: Option<MacOsVersion>) -> Compat
             notes.push(note(
                 NoteLevel::Blocking,
                 component,
-                &title("Not supported"),
+                &if evals
+                    .iter()
+                    .all(|(_, e)| e.blockers.iter().any(|(c, _)| *c == "cpu"))
+                {
+                    "Not supported on any macOS release".into()
+                } else {
+                    title("Not supported")
+                },
                 text,
             ));
         }

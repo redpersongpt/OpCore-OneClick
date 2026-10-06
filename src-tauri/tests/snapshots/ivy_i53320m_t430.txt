@@ -91,7 +91,7 @@ platform-info:
   on: Automatic UpdateDataHub UpdateNVRAM UpdateSMBIOS
   off: CustomMemory UseRawUuidEncoding
   set: UpdateSMBIOSMode="Create"
-drivers: OpenRuntime.efi HfsPlus.efi OpenCanopy.efi ResetNvramEntry.efi
+drivers: OpenRuntime.efi HfsPlus.efi OpenCanopy.efi
 uefi-quirks:
   on: IgnoreInvalidFlexRatio ReleaseUsbOwnership RequestBootVarRouting
   off: DisableSecurityPolicy EnableVectorAcceleration ForceOcWriteFlash UnblockFsConnect
@@ -121,6 +121,7 @@ bios: Execute Disable Bit = enable (required)
 bios: Hyper-Threading = enable
 bios: DVMT Pre-Allocated = 32MB
 notes:
+  [warning] nvram: Avoid Reset NVRAM on Lenovo laptops
   [info] gpu: Ivy Bridge panel
   [info] gpu: Display: Intel(R) HD Graphics 4000
   [info] cpu: CFG Lock

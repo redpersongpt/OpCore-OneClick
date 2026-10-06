@@ -121,6 +121,8 @@ pub const OC_TOOLS: &[&str] = &[
 /// Bundles that ship without an executable (Info.plist-only injectors).
 const CODELESS: &[&str] = &[
     "AppleMCEReporterDisabler.kext",
+    "ASPP-Override.kext",
+    "XLNCUSBFix.kext",
     "BrcmBluetoothInjector.kext",
     "BrcmBluetoothInjectorLegacy.kext",
     "IntelBluetoothInjector.kext",
@@ -166,6 +168,10 @@ fn add_entry(
 ) -> KernelAddEntry {
     let executable = if CODELESS.iter().any(|c| c.eq_ignore_ascii_case(name)) {
         String::new()
+    } else if name == "AAAMouSSE.kext" {
+        "Contents/MacOS/MouSSE".into()
+    } else if name == "AirPortBrcmNIC-Tahoe.kext" {
+        "Contents/MacOS/AirPortBrcmNIC".into()
     } else {
         format!("Contents/MacOS/{}", stem(name))
     };

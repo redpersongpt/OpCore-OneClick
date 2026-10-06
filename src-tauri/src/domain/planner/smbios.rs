@@ -367,7 +367,7 @@ fn amd(ctx: &PlanContext, path: DisplayPath, family: Option<GpuFamily>) -> Candi
         (true, DisplayPath::Igpu) => c(
             &["MacBookPro16,2", "MacBookPro15,2"],
             "MacBookPro16,2",
-            "AMD laptop with a Vega APU",
+            "AMD laptop with a Vega APU (MacBookPro15,2 is untested with NootedRed)",
         ),
         (true, _) => laptop_dgpu(),
         (false, DisplayPath::Igpu) => c(
@@ -408,7 +408,7 @@ fn intel_hedt(platform: P) -> Candidates {
         _ => c(
             &["iMacPro1,1", "MacPro7,1"],
             "MacPro7,1",
-            "X299 workstation",
+            "Skylake-X/W workstation (X299/C422)",
         ),
     }
 }

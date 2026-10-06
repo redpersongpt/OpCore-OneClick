@@ -828,6 +828,27 @@ fn match_board_token(token: &str) -> Option<&'static Def> {
     None
 }
 
+/// AMD_Vanilla's PCI enumeration fix is limited to these AM5 boards with
+/// onboard Thunderbolt/USB4 and Wi-Fi enabled.
+pub fn needs_amd_hotplug_fix(
+    profile: &crate::domain::model::HardwareProfile,
+    chipset: Option<&ChipsetInfo>,
+) -> bool {
+    const BOARDS: &[&str] = &[
+        "CROSSHAIR X670E HERO",
+        "CROSSHAIR X670E GENE",
+        "CROSSHAIR X670E EXTREME",
+        "PROART X670E-CREATOR",
+    ];
+    let board = profile
+        .motherboard_model
+        .to_ascii_uppercase()
+        .replace("ROG ", "");
+    chipset.is_some_and(ChipsetInfo::is_am5)
+        && profile.wifi.is_some()
+        && BOARDS.iter().any(|b| board.contains(b))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

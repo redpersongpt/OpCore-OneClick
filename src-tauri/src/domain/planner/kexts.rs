@@ -39,7 +39,7 @@ pub fn apply(ctx: &PlanContext, display: &DisplayPlan, plan: &mut BuildPlan) {
     core(plan);
     sensors(ctx, display, plan);
     audio(ctx, plan);
-    cpu_helpers(ctx, plan);
+    cpu_helpers(ctx, display, plan);
     vm(ctx, plan, &mut st);
     ethernet(ctx, plan, &mut st);
     wifi(ctx, plan, &mut st);
@@ -50,7 +50,7 @@ pub fn apply(ctx: &PlanContext, display: &DisplayPlan, plan: &mut BuildPlan) {
     aquantia_patches(ctx, plan);
     root_patch_support(ctx, display, plan);
     restrict_events(ctx, plan);
-    network_check(plan, &st);
+    network_check(ctx, plan, &st);
 }
 
 /// Facts collected across sections.
@@ -310,7 +310,7 @@ fn sensors(ctx: &PlanContext, display: &DisplayPlan, plan: &mut BuildPlan) {
             push(plan, pm);
             push(plan, smc);
         }
-        if ctx.target == MacOsVersion::Tahoe {
+        if ctx.target == MacOsVersion::Tahoe && !newer {
             note(
                 plan,
                 NoteLevel::Info,
@@ -489,7 +489,11 @@ fn audio(ctx: &PlanContext, plan: &mut BuildPlan) {
         return;
     }
     let subsystem = oem_subsystem(&ctx.profile.motherboard_vendor);
-    let Some(layout) = audio.layout_id.or_else(|| codec_db::default_layout(codec, subsystem, ctx.is_laptop)) else {
+    let Some(layout) = audio.layout_id.or_else(|| {
+        codec_db::ranked_layouts_for_model(codec, subsystem, ctx.is_laptop, ctx.profile.system_model.as_deref())
+            .first()
+            .copied()
+    }) else {
         note(
             plan,
             NoteLevel::Warning,
@@ -516,12 +520,13 @@ fn audio(ctx: &PlanContext, plan: &mut BuildPlan) {
         // No known controller path (AMD boards, VMs): the boot-arg works on any path.
         None => boot_arg(plan, &format!("alcid={layout}")),
     }
-    let others: Vec<String> = codec_db::ranked_layouts(codec, subsystem, ctx.is_laptop)
-        .into_iter()
-        .filter(|l| *l != layout)
-        .take(6)
-        .map(|l| l.to_string())
-        .collect();
+    let others: Vec<String> =
+        codec_db::ranked_layouts_for_model(codec, subsystem, ctx.is_laptop, ctx.profile.system_model.as_deref())
+            .into_iter()
+            .filter(|l| *l != layout)
+            .take(6)
+            .map(|l| l.to_string())
+            .collect();
     if audio.layout_id.is_none() && !others.is_empty() {
         post_install(
             plan,
@@ -646,8 +651,101 @@ fn apple_cpu_pm_platform(platform: CpuPlatform) -> bool {
     )
 }
 
-fn cpu_helpers(ctx: &PlanContext, plan: &mut BuildPlan) {
+fn cpu_helpers(ctx: &PlanContext, display: &DisplayPlan, plan: &mut BuildPlan) {
     let target = ctx.target;
+    let pre_sandy = matches!(
+        ctx.platform(),
+        CpuPlatform::Penryn | CpuPlatform::Lynnfield | CpuPlatform::Arrandale | CpuPlatform::NehalemHedt
+    );
+    let pre_ivy = pre_sandy || matches!(ctx.platform(), CpuPlatform::SandyBridge | CpuPlatform::SandyBridgeE);
+    if ctx.profile.cpu.lacks_avx() && target >= MacOsVersion::Monterey {
+        if target == MacOsVersion::Monterey {
+            push(
+                plan,
+                kext(
+                    "NoAVXFSCompressionTypeZlib",
+                    "NoAVXFSCompressionTypeZlib.kext",
+                    "Avoids Zlib decompression panics without AVX on macOS 12.4+.",
+                )
+                .min("21.5.0")
+                .max("21.99.99"),
+            );
+        }
+        if target >= MacOsVersion::Ventura {
+            push(
+                plan,
+                kext(
+                    "NoAVXFSCompressionTypeZlib-AVXpel",
+                    "NoAVXFSCompressionTypeZlib-AVXpel.kext",
+                    "Non-AVX Zlib decompressor for macOS 13+.",
+                )
+                .min(DARWIN_13),
+            );
+        }
+    }
+    if ctx.is_intel() && pre_ivy && !ctx.is_vm && target >= MacOsVersion::Monterey {
+        push(
+            plan,
+            kext(
+                "ASPP-Override",
+                "ASPP-Override.kext",
+                "Keeps ACPI SMC power management attached on macOS 12.3+.",
+            )
+            .min("21.4.0"),
+        );
+    }
+    if ctx.profile.cpu.lacks_rdrand() && matches!(target, MacOsVersion::BigSur | MacOsVersion::Monterey) {
+        for (base, find, replace, limit) in [
+            ("_early_random", "007423488B", "00EB23488B", 800),
+            ("_register_and_init_prng", "BA4801000031F6", "BA48010000EB05", 256),
+        ] {
+            plan.kernel_patches.push(BinaryPatch {
+                comment: format!("SurPlus: {base}"),
+                arch: "x86_64".into(),
+                identifier: "kernel".into(),
+                base: base.into(),
+                find: find.into(),
+                replace: replace.into(),
+                count: 1,
+                limit,
+                min_kernel: "20.4.0".into(),
+                max_kernel: "21.1.0".into(),
+                enabled: true,
+                mask: String::new(),
+                replace_mask: String::new(),
+                skip: 0,
+            });
+        }
+    }
+    if ctx.platform() == CpuPlatform::Penryn
+        && target >= MacOsVersion::Mojave
+        && ctx.display_gpu(display).is_some_and(|g| {
+            matches!(
+                g.family,
+                GpuFamily::AmdGcn1
+                    | GpuFamily::AmdGcn2
+                    | GpuFamily::AmdGcn3
+                    | GpuFamily::AmdPolaris
+                    | GpuFamily::AmdVega10
+                    | GpuFamily::AmdVega20
+                    | GpuFamily::AmdLexa
+            )
+        })
+    {
+        push(
+            plan,
+            kext(
+                "AAAMouSSE",
+                "AAAMouSSE.kext",
+                "SSE4.2 emulation for AMD Metal graphics on Penryn.",
+            )
+            .min("16.0.0"),
+        );
+    }
+    if ctx.profile.cpu.lacks_avx() && target >= MacOsVersion::Sequoia {
+        note(plan, NoteLevel::Warning, "cpu", "WebKit needs an additional non-AVX workaround",
+            "macOS 15.2 and newer can crash Safari, Mail and other JavaScriptCore apps on this CPU. The upstream RestrictEvents build does not include OCLP's jsc patch; this remains an expert configuration.");
+    }
     if ctx.needs_cryptexfixup {
         let caveat = cpu_db::ceiling_workaround(ctx.platform())
             .filter(|w| w.kext == Some("CryptexFixup.kext"))
@@ -711,9 +809,9 @@ fn cpu_helpers(ctx: &PlanContext, plan: &mut BuildPlan) {
             kext(
                 "CpuTopologyRebuild",
                 "CpuTopologyRebuild.kext",
-                "Rebuilds the P-core/E-core topology so the scheduler uses hybrid cores well.",
+                "Rebuilds the P-core/E-core topology; enable only after removing verbose boot (-v).",
             )
-            .optional(),
+            .disabled(),
         );
     }
     if !ctx.is_vm {
@@ -744,7 +842,13 @@ fn cpu_helpers(ctx: &PlanContext, plan: &mut BuildPlan) {
 
     // AppleMCEReporterDisabler only matches the MacPro6,1 / iMacPro1,1 /
     // MacPro7,1 board-ids (research-kexts §3.5).
-    let mce_model = MCE_BOARD_MODELS.iter().any(|m| m.eq_ignore_ascii_case(&plan.smbios.model));
+    let mce_model = MCE_BOARD_MODELS
+        .iter()
+        .any(|m| m.eq_ignore_ascii_case(&plan.smbios.model));
+    if ctx.is_amd() && target < MacOsVersion::Tahoe {
+        post_install(plan, "cpu", "Rebuild before upgrading to macOS 26",
+            "This EFI uses the AMD_Vanilla patch set pinned for this target. Rebuild for macOS 26 before upgrading so the Tahoe kernel patches are included.");
+    }
     if mce_model {
         let reason = if ctx.is_amd() && target >= MacOsVersion::Monterey {
             Some("Stops AppleIntelMCEReporter panics on AMD CPUs (macOS 12.3+).")
@@ -834,6 +938,69 @@ fn restrict_events(ctx: &PlanContext, plan: &mut BuildPlan) {
 /// is known once this stage has picked the audio and Wi-Fi kexts).
 fn root_patch_support(ctx: &PlanContext, display: &DisplayPlan, plan: &mut BuildPlan) {
     let rp = root_patching_planned(ctx, display, plan);
+    if rp.graphics
+        && ctx.target >= MacOsVersion::Ventura
+        && ctx.display_gpu(display).is_some_and(|g| {
+            matches!(
+                g.family,
+                GpuFamily::IntelIvyBridge | GpuFamily::IntelHaswell | GpuFamily::NvidiaKepler
+            )
+        })
+    {
+        merge_list_arg(plan, "revblock", &["media"]);
+        if plan.smbios.model == "MacPro7,1" {
+            merge_list_arg(plan, "revblock", &["pci"]);
+        }
+    }
+    if rp.graphics
+        && ctx.display_gpu(display).is_some_and(|g| {
+            matches!(
+                g.family,
+                GpuFamily::AmdGcn1
+                    | GpuFamily::AmdGcn2
+                    | GpuFamily::AmdGcn3
+                    | GpuFamily::AmdPolaris
+                    | GpuFamily::AmdLexa
+                    | GpuFamily::AmdVega10
+                    | GpuFamily::AmdVega20
+            )
+        })
+    {
+        plan.kernel_patches.extend([
+            BinaryPatch {
+                comment: "Disable Library Validation Enforcement".into(),
+                arch: "x86_64".into(),
+                identifier: "kernel".into(),
+                base: "_cs_require_lv".into(),
+                find: String::new(),
+                mask: String::new(),
+                replace: "B800000000C3".into(),
+                replace_mask: String::new(),
+                count: 0,
+                limit: 0,
+                skip: 0,
+                min_kernel: "20.0.0".into(),
+                max_kernel: String::new(),
+                enabled: true,
+            },
+            BinaryPatch {
+                comment: "Disable _csr_check() in _vnode_check_signature".into(),
+                arch: "x86_64".into(),
+                identifier: "com.apple.driver.AppleMobileFileIntegrity".into(),
+                base: "__ZL22_vnode_check_signatureP5vnodeP5labeliP7cs_blobPjS5_ijPPcPm".into(),
+                find: "01000000E80000000085C075".into(),
+                mask: "FFFFFFFFFF00000000FFFFFF".into(),
+                replace: "01000000B80100000085C075".into(),
+                replace_mask: String::new(),
+                count: 1,
+                limit: 0,
+                skip: 0,
+                min_kernel: "22.0.0".into(),
+                max_kernel: String::new(),
+                enabled: true,
+            },
+        ]);
+    }
     if rp.needs_amfipass() {
         let mut why = Vec::new();
         if rp.graphics {
@@ -1127,6 +1294,12 @@ fn choose_nic(ctx: &PlanContext, nic: &ProfileNic, info: &EthernetInfo) -> NicCh
                 if device == Some(0x15F3) && target <= MacOsVersion::BigSur {
                     c.patch = Some(i225v_patch());
                 }
+                if target == MacOsVersion::BigSur {
+                    c.boot_args.push("dk.e1000=0");
+                    c.notes.push(format!(
+                        "{chip}: dk.e1000=0 avoids DriverKit Ethernet hangs on Big Sur."
+                    ));
+                }
                 if target == MacOsVersion::Monterey {
                     c.boot_args.push("e1000=0");
                     c.notes.push(format!(
@@ -1253,6 +1426,16 @@ fn choose_nic(ctx: &PlanContext, nic: &ProfileNic, info: &EthernetInfo) -> NicCh
 }
 
 fn ethernet(ctx: &PlanContext, plan: &mut BuildPlan, st: &mut State) {
+    if ctx.profile.vm == Some(VmKind::HyperV) {
+        note(
+            plan,
+            NoteLevel::Info,
+            "ethernet",
+            "Hyper-V synthetic network",
+            "MacHyperVSupport provides the synthetic network adapter.",
+        );
+        return;
+    }
     for nic in &ctx.profile.ethernet {
         let info = device_db::ethernet_info(nic);
         let chip = info.chip.clone();
@@ -1872,14 +2055,29 @@ fn usb(ctx: &PlanContext, plan: &mut BuildPlan) {
             kext(
                 "GenericUSBXHCI",
                 "GenericUSBXHCI.kext",
-                "Works around the XHCI boot hang of Ryzen APU laptops on macOS 11+ (Apple's driver keeps the ports).",
+                "Troubleshooting only: enable if boot hangs near PCI Configuration End due to an XHCI conflict.",
             )
-            .optional()
-            .min(DARWIN_11),
+            .disabled()
+            .min(DARWIN_11)
+            .max("24.99.99"),
+        );
+        note(
+            plan,
+            NoteLevel::Warning,
+            "usb",
+            "Ryzen XHCI workaround is optional",
+            if ctx.target == MacOsVersion::Tahoe {
+                "GenericUSBXHCI stays disabled and is capped at macOS 15: it depends on IOUSBFamily, removed in macOS 26. If this laptop needs the workaround to pass PCI Configuration End, use an older macOS release until its USB path is resolved."
+            } else {
+                "Only enable GenericUSBXHCI if boot hangs near PCI Configuration End due to an XHCI conflict. Leave it disabled when the standard Apple USB driver boots correctly."
+            },
         );
     }
     if matches!(ctx.platform(), CpuPlatform::AmdBulldozer | CpuPlatform::AmdJaguar) {
-        push(plan, kext("XLNCUSBFix", "XLNCUSBFix.kext", "USB fix for AMD FX-era chipsets.").optional());
+        push(
+            plan,
+            kext("XLNCUSBFix", "XLNCUSBFix.kext", "USB fix for AMD FX-era chipsets.").optional(),
+        );
     }
 }
 
@@ -1927,8 +2125,15 @@ fn input(ctx: &PlanContext, plan: &mut BuildPlan) {
     match touchpad {
         TouchpadDriver::I2cHid => {
             push(plan, voodoo_i2c(true, "touchpad"));
-            push(plan, kext("VoodooI2C", "VoodooI2CHID.kext", "I2C HID touchpad (precision touchpad) driver."));
-            input_gpio_note(plan);
+            push(
+                plan,
+                kext(
+                    "VoodooI2C",
+                    "VoodooI2CHID.kext",
+                    "I2C HID touchpad (precision touchpad) driver.",
+                ),
+            );
+            input_gpio_note(ctx, plan);
         }
         TouchpadDriver::RmiI2c => {
             // VoodooRMI README: VoodooRMI + its VoodooInput, VoodooI2C, RMII2C.
@@ -1940,7 +2145,7 @@ fn input(ctx: &PlanContext, plan: &mut BuildPlan) {
                     .plugin("RMISMBus.kext", false, None, None),
             );
             push(plan, voodoo_i2c(false, "touchpad"));
-            input_gpio_note(plan);
+            input_gpio_note(ctx, plan);
         }
         TouchpadDriver::RmiSmbus => {
             push(
@@ -1974,11 +2179,15 @@ fn input(ctx: &PlanContext, plan: &mut BuildPlan) {
     }
     // Dortania ktext.md: VoodooI2CHID also drives I2C/USB touchscreens.
     // The I2C HID and Alps touchpad stacks already carry a VoodooI2CHID;
-    // with VoodooRMI over I2C it must stay out (VoodooRMI README).
+    // a separate touchscreen can also coexist with an RMI touchpad.
     if inp.has_touchscreen
         && matches!(
             touchpad,
-            TouchpadDriver::Ps2 | TouchpadDriver::RmiSmbus | TouchpadDriver::ElanSmbus | TouchpadDriver::None
+            TouchpadDriver::Ps2
+                | TouchpadDriver::RmiI2c
+                | TouchpadDriver::RmiSmbus
+                | TouchpadDriver::ElanSmbus
+                | TouchpadDriver::None
         )
     {
         let input_taken = plan.kexts.iter().any(|k| {
@@ -1987,13 +2196,23 @@ fn input(ctx: &PlanContext, plan: &mut BuildPlan) {
         push(plan, voodoo_i2c(!input_taken, "touchscreen").optional());
         push(
             plan,
-            kext("VoodooI2C", "VoodooI2CHID.kext", "Touchscreen (HID over I2C/USB) driver.").optional(),
+            kext(
+                "VoodooI2C",
+                "VoodooI2CHID.kext",
+                "Touchscreen (HID over I2C/USB) driver.",
+            )
+            .optional(),
         );
-        input_gpio_note(plan);
+        input_gpio_note(ctx, plan);
     }
 }
 
-fn input_gpio_note(plan: &mut BuildPlan) {
+fn input_gpio_note(ctx: &PlanContext, plan: &mut BuildPlan) {
+    if ctx.is_amd() {
+        note(plan, NoteLevel::Info, "input", "AMD I2C input devices",
+            "VoodooI2C 2.9+ supports AMD I2C (AMDI0010) and GPIO (AMDI0030). SSDT-XOSI enables the devices; if input does not respond, try -vi2c-force-polling.");
+        return;
+    }
     note(
         plan,
         NoteLevel::Info,
@@ -2007,6 +2226,9 @@ fn input_gpio_note(plan: &mut BuildPlan) {
 // ── Storage ─────────────────────────────────────────────────────────────────
 
 fn storage(ctx: &PlanContext, plan: &mut BuildPlan) {
+    if ctx.is_vm {
+        return;
+    }
     let mut nvmefix = false;
     let mut ctlna = false;
     // RST-mode ids (RAID class code): no AHCI class match before 11 either.
@@ -2101,7 +2323,14 @@ fn vm(ctx: &PlanContext, plan: &mut BuildPlan, st: &mut State) {
 
 // ── Network sanity ──────────────────────────────────────────────────────────
 
-fn network_check(plan: &mut BuildPlan, st: &State) {
+fn network_check(ctx: &PlanContext, plan: &mut BuildPlan, st: &State) {
+    if ctx.is_vm {
+        if !st.ethernet_ok && !st.wifi_recovery_ok {
+            note(plan, NoteLevel::Warning, "network", "No network in macOS Recovery",
+                "Select a supported virtual NIC in the hypervisor: vmxnet3 or e1000-82545em for older guests, or VirtIO on macOS 11+. Rescan and rebuild after changing the virtual hardware.");
+        }
+        return;
+    }
     if st.ethernet_ok || st.wifi_recovery_ok {
         return;
     }
@@ -2113,10 +2342,15 @@ fn network_check(plan: &mut BuildPlan, st: &State) {
         detail.push_str(" The Wi-Fi card only works after installation.");
     }
     detail.push_str(
-        " Use a supported PCIe network card, or a USB Ethernet adapter that macOS drives natively (e.g. ASIX \
-         AX88179 or RTL8153 based), during the install.",
+        " Use a supported PCIe network card, or a USB Ethernet adapter that macOS drives natively (e.g. CDC-ECM/NCM class or supported Realtek RTL8153/RTL8156), during the install.",
     );
-    note(plan, NoteLevel::Warning, "network", "No network in macOS Recovery", detail);
+    note(
+        plan,
+        NoteLevel::Warning,
+        "network",
+        "No network in macOS Recovery",
+        detail,
+    );
 }
 
 #[cfg(test)]
@@ -2305,10 +2539,18 @@ mod tests {
         let mut keys = std::collections::HashSet::new();
         for a in &plan.boot_args {
             assert!(!a.is_empty() && !a.contains(' '), "bad boot-arg {a:?}");
-            assert!(keys.insert(a.split('=').next().unwrap_or(a)), "boot-arg {a} written twice");
+            assert!(
+                keys.insert(a.split('=').next().unwrap_or(a)),
+                "boot-arg {a} written twice"
+            );
         }
         for p in &plan.kernel_patches {
-            assert!(valid_kernel(&p.min_kernel) && valid_kernel(&p.max_kernel), "{}", p.comment);
+            assert!(
+                (p.min_kernel.is_empty() || valid_kernel(&p.min_kernel))
+                    && (p.max_kernel.is_empty() || valid_kernel(&p.max_kernel)),
+                "{}",
+                p.comment
+            );
         }
         let mut blocks = std::collections::HashSet::new();
         for b in &plan.kernel_blocks {
@@ -2943,7 +3185,7 @@ mod tests {
         let plan = run(&p, Sonoma, "MacBookPro16,2");
         assert!(!find(&plan, "ForgedInvariant", "ForgedInvariant.kext").required);
         let gux = find(&plan, "GenericUSBXHCI", "GenericUSBXHCI.kext");
-        assert_eq!(range(gux), (Some("20.0.0"), None));
+        assert_eq!(range(gux), (Some("20.0.0"), Some("24.99.99")));
         assert!(find(&plan, "AMDRyzenCPUPowerManagement", "AMDRyzenCPUPowerManagement.kext").enabled);
         find(&plan, "VirtualSMC", "SMCBatteryManager.kext");
         assert!(arg(&plan, "alcid=").is_some());
@@ -3392,10 +3634,10 @@ mod tests {
         assert!(!find(&plan, "VoodooI2C", "VoodooI2CHID.kext").required);
         assert!(plugin(find(&plan, "VoodooPS2Controller", "VoodooPS2Controller.kext"), "VoodooInput.kext").enabled);
 
-        // Synaptics over I2C: VoodooRMI's README keeps VoodooI2CHID out.
+        // The RMI touchpad and a separate HID touchscreen use different drivers.
         let mut p = touchpad_laptop(InputBus::I2c, TouchpadVendor::Synaptics, Some("SYNA2B33"));
         p.input.has_touchscreen = true;
-        assert!(!has_bundle(&run(&p, Ventura, "MacBookPro15,2"), "VoodooI2CHID.kext"));
+        assert!(has_bundle(&run(&p, Ventura, "MacBookPro15,2"), "VoodooI2CHID.kext"));
 
         // All-in-one without PS/2: the touchscreen stack brings its own VoodooInput.
         let mut aio = machine(P::CometLake, FormFactor::AllInOne, Some("H410"), "HP");
@@ -3415,7 +3657,7 @@ mod tests {
         }];
         assert_eq!(
             range(find(&run(&p, BigSur, "MacBookPro16,2"), "GenericUSBXHCI", "GenericUSBXHCI.kext")),
-            (Some("20.0.0"), None)
+            (Some("20.0.0"), Some("24.99.99"))
         );
         assert!(!has_catalog(&run(&p, Catalina, "MacBookPro16,2"), "GenericUSBXHCI"));
         p.form_factor = FormFactor::Desktop;

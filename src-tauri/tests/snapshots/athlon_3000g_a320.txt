@@ -110,6 +110,8 @@ notes:
 post-install:
   [info] boot: Copy the EFI to the internal drive
   [info] usb: Map the USB ports
+  [info] gpu: NootedRed display settings
+  [info] cpu: Rebuild before upgrading to macOS 26
   [info] bootloader: Boot picker after install
   [info] audio: Try other layout-ids if a jack or the microphone is silent
   [info] smbios: Check the serial number before using iServices

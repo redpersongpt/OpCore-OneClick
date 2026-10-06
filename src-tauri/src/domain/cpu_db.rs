@@ -131,15 +131,15 @@ pub struct CeilingWorkaround {
 }
 
 const CRYPTEX_INTEL_CAVEAT: &str = "No AVX2: macOS 13+ installs only with CryptexFixup. \
-     Delta updates are unavailable, AMD Polaris/Vega/Navi GPUs lose acceleration and \
+     Delta updates are unavailable, Polaris/Vega need a non-AVX2 OCLP root patch and KDK for acceleration; Navi is not covered and \
      AppleIntelCPUPowerManagement has to be re-injected.";
 const CRYPTEX_AMD_CAVEAT: &str = "No AVX2: macOS 13+ installs only with CryptexFixup. \
-     Delta updates are unavailable and AMD Polaris/Vega/Navi GPUs lose acceleration; \
+     Delta updates are unavailable and Polaris/Vega need a non-AVX2 OCLP root patch and KDK for acceleration; Navi is not covered; \
      untested on AMD.";
 // Haswell to Comet Lake Pentium/Celeron: XCPM-era parts, so no CPU power
 // management kext to restore.
 const CRYPTEX_LOW_END_CAVEAT: &str = "No AVX2: macOS 13+ installs only with CryptexFixup. \
-     Delta updates are unavailable and AMD Polaris/Vega/Navi GPUs lose acceleration.";
+     Delta updates are unavailable and Polaris/Vega need a non-AVX2 OCLP root patch and KDK for acceleration; Navi is not covered.";
 const EXCAVATOR_CAVEAT: &str = "Excavator has AVX2, so macOS 13+ needs no extra kext, \
      but no guide covers family 15h past Monterey: experimental.";
 const CRYPTEXFIXUP_KEXT: &str = "CryptexFixup.kext";
@@ -566,7 +566,7 @@ pub fn platform_info(platform: CpuPlatform) -> PlatformInfo {
         P::AmdZen => PlatformInfo {
             label: "AMD Zen / Zen+ (Ryzen 1000/2000, Threadripper 1000/2000)",
             notes: &[
-                "Supported through Tahoe with the AMD kernel patches and a supported dGPU.",
+                "Supported with AMD kernel patches and a supported display GPU: Vega APUs use NootedRed; laptops need a supported iGPU or a MUX-wired supported dGPU.",
                 "Raven/Picasso Vega iGPUs need NootedRed.",
                 AMD_HV_NOTE,
             ],
@@ -575,7 +575,7 @@ pub fn platform_info(platform: CpuPlatform) -> PlatformInfo {
         P::AmdZen2 => PlatformInfo {
             label: "AMD Zen 2 (Ryzen 3000/4000, Threadripper 3000)",
             notes: &[
-                "Supported through Tahoe with the AMD kernel patches and a supported dGPU.",
+                "Supported with AMD kernel patches and a supported display GPU: Vega APUs use NootedRed; laptops need a supported iGPU or a MUX-wired supported dGPU.",
                 "Renoir/Lucienne Vega iGPUs need NootedRed.",
                 AMD_HV_NOTE,
             ],
@@ -584,7 +584,7 @@ pub fn platform_info(platform: CpuPlatform) -> PlatformInfo {
         P::AmdZen3 => PlatformInfo {
             label: "AMD Zen 3 (Ryzen 5000/6000, Threadripper PRO 5000)",
             notes: &[
-                "Supported through Tahoe with the AMD kernel patches and a supported dGPU.",
+                "Supported with AMD kernel patches and a supported display GPU: Vega APUs use NootedRed; laptops need a supported iGPU or a MUX-wired supported dGPU.",
                 "Cezanne/Barcelo Vega iGPUs need NootedRed; Ryzen 6000 graphics have no driver.",
                 AMD_HV_NOTE,
             ],

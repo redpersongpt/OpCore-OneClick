@@ -29,7 +29,7 @@ kexts:
 ssdts:
   SSDT-EC-USBX-DESKTOP.aml <- dortania SSDT-EC-USBX-DESKTOP.aml
   SSDT-HV-VMBUS.aml <- opencore SSDT-HV-VMBUS.aml (optional)
-  SSDT-HV-DEV.aml <- opencore SSDT-HV-DEV.aml (optional)
+  SSDT-HV-DEV.aml <- opencore SSDT-HV-DEV.aml
   SSDT-HV-PLUG.aml <- opencore SSDT-HV-PLUG.aml (optional)
 acpi-patches:
   + _HID to XHID rename (Hyper-V VMOD) (SSDT-HV-VMBUS.aml) [5F484944 -> 58484944 in DSDT]
@@ -89,12 +89,12 @@ bios: VM firmware = UEFI (required)
 bios: Secure Boot (VM firmware) = disable (required)
 bios: VM generation = Generation 2 (required)
 notes:
-  [warning] ethernet: Microsoft Hyper-V Network Adapter: not configured
   [info] gpu: Display: Microsoft Hyper-V Video
+  [info] ethernet: Hyper-V synthetic network
   [info] acpi: Hyper-V ACPI tables
-  [info] acpi: Generic prebuilt SSDTs
 post-install:
   [info] boot: Copy the EFI to the internal drive
   [info] bootloader: Boot picker after install
+  [info] vm: Prepare the virtual installer disks
   [info] boot: Turn off verbose boot
   [info] storage: Leave FileVault off

@@ -60,6 +60,7 @@ export function plan(target: MacOsVersion = '15'): BuildPlan {
     nvramAdd: [],
     nvramDelete: [],
     nvramSettings: {},
+    nvramLegacySchema: {},
     platformInfo: {},
     drivers: [],
     uefiQuirks: {},

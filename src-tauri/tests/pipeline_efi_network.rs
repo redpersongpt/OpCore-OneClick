@@ -152,6 +152,8 @@ fn coffee_lake_profile() -> HardwareProfile {
             cores: 8,
             threads: 8,
             is_mobile: false,
+            has_avx: Some(true),
+            has_rdrand: Some(true),
             has_avx2: Some(true),
             has_sse4_2: Some(true),
             is_hybrid: false,

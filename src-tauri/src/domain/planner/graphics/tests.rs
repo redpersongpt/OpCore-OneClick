@@ -327,7 +327,7 @@ fn alder_lake_with_rx6900xt_hides_the_xe_igpu() {
     assert_eq!(r.display, display(Some(1), None, false, &[0]));
     assert!(r.has_arg("-wegnoigpu"));
     assert!(r.arg("agdpmod").is_none());
-    assert!(r.entry(IGPU_PATH).is_none());
+    assert_eq!(r.prop(IGPU_PATH, "class-code").as_deref(), Some("FFFFFFFF"));
     assert_eq!(r.kext, GpuKext::WhateverGreen);
 }
 
@@ -477,7 +477,7 @@ fn sandy_bridge_hd3000_headless_next_to_gtx680() {
     let r = run(&p, Mojave, "MacPro6,1");
     assert_eq!(r.display, display(Some(1), None, false, &[0]));
     assert!(r.has_arg("-wegnoigpu"));
-    assert!(r.entry(IGPU_PATH).is_none());
+    assert_eq!(r.prop(IGPU_PATH, "class-code").as_deref(), Some("FFFFFFFF"));
 }
 
 #[test]
@@ -536,7 +536,7 @@ fn macpro_smbios_hides_a_headless_igpu() {
     let r = run(&p, Sequoia, "MacPro7,1");
     assert_eq!(r.display, display(Some(1), Some(0), true, &[]));
     assert!(r.has_arg("-wegnoigpu"));
-    assert!(r.entry(IGPU_PATH).is_none());
+    assert_eq!(r.prop(IGPU_PATH, "class-code").as_deref(), Some("FFFFFFFF"));
 }
 
 #[test]

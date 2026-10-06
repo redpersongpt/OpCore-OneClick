@@ -12,6 +12,10 @@ codename: string, family: number | null, model: number | null, stepping: number 
  */
 cores: number, threads: number, isMobile: boolean, 
 /**
+ * Actual instruction flags when the scanner exposes them.
+ */
+hasAvx?: boolean, hasRdrand?: boolean, 
+/**
  * AVX2 is required for macOS 13+ without CryptexFixup.
  */
 hasAvx2: boolean | null, hasSse42: boolean | null, 

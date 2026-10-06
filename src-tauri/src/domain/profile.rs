@@ -74,6 +74,7 @@ pub fn build_profile(detected: &DetectedHardware) -> HardwareProfile {
         storage: detected.storage.iter().map(storage).collect(),
         motherboard_vendor,
         motherboard_model,
+        system_model: detected.motherboard.system_product.clone(),
         chipset: None,
         ram_gb: ram_gb(detected.memory.total_mb),
         has_battery: detected.chassis.has_battery,
@@ -161,6 +162,8 @@ fn profile_cpu(c: &CpuInfo, identity: &cpu_db::CpuIdentity) -> ProfileCpu {
         cores,
         threads: c.threads,
         is_mobile: identity.is_mobile,
+        has_avx: known_flags.then(|| has("avx")),
+        has_rdrand: known_flags.then(|| has("rdrand")),
         has_avx2: Some(if known_flags {
             has("avx2")
         } else {

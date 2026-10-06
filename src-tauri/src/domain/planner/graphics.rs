@@ -658,7 +658,7 @@ fn suggestion(ctx: &PlanContext, views: &[View]) -> String {
         }
     } else {
         parts.push(
-            "Otherwise install a graphics card macOS supports natively, such as an AMD Radeon RX 580, \
+            "Install a graphics card macOS supports natively, such as an AMD Radeon RX 580, \
              RX 5700 XT or RX 6600 XT."
                 .into(),
         );
@@ -899,6 +899,12 @@ fn igpu_notes(
 }
 
 fn apply_nootedred(v: &View, plan: &mut BuildPlan) {
+    if v.gpu.vram_mb.is_some_and(|mb| mb < 512) {
+        plan.notes.push(note(NoteLevel::Warning, "Insufficient UMA memory",
+            "NootedRed needs at least 512 MiB of UMA memory (1 GiB recommended). Increase UMA Frame Buffer Size in the BIOS or use a board-appropriate UMA unlock tool before booting. If it cannot be changed, this graphics path will not work."));
+    }
+    plan.post_install.push(note(NoteLevel::Info, "NootedRed display settings",
+        "On macOS 14+, use a static wallpaper and a non-Memoji account picture to avoid freezes. For Chromium/Electron artefacts disable GPU rasterisation; use --disable-gpu if the app cannot open. Disable HDR on the display before booting to avoid a black screen."));
     let model = plan.smbios.model.clone();
     if model.starts_with("MacPro") {
         plan.notes.push(note(
@@ -971,14 +977,18 @@ fn apply_amd(
             if navi && agdp_board {
                 push_agdp_patch(plan);
             }
-            push_note_once(&mut plan.notes, note(
-                NoteLevel::Info,
-                "AMD graphics on macOS 26",
-                "agdpmod=ignore is set as the WhateverGreen maintainer advises for macOS 26; Lilu 1.7.2 and \
-                 WhateverGreen 1.7.1 or newer are required. If WhateverGreen still panics, remove it; with an iMac \
-                 SMBIOS and a Navi card, Dortania's AppleGraphicsDevicePolicy board-id patch then replaces \
-                 agdpmod=pikera.",
-            ));
+            push_note_once(
+                &mut plan.notes,
+                note(
+                    NoteLevel::Info,
+                    "AMD graphics on macOS 26",
+                    if spoof.is_some() {
+                        "This card uses WhateverGreen with a device-id spoof. Do not remove WhateverGreen by itself: the spoof depends on it. If it panics on Tahoe, switch to NootRX on supported Navi 2x cards and remove the spoof; agdpmod=ignore is used with the current WhateverGreen path."
+                    } else {
+                        "agdpmod=ignore is set for macOS 26; Lilu 1.7.2 and WhateverGreen 1.7.1 or newer are required. If WhateverGreen still panics on this native card, remove it; an iMac SMBIOS with Navi also needs Dortania's AppleGraphicsDevicePolicy board-id patch."
+                    },
+                ),
+            );
         } else if navi && agdp_board {
             push_arg(plan, "agdpmod=pikera");
         }
@@ -1127,6 +1137,13 @@ fn apply_disabled(
 
     for v in disabled.iter().filter(|v| v.is_igpu()) {
         if v.is_intel_igpu() {
+            plan.device_properties.push(DevicePropertyEntry {
+                path: v
+                    .pci_path()
+                    .unwrap_or_else(|| "PciRoot(0x0)/Pci(0x2,0x0)".into()),
+                properties: vec![hex_prop("class-code", "FFFFFFFF")],
+                reason: "Hide the unused Intel graphics device from macOS".into(),
+            });
             if kext == GpuKext::WhateverGreen {
                 push_arg(plan, "-wegnoigpu");
             } else {
@@ -1149,6 +1166,15 @@ fn apply_disabled(
         }
     }
     if hide_igpu {
+        for v in views.iter().filter(|v| v.is_intel_igpu()) {
+            plan.device_properties.push(DevicePropertyEntry {
+                path: v
+                    .pci_path()
+                    .unwrap_or_else(|| "PciRoot(0x0)/Pci(0x2,0x0)".into()),
+                properties: vec![hex_prop("class-code", "FFFFFFFF")],
+                reason: "Workstation SMBIOS uses discrete graphics".into(),
+            });
+        }
         push_arg(plan, "-wegnoigpu");
         plan.notes.push(note(
             NoteLevel::Info,
@@ -1300,8 +1326,7 @@ fn push_display_notes(
         plan.notes.push(note(
             NoteLevel::Info,
             format!("Display: {label}"),
-            "macOS drives the virtual display as a plain framebuffer without Metal acceleration; pass a supported \
-             GPU through for acceleration.",
+            "The virtual display has no Metal acceleration. VMware Tools adds SVGA resolution support; MacHyperVFramebuffer adds Hyper-V display support. GPU passthrough depends on the hypervisor (Workstation/Player does not provide it).",
         ));
         return;
     }

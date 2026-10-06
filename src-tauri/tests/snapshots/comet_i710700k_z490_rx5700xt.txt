@@ -138,6 +138,7 @@ post-install:
   [info] usb: Map the USB ports
   [info] wifi: Install HeliPort for Intel Wi-Fi
   [info] bootloader: Boot picker after install
+  [info] cpu: Check CPU frequency vectors
   [info] audio: Try other layout-ids if a jack or the microphone is silent
   [info] smbios: Check the serial number before using iServices
   [info] boot: Turn off verbose boot

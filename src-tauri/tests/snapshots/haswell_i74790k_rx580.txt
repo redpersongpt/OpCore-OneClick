@@ -42,6 +42,8 @@ ssdts:
   SSDT-PLUG.aml <- machine (120 bytes)
   SSDT-EC-USBX.aml <- machine (353 bytes)
 device-properties:
+  PciRoot(0x0)/Pci(0x2,0x0)
+    class-code = <FFFFFFFF>
   PciRoot(0x0)/Pci(0x1b,0x0)
     layout-id = <01000000>
   PciRoot(0x0)/Pci(0x19,0x0)
@@ -108,6 +110,7 @@ bios: Intel Platform Trust Technology (PTT) = disable
 bios: Hyper-Threading = enable
 bios: Serial / Parallel port = disable
 notes:
+  [warning] nvram: ASUS 9-series NVRAM restriction
   [info] gpu: Intel(R) HD Graphics 4600 disabled
   [info] gpu: Display: Radeon RX 580 Series
   [info] cpu: CFG Lock
@@ -116,6 +119,7 @@ post-install:
   [info] boot: Copy the EFI to the internal drive
   [info] usb: Map the USB ports
   [info] bootloader: Boot picker after install
+  [info] cpu: Check CPU frequency vectors
   [info] audio: Try other layout-ids if a jack or the microphone is silent
   [info] smbios: Check the serial number before using iServices
   [info] boot: Turn off verbose boot

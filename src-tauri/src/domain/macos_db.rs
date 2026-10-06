@@ -155,7 +155,7 @@ pub fn release_caveats(version: MacOsVersion) -> Vec<&'static str> {
             "Last macOS for Intel Macs.",
             "AppleHDA was removed: analog audio needs VoodooHDA or a post-install AppleHDA patch; HDMI/DP audio from AMD GPUs still works.",
             "No official AirportItlwm: Intel Wi-Fi works through itlwm with HeliPort.",
-            "Intel Bluetooth needs the -ibtcompatbeta boot argument.",
+            "The pinned IntelBluetoothFirmware 2.5.1 fork supports Tahoe without -ibtcompatbeta (only upstream 2.4.0 needs the flag).",
             "IOUSBFamily was removed: many USB Wi-Fi dongles and older USB Bluetooth adapters stop working.",
             "FileVault volumes cannot be unlocked by Tahoe's APFS driver under OpenCore; leave FileVault off.",
             "Only MacPro7,1, iMac20,1, iMac20,2 and MacBookPro16,1/16,2/16,4 SMBIOS are supported (not MacBookPro16,3); USB maps need the new Tahoe port keys.",

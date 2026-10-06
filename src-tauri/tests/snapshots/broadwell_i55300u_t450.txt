@@ -103,7 +103,7 @@ platform-info:
   on: Automatic UpdateDataHub UpdateNVRAM UpdateSMBIOS
   off: CustomMemory UseRawUuidEncoding
   set: UpdateSMBIOSMode="Create"
-drivers: OpenRuntime.efi HfsPlus.efi OpenCanopy.efi ResetNvramEntry.efi
+drivers: OpenRuntime.efi HfsPlus.efi OpenCanopy.efi
 uefi-quirks:
   on: IgnoreInvalidFlexRatio ReleaseUsbOwnership RequestBootVarRouting
   off: DisableSecurityPolicy EnableVectorAcceleration ForceOcWriteFlash UnblockFsConnect
@@ -134,6 +134,7 @@ bios: Intel Platform Trust Technology (PTT) = disable
 bios: Hyper-Threading = enable
 bios: DVMT Pre-Allocated = 64MB
 notes:
+  [warning] nvram: Avoid Reset NVRAM on Lenovo laptops
   [info] smbios: MacBookPro12,1 stops at macOS 12.7.6
   [info] gpu: Display: Intel(R) HD Graphics 5500
   [info] cpu: CFG Lock

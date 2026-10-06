@@ -178,7 +178,13 @@ pub fn platform(sys: &SysRoot) -> PlatformFacts {
             manufacturer: dmi("board_vendor"),
             product: dmi("board_name"),
             system_manufacturer: dmi("sys_vendor"),
-            system_product: dmi("product_name"),
+            system_product: if dmi("sys_vendor")
+                .is_some_and(|v| v.to_ascii_lowercase().contains("lenovo"))
+            {
+                dmi("product_version").or_else(|| dmi("product_name"))
+            } else {
+                dmi("product_name")
+            },
             ..Default::default()
         },
         chassis: ChassisInfo {

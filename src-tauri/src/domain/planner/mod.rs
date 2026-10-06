@@ -691,7 +691,14 @@ pub fn validate(profile: &HardwareProfile, options: &BuildOptions) -> Result<(),
                 format!("{} needs {} or newer.", info.label, min.display_name()),
             )
             .recoverable()
-            .with_suggestion("Choose a newer macOS version."));
+            .with_suggestion(if MacOsVersion::ALL.into_iter().filter(|v| *v >= min).any(|target| {
+                let options = BuildOptions { target, ..BuildOptions::default() };
+                graphics::choose_display(&PlanContext::new(profile, &options)).is_ok()
+            }) {
+                "Choose a newer macOS version."
+            } else {
+                "A newer macOS release also needs a supported display GPU; replace the unsupported GPU before building."
+            }));
         }
     }
     if identity.vendor == CpuVendor::Amd {
@@ -751,6 +758,7 @@ pub fn empty_plan(target: MacOsVersion) -> BuildPlan {
         nvram_add: vec![],
         nvram_delete: vec![],
         nvram_settings: SettingMap::new(),
+        nvram_legacy_schema: Default::default(),
         platform_info: SettingMap::new(),
         drivers: vec![],
         uefi_quirks: SettingMap::new(),
@@ -848,6 +856,8 @@ pub(crate) mod test_support {
     pub fn cpu(platform: CpuPlatform, name: &str, codename: &str, cores: u32) -> ProfileCpu {
         let info = cpu_db::platform_info(platform);
         ProfileCpu {
+            has_avx: None,
+            has_rdrand: None,
             name: name.to_string(),
             vendor: info.vendor,
             platform,
@@ -926,6 +936,7 @@ pub(crate) mod test_support {
             }],
             motherboard_vendor: String::new(),
             motherboard_model: String::new(),
+            system_model: None,
             chipset: None,
             ram_gb: 16,
             has_battery: is_mobile,

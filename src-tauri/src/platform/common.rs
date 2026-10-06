@@ -417,7 +417,7 @@ pub fn decode_signature(eax: u32) -> (u32, u32, u32) {
 /// vmx, svm, hybrid (Intel P/E cores), hypervisor.
 pub fn decode_features(regs: &CpuidFeatureRegs) -> Vec<String> {
     let bit = |reg: u32, n: u32| (reg >> n) & 1 == 1;
-    let table: [(&str, bool); 12] = [
+    let table: [(&str, bool); 13] = [
         ("sse3", bit(regs.leaf1_ecx, 0)),
         ("ssse3", bit(regs.leaf1_ecx, 9)),
         ("sse4_1", bit(regs.leaf1_ecx, 19)),
@@ -425,6 +425,7 @@ pub fn decode_features(regs: &CpuidFeatureRegs) -> Vec<String> {
         ("sse4a", bit(regs.ext1_ecx, 6)),
         ("avx", bit(regs.leaf1_ecx, 28)),
         ("avx2", bit(regs.leaf7_ebx, 5)),
+        ("rdrand", bit(regs.leaf1_ecx, 30)),
         ("avx512f", bit(regs.leaf7_ebx, 16)),
         ("vmx", bit(regs.leaf1_ecx, 5)),
         ("svm", bit(regs.ext1_ecx, 2)),

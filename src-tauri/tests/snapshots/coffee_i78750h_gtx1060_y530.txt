@@ -110,7 +110,7 @@ platform-info:
   on: Automatic UpdateDataHub UpdateNVRAM UpdateSMBIOS
   off: CustomMemory UseRawUuidEncoding
   set: UpdateSMBIOSMode="Create"
-drivers: OpenRuntime.efi HfsPlus.efi OpenCanopy.efi ResetNvramEntry.efi
+drivers: OpenRuntime.efi HfsPlus.efi OpenCanopy.efi
 uefi-quirks:
   on: ReleaseUsbOwnership RequestBootVarRouting
   off: DisableSecurityPolicy EnableVectorAcceleration ForceOcWriteFlash IgnoreInvalidFlexRatio UnblockFsConnect
@@ -146,6 +146,7 @@ bios: Thunderbolt / USB4 = disable for the install
 bios: Sleep State = S3 if available
 notes:
   [warning] storage: SAMSUNG MZVLB512HAJQ-000L7 (PM981)
+  [warning] nvram: Avoid Reset NVRAM on Lenovo laptops
   [info] smbios: MacBookPro15,1 stops at macOS 15.8.1
   [info] gpu: Backlight
   [info] gpu: NVIDIA GeForce GTX 1060 disabled

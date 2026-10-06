@@ -88,7 +88,7 @@ pub fn apply(ctx: &PlanContext, display: &DisplayPlan, plan: &mut BuildPlan) {
             .insert(key.to_string(), PlistScalar::Bool(value));
     }
 
-    if !built.prebuilt.is_empty() {
+    if !built.prebuilt.is_empty() && !ctx.is_vm {
         plan.notes.push(note(
             NoteLevel::Info,
             "Generic prebuilt SSDTs",
@@ -331,7 +331,7 @@ fn hyper_v(plan: &mut BuildPlan) {
             source: SsdtSource::OcSample {
                 file: file.to_string(),
             },
-            required: false,
+            required: *file == "SSDT-HV-DEV.aml",
             reason: reason.to_string(),
         });
         for (base, comment, find, replace) in *renames {

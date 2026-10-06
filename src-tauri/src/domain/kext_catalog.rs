@@ -8,7 +8,8 @@
 //! ChefKiss releases, taken from the `digest` GitHub publishes for the
 //! release asset). Files that are not GitHub release assets (OCLP payloads,
 //! Dortania, Legacy-Kexts and OpCore-Simplify mirrors) are pinned to a
-//! commit, never to a branch, so the URL keeps serving the same bytes.
+//! commit so the URL keeps serving the same bytes, except NootRX's nightly
+//! artifact: its hash is pinned and a replaced artifact fails verification.
 //!
 //! Catalog ids are stable: the planner refers to them through
 //! `KextSelection::catalog_id`. Variants of one project use a suffix
@@ -31,8 +32,7 @@ pub enum ArchiveKind {
 pub struct Pin {
     pub version: &'static str,
     pub url: &'static str,
-    /// Lowercase hex SHA-256 of the downloaded file; None only for moving
-    /// nightly artifacts (NootRX), which are then validated structurally.
+    /// Lowercase hex SHA-256 of the downloaded file. Every catalog pin has one.
     pub sha256: Option<&'static str>,
 }
 
@@ -222,12 +222,12 @@ static CATALOG: &[KextCatalogEntry] = &[
         pin: Pin {
             version: "1.0.0",
             url: "https://nightly.link/ChefKissInc/NootRX/workflows/main/master/Artifacts.zip",
-            sha256: None,
+            sha256: Some("b02fc85eceb322eb924d59f38c96dd54b13ef92bdb2ae4cd0d278c809d95e417"),
         },
         archive: ArchiveKind::NestedZip,
         latest_asset_regex: "",
         bundles: &["NootRX.kext"],
-        description: "AMD RDNA2 (Navi 21/22/23) dGPU support. Only published as a CI artifact, so it is checked structurally instead of by hash.",
+        description: "AMD RDNA2 (Navi 21/22/23) dGPU support. Published as a CI artifact; the downloaded archive is pinned by SHA-256 and must be re-pinned when upstream replaces it.",
     },
     KextCatalogEntry {
         id: "SMCRadeonSensors",
@@ -268,6 +268,58 @@ static CATALOG: &[KextCatalogEntry] = &[
         latest_asset_regex: r"^CryptexFixup-[0-9][0-9.]*-RELEASE\.zip$",
         bundles: &["CryptexFixup.kext"],
         description: "Installs the non-AVX2 Rosetta cryptex on macOS 13+ for CPUs without AVX2.",
+    },
+    KextCatalogEntry {
+        id: "NoAVXFSCompressionTypeZlib",
+        repo: "",
+        pin: Pin {
+            version: "12.3.1",
+            url: oclp_payload!("Misc/NoAVXFSCompressionTypeZlib-v12.3.1.zip"),
+            sha256: Some("c29dca40d15cd626a29bd461299d3a475b91d6c71b9eb3bbf916e4a3c5e97d0b"),
+        },
+        archive: ArchiveKind::KextZip,
+        latest_asset_regex: "",
+        bundles: &["NoAVXFSCompressionTypeZlib.kext"],
+        description: "Zlib decompression for CPUs without AVX on Monterey.",
+    },
+    KextCatalogEntry {
+        id: "NoAVXFSCompressionTypeZlib-AVXpel",
+        repo: "",
+        pin: Pin {
+            version: "12.6",
+            url: oclp_payload!("Misc/NoAVXFSCompressionTypeZlib-AVXpel-v12.6.zip"),
+            sha256: Some("b5d6319d0a1f335684a92ecf23369bc3deb776be19e92b0a40860021409d20df"),
+        },
+        archive: ArchiveKind::KextZip,
+        latest_asset_regex: "",
+        bundles: &["NoAVXFSCompressionTypeZlib-AVXpel.kext"],
+        description: "Zlib decompression for CPUs without AVX on Ventura and newer.",
+    },
+    KextCatalogEntry {
+        id: "ASPP-Override",
+        repo: "",
+        pin: Pin {
+            version: "1.0.1",
+            url: oclp_payload!("Misc/ASPP-Override-v1.0.1.zip"),
+            sha256: Some("25049d8ce3f9d1251be36781abac4e2cc993d7bcfaf7e202f49544a99e723d5c"),
+        },
+        archive: ArchiveKind::KextZip,
+        latest_asset_regex: "",
+        bundles: &["ASPP-Override.kext"],
+        description: "Restore ACPI SMC power management matching on Sandy Bridge and older.",
+    },
+    KextCatalogEntry {
+        id: "AAAMouSSE",
+        repo: "",
+        pin: Pin {
+            version: "0.95-Dortania",
+            url: oclp_payload!("SSE/AAAMouSSE-v0.95-Dortania.zip"),
+            sha256: Some("73a7980813eea291d1f750ec288bc611cbcfff43fc560ec4fc96ce0c8467ded6"),
+        },
+        archive: ArchiveKind::KextZip,
+        latest_asset_regex: "",
+        bundles: &["AAAMouSSE.kext"],
+        description: "SSE4.2 emulation for Penryn with AMD Metal graphics.",
     },
     KextCatalogEntry {
         id: "telemetrap",
@@ -1382,18 +1434,17 @@ mod tests {
         for e in all() {
             assert!(e.pin.url.starts_with("https://"), "{}: url must be https", e.id);
             assert!(!e.pin.version.is_empty(), "{}: empty version", e.id);
-            match e.pin.sha256 {
-                Some(sha) => assert!(is_sha256(sha), "{}: bad sha256 {sha}", e.id),
-                None => {
-                    assert_eq!(e.archive, ArchiveKind::NestedZip, "{}: only nightly artifacts may skip the hash", e.id)
-                }
-            }
+            assert!(e.pin.sha256.is_some_and(is_sha256), "{}: missing or invalid hash", e.id);
             assert!(!e.bundles.is_empty(), "{}: no bundles", e.id);
             for b in e.bundles {
-                assert!(b.ends_with(".kext") && !b.contains('/') && !b.contains('\\'), "{}: bad bundle {b}", e.id);
+                assert!(
+                    b.ends_with(".kext") && !b.contains('/') && !b.contains('\\'),
+                    "{}: bad bundle {b}",
+                    e.id
+                );
             }
             // Moving branches would change the bytes behind a pinned hash.
-            if e.pin.sha256.is_some() {
+            if !e.pin.url.starts_with("https://nightly.link/") {
                 for moving in ["/master/", "/main/", "/refs/heads/"] {
                     assert!(!e.pin.url.contains(moving), "{}: url points at a branch", e.id);
                 }
@@ -1491,10 +1542,17 @@ mod tests {
         assert!(entry("RealtekRTL8111-2.4.2").is_some_and(|e| e.pin.version == "2.4.2"));
         assert!(entry("RealtekRTL8111-2.2.2").is_some_and(|e| e.provides("RealtekRTL8111.kext")));
         assert!(entry("SmallTreeIntel82576-1.2.5").is_some_and(|e| e.provides("SmallTreeIntel82576.kext")));
-        for id in ["telemetrap", "AppleIntelCPUPowerManagement", "AppleIntelCPUPowerManagementClient"] {
-            assert!(entry(id).is_some_and(|e| e.pin.url.contains("/OpenCore-Legacy-Patcher/")), "{id}");
+        for id in [
+            "telemetrap",
+            "AppleIntelCPUPowerManagement",
+            "AppleIntelCPUPowerManagementClient",
+        ] {
+            assert!(
+                entry(id).is_some_and(|e| e.pin.url.contains("/OpenCore-Legacy-Patcher/")),
+                "{id}"
+            );
         }
         assert!(entry("SATA-unsupported").is_some_and(|e| e.provides("SATA-unsupported.kext")));
-        assert!(entry("NootRX").is_some_and(|e| e.pin.sha256.is_none() && e.archive == ArchiveKind::NestedZip));
+        assert!(entry("NootRX").is_some_and(|e| e.pin.sha256.is_some() && e.archive == ArchiveKind::NestedZip));
     }
 }

@@ -81,13 +81,13 @@ uefi-input:
   set: KeyForgetThreshold=5 KeySupportMode="Auto" TimerResolution=50000
 bios: VM firmware = UEFI (required)
 bios: Secure Boot (VM firmware) = disable (required)
-bios: CPU model = host (Intel) or a Haswell/Skylake-class model (required)
+bios: CPU model = Keep the scanned CPU vendor and vCPU topology (required)
 notes:
   [info] gpu: Display: Virtio GPU
   [info] ethernet: VirtIO network Ethernet
-  [info] acpi: Generic prebuilt SSDTs
 post-install:
   [info] boot: Copy the EFI to the internal drive
   [info] bootloader: Boot picker after install
+  [info] vm: Prepare the virtual installer disks
   [info] boot: Turn off verbose boot
   [info] storage: Leave FileVault off

@@ -127,10 +127,11 @@ bios: Thunderbolt / USB4 = disable for the install
 notes:
   [warning] wifi: MediaTek Wi-Fi 6E MT7922 160MHz: Wi-Fi not supported
   [warning] ethernet: Aquantia 10GbE
+  [warning] acpi: Check AM5 BIOS compatibility
+  [warning] pci: AM5 PCI hotplug fix is enabled
   [info] gpu: AMD graphics on macOS 26
   [info] gpu: AMD Radeon(TM) Graphics disabled
   [info] gpu: Display: AMD Radeon RX 6950 XT
-  [info] cpu: AMD power management on macOS 26
   [info] audio: No audio codec detected
   [info] ethernet: Intel I225-V Ethernet
   [info] ethernet: Aquantia AQC113 Ethernet

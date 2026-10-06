@@ -14,7 +14,7 @@ import type { VmKind } from "./VmKind";
  * from a scan (or imported / entered manually) and sent back unchanged by the
  * UI for compatibility checks and builds.
  */
-export type HardwareProfile = { cpu: ProfileCpu, formFactor: FormFactor, vm: VmKind | null, gpus: Array<ProfileGpu>, audio: ProfileAudio | null, ethernet: Array<ProfileNic>, wifi: ProfileNic | null, bluetooth: ProfileNic | null, input: ProfileInput, storage: Array<ProfileStorage>, motherboardVendor: string, motherboardModel: string, 
+export type HardwareProfile = { cpu: ProfileCpu, formFactor: FormFactor, vm: VmKind | null, gpus: Array<ProfileGpu>, audio: ProfileAudio | null, ethernet: Array<ProfileNic>, wifi: ProfileNic | null, bluetooth: ProfileNic | null, input: ProfileInput, storage: Array<ProfileStorage>, motherboardVendor: string, motherboardModel: string, systemModel?: string, 
 /**
  * Chipset / PCH name, e.g. "Z390", "B550", "HM370".
  */

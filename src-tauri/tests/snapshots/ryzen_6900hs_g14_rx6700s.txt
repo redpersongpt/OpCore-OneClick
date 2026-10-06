@@ -8,7 +8,7 @@ net: MediaTek Wi-Fi 6E MT7922 160MHz [14c3:0616 Pci]
 net: MediaTek Bluetooth MT7922 [13d3:3568 Usb]
 touchpad: I2c Some(Other) ASUE140D
 assessment: Unsupported, recommended none
-summary: No macOS release runs natively on this machine. No GPU can drive a display on macOS Tahoe 26: AMD Radeon(TM) Graphics (680M) has no macOS driver; AMD Radeon RX 6700S is a laptop dGPU that cannot drive the screen.
+summary: No macOS release runs natively on this machine. No GPU can drive a display on macOS Tahoe 26: AMD Radeon(TM) Graphics (680M) has no macOS driver; AMD Radeon RX 6700S has unverified laptop display routing; if a MUX supports dGPU-only mode, select it in firmware and disable the iGPU in the hardware editor.
 releases:
   10.13 unsupported | err NO_DISPLAY_PATH (recoverable)
   10.14 unsupported | err NO_DISPLAY_PATH (recoverable)

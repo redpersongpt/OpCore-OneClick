@@ -79,6 +79,41 @@ pub fn write_config(sample_plist: &[u8], inputs: &ConfigInputs) -> Result<Vec<u8
     write_kernel(&mut root, &template, inputs)?;
     write_misc(&mut root, &template, inputs)?;
     write_nvram(&mut root, &template, inputs.plan)?;
+    if inputs
+        .plan
+        .drivers
+        .iter()
+        .any(|d| d.enabled && d.path.eq_ignore_ascii_case("OpenVariableRuntimeDxe.efi"))
+    {
+        let schema: Dictionary = [
+            "36C28AB5-6566-4C50-9EBD-CBB920F83843",
+            "7C436110-AB2A-4BBB-A880-FE41995C9F82",
+            "8BE4DF61-93CA-11D2-AA0D-00E098032B8C",
+        ]
+        .into_iter()
+        .map(|guid| {
+            (
+                guid.to_string(),
+                Value::Array(vec![Value::String("*".into())]),
+            )
+        })
+        .collect();
+        set_path(&mut root, "NVRAM/LegacySchema", Value::Dictionary(schema))?;
+    }
+    if !inputs.plan.nvram_legacy_schema.is_empty() {
+        let schema: Dictionary = inputs
+            .plan
+            .nvram_legacy_schema
+            .iter()
+            .map(|(guid, keys)| {
+                Ok((
+                    canonical_guid(guid, "NVRAM/LegacySchema")?,
+                    Value::Array(keys.iter().cloned().map(Value::String).collect()),
+                ))
+            })
+            .collect::<Result<_, AppError>>()?;
+        set_path(&mut root, "NVRAM/LegacySchema", Value::Dictionary(schema))?;
+    }
     write_platform_info(&mut root, inputs)?;
     write_uefi(&mut root, &template, inputs)?;
     reconcile_custom_smbios(&mut root)?;
@@ -1418,6 +1453,7 @@ mod tests {
             nvram_add: Vec::new(),
             nvram_delete: Vec::new(),
             nvram_settings: SettingMap::from([("WriteFlash".to_string(), PlistScalar::Bool(true))]),
+            nvram_legacy_schema: Default::default(),
             platform_info: SettingMap::new(),
             drivers: vec![
                 driver("OpenRuntime.efi", false),

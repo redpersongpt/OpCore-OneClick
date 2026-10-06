@@ -49,6 +49,8 @@ ssdts:
   SSDT-EC-USBX-DESKTOP.aml <- dortania SSDT-EC-USBX-DESKTOP.aml
   SSDT-AWAC.aml <- dortania SSDT-AWAC.aml
 device-properties:
+  PciRoot(0x0)/Pci(0x2,0x0)
+    class-code = <FFFFFFFF>
   PciRoot(0x0)/Pci(0x1f,0x3)
     layout-id = <01000000>
   PciRoot(0x0)/Pci(0x1c,0x0)/Pci(0x0,0x0)
@@ -136,6 +138,7 @@ post-install:
   [info] usb: Map the USB ports
   [info] wifi: Install HeliPort for Intel Wi-Fi
   [info] bootloader: Boot picker after install
+  [info] cpu: Check CPU frequency vectors
   [info] audio: Try other layout-ids if a jack or the microphone is silent
   [info] smbios: Check the serial number before using iServices
   [info] boot: Turn off verbose boot

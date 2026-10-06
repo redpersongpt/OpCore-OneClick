@@ -384,8 +384,8 @@ const NOTE_NOOTRX_BUILDS: &str =
     "NootRX has no tagged releases; it comes from the project's nightly builds.";
 const NOTE_NO_PIKERA: &str = "Do not use agdpmod=pikera with Polaris or Vega cards.";
 const NOTE_DISABLE: &str =
-    "macOS has no driver for this GPU. Disable it: -wegnoegpu when an iGPU drives the \
-     display, otherwise the disable-gpu property or an SSDT.";
+    "macOS has no driver for this GPU. If it is the only display device, install a supported GPU. \
+     Disable this GPU only after another supported GPU drives the display.";
 const NOTE_COMPUTE: &str =
     "Compute / data-centre board without display outputs; it cannot drive a screen.";
 const NOTE_HEADLESS: &str =
@@ -612,7 +612,7 @@ fn family_support(family: GpuFamily) -> GpuSupport {
             s.requirement = GpuRequirement::NootRx;
             s.notes = vec![
                 "Apple never shipped Navi 22: it needs NootRX (macOS 12 to 26), which replaces WhateverGreen. \
-                 Known issues: green artefacts in some 3D apps and black screens with DRM video."
+                 Known issues: FairPlay 1.x/4.x DRM video can black-screen or crash; software-DRM browsers can show green/pink artefacts. Some 3D apps show green artefacts (sometimes improved on Monterey)."
                     .to_string(),
                 NOTE_NOOTRX_BUILDS.to_string(),
                 NOTE_AVX2.to_string(),

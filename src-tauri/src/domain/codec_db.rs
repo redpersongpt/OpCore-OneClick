@@ -740,6 +740,45 @@ pub fn ranked_layouts(codec_id: u32, subsystem: Option<u32>, is_laptop: bool) ->
     scored.into_iter().map(|(_, id)| id).collect()
 }
 
+/// Prefer comments naming the scanned chassis, without treating nearby model
+/// numbers (such as T430/T430s or Y530/Y540) as interchangeable.
+pub fn ranked_layouts_for_model(
+    codec_id: u32,
+    subsystem: Option<u32>,
+    is_laptop: bool,
+    model: Option<&str>,
+) -> Vec<u32> {
+    let mut layouts = ranked_layouts(codec_id, subsystem, is_laptop);
+    let Some(model) = model.filter(|s| !s.trim().is_empty()) else {
+        return layouts;
+    };
+    let tokens = |s: &str| -> Vec<String> {
+        s.split(|c: char| !c.is_ascii_alphanumeric())
+            .filter(|w| w.len() >= 4 && w.chars().any(|c| c.is_ascii_digit()))
+            .map(str::to_ascii_lowercase)
+            .collect()
+    };
+    let model_tokens = tokens(model);
+    if model_tokens.is_empty() {
+        return layouts;
+    }
+    if let Some(codec) = find(codec_id) {
+        layouts.sort_by_key(|id| {
+            let matched = codec.layouts.iter().find(|l| l.id == *id).is_some_and(|l| {
+                let comment_tokens = tokens(&l.comment);
+                model_tokens.iter().any(|m| comment_tokens.contains(m))
+            });
+            let dock_only = codec
+                .layouts
+                .iter()
+                .find(|l| l.id == *id)
+                .is_some_and(|l| l.comment.to_ascii_lowercase().contains("with dock"));
+            (!matched, dock_only)
+        });
+    }
+    layouts
+}
+
 /// Deterministic default layout-id for a codec (never random). `is_laptop`
 /// and the codec subsystem id may be used to prefer OEM-specific layouts.
 pub fn default_layout(codec_id: u32, subsystem: Option<u32>, is_laptop: bool) -> Option<u32> {

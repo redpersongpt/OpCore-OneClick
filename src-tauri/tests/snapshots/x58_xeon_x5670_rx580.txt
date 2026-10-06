@@ -11,11 +11,11 @@ releases:
   10.14 supported   | ok MacPro5,1 sbm=Disabled csr=00000000 gpu=WhateverGreen kexts=10 ssdts=1
   10.15 supported   | ok MacPro6,1 sbm=Disabled csr=00000000 gpu=WhateverGreen kexts=11 ssdts=1
   11    supported   | ok MacPro6,1 sbm=Default csr=00000000 gpu=WhateverGreen kexts=11 ssdts=1
-  12    supported   | ok MacPro6,1 sbm=Default csr=00000000 gpu=WhateverGreen kexts=11 ssdts=1
-  13    expert      root-patch | ok MacPro6,1 (skip) sbm=Disabled csr=00000803 gpu=WhateverGreen kexts=16 ssdts=1
-  14    expert      root-patch | ok MacPro6,1 (skip) sbm=Disabled csr=00000803 gpu=WhateverGreen kexts=16 ssdts=1
-  15    expert      root-patch | ok MacPro6,1 (skip) sbm=Disabled csr=00000803 gpu=WhateverGreen kexts=16 ssdts=1
-  26    expert      root-patch | ok MacPro6,1 (skip) sbm=Disabled csr=00000803 gpu=WhateverGreen kexts=16 ssdts=1
+  12    supported   | ok MacPro6,1 sbm=Default csr=00000000 gpu=WhateverGreen kexts=13 ssdts=1
+  13    expert      root-patch | ok MacPro6,1 (skip) sbm=Disabled csr=00000803 gpu=WhateverGreen kexts=18 ssdts=1
+  14    expert      root-patch | ok MacPro6,1 (skip) sbm=Disabled csr=00000803 gpu=WhateverGreen kexts=18 ssdts=1
+  15    expert      root-patch | ok MacPro6,1 (skip) sbm=Disabled csr=00000803 gpu=WhateverGreen kexts=18 ssdts=1
+  26    expert      root-patch | ok MacPro6,1 (skip) sbm=Disabled csr=00000803 gpu=WhateverGreen kexts=18 ssdts=1
 report-notes:
   [warning] network: No network in macOS Recovery
   [warning] platform: Legacy BIOS boot
@@ -34,6 +34,8 @@ kexts:
   + SMCProcessor.kext (VirtualSMC)
   + SMCSuperIO.kext (VirtualSMC)
   + AppleALC.kext (AppleALC) required
+  + NoAVXFSCompressionTypeZlib.kext (NoAVXFSCompressionTypeZlib) [21.5.0..21.99.99] required
+  + ASPP-Override.kext (ASPP-Override) [21.4.0..] required
   + CpuTscSync.kext (CpuTscSync)
   + AppleMCEReporterDisabler.kext (AppleMCEReporterDisabler) [19.0.0..] required
   + USBToolBox.kext (USBToolBox) required
@@ -57,6 +59,9 @@ kernel-quirks:
 kernel-emulate:
   off: DummyPowerManagement
   set: Cpuid1Data=<> Cpuid1Mask=<>
+kernel-patches:
+  + SurPlus: _early_random (kernel) [20.4.0..21.1.0]
+  + SurPlus: _register_and_init_prng (kernel) [20.4.0..21.1.0]
 misc-boot:
   on: ShowPicker
   off: HideAuxiliary PickerAudioAssist PollAppleHotKeys

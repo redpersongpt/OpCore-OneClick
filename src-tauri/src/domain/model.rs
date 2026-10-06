@@ -273,11 +273,49 @@ pub struct ProfileCpu {
     pub cores: u32,
     pub threads: u32,
     pub is_mobile: bool,
+    /// Actual instruction flags when the scanner exposes them.
+    #[serde(default)]
+    #[ts(optional)]
+    pub has_avx: Option<bool>,
+    #[serde(default)]
+    #[ts(optional)]
+    pub has_rdrand: Option<bool>,
     /// AVX2 is required for macOS 13+ without CryptexFixup.
     pub has_avx2: Option<bool>,
     pub has_sse4_2: Option<bool>,
     /// Hybrid P/E-core design (Alder/Raptor/Arrow Lake).
     pub is_hybrid: bool,
+}
+
+impl ProfileCpu {
+    pub fn lacks_avx(&self) -> bool {
+        self.has_avx.map(|v| !v).unwrap_or_else(|| {
+            matches!(
+                self.platform,
+                CpuPlatform::Penryn
+                    | CpuPlatform::Lynnfield
+                    | CpuPlatform::Arrandale
+                    | CpuPlatform::NehalemHedt
+            ) || (self.vendor == CpuVendor::Intel
+                && !self.has_avx2.unwrap_or(false)
+                && (self.name.to_ascii_lowercase().contains("pentium")
+                    || self.name.to_ascii_lowercase().contains("celeron")))
+        })
+    }
+
+    pub fn lacks_rdrand(&self) -> bool {
+        self.has_rdrand.map(|v| !v).unwrap_or_else(|| {
+            matches!(
+                self.platform,
+                CpuPlatform::Penryn
+                    | CpuPlatform::Lynnfield
+                    | CpuPlatform::Arrandale
+                    | CpuPlatform::NehalemHedt
+                    | CpuPlatform::SandyBridge
+                    | CpuPlatform::SandyBridgeE
+            )
+        })
+    }
 }
 
 // ── GPU ─────────────────────────────────────────────────────────────────────
@@ -537,6 +575,9 @@ pub struct HardwareProfile {
     pub storage: Vec<ProfileStorage>,
     pub motherboard_vendor: String,
     pub motherboard_model: String,
+    #[serde(default)]
+    #[ts(optional)]
+    pub system_model: Option<String>,
     /// Chipset / PCH name, e.g. "Z390", "B550", "HM370".
     pub chipset: Option<String>,
     pub ram_gb: u32,
@@ -946,6 +987,8 @@ pub struct BuildPlan {
     pub nvram_delete: Vec<NvramVariable>,
     /// NVRAM->WriteFlash, LegacyOverwrite, ... overrides.
     pub nvram_settings: SettingMap,
+    #[serde(default)]
+    pub nvram_legacy_schema: BTreeMap<String, Vec<String>>,
 
     /// PlatformInfo top-level overrides (UpdateSMBIOSMode, CustomMemory, ...).
     pub platform_info: SettingMap,

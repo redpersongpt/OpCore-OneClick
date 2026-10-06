@@ -54,7 +54,7 @@ csrActiveConfig: number, nvramAdd: Array<NvramVariable>, nvramDelete: Array<Nvra
 /**
  * NVRAM->WriteFlash, LegacyOverwrite, ... overrides.
  */
-nvramSettings: { [key in string]: PlistScalar }, 
+nvramSettings: { [key in string]: PlistScalar }, nvramLegacySchema: { [key in string]: Array<string> }, 
 /**
  * PlatformInfo top-level overrides (UpdateSMBIOSMode, CustomMemory, ...).
  */

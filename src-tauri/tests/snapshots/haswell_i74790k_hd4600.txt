@@ -111,6 +111,7 @@ bios: Hyper-Threading = enable
 bios: DVMT Pre-Allocated = 64MB
 bios: Serial / Parallel port = disable
 notes:
+  [warning] nvram: ASUS 9-series NVRAM restriction
   [info] smbios: iMac16,2 stops at macOS 12.7.6
   [info] gpu: Display: Intel(R) HD Graphics 4600
   [info] acpi: Generic prebuilt SSDTs
