@@ -1,3 +1,4 @@
+pub mod build;
 pub mod commands;
 pub mod contracts;
 pub mod domain;
@@ -36,7 +37,7 @@ pub fn run() {
             let _ = std::fs::remove_dir_all(&paths.work);
             let _ = std::fs::create_dir_all(&paths.work);
 
-            app.manage(AppStateManager::new(app_data));
+            app.manage(AppStateManager::new(app_data, paths.builds.clone()));
             app.manage(paths);
             app.manage(TaskRegistry::new(app_handle));
             app.manage(FlashSecurityContext::new(uuid::Uuid::new_v4().to_string()));
