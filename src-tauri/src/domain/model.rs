@@ -794,6 +794,16 @@ pub struct BinaryPatch {
     pub enabled: bool,
 }
 
+/// Booter->MmioWhitelist entry (used with DevirtualiseMmio).
+#[derive(Debug, Clone, Serialize, Deserialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub struct MmioEntry {
+    pub address: u64,
+    pub comment: String,
+    pub enabled: bool,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
 #[serde(rename_all = "camelCase")]
 #[ts(export)]
@@ -876,6 +886,7 @@ pub struct BuildPlan {
 
     pub booter_quirks: SettingMap,
     pub booter_patches: Vec<BinaryPatch>,
+    pub mmio_whitelist: Vec<MmioEntry>,
 
     pub device_properties: Vec<DevicePropertyEntry>,
 

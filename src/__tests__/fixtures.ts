@@ -43,6 +43,7 @@ export function plan(target: MacOsVersion = '15'): BuildPlan {
     acpiQuirks: {},
     booterQuirks: {},
     booterPatches: [],
+    mmioWhitelist: [],
     deviceProperties: [],
     kexts: [],
     kernelPatches: [],

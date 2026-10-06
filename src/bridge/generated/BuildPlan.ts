@@ -8,6 +8,7 @@ import type { DriverPlan } from "./DriverPlan";
 import type { KernelBlock } from "./KernelBlock";
 import type { KextSelection } from "./KextSelection";
 import type { MacOsVersion } from "./MacOsVersion";
+import type { MmioEntry } from "./MmioEntry";
 import type { NvramVariable } from "./NvramVariable";
 import type { PlanNote } from "./PlanNote";
 import type { PlistScalar } from "./PlistScalar";
@@ -19,7 +20,7 @@ import type { SsdtPlan } from "./SsdtPlan";
  * Pure data: produced by `domain::planner`, consumed by the build pipeline
  * and `domain::config_writer`.
  */
-export type BuildPlan = { target: MacOsVersion, smbios: SmbiosPlan, ssdts: Array<SsdtPlan>, acpiPatches: Array<AcpiPatch>, acpiDeletes: Array<AcpiDelete>, acpiQuirks: { [key in string]: PlistScalar }, booterQuirks: { [key in string]: PlistScalar }, booterPatches: Array<BinaryPatch>, deviceProperties: Array<DevicePropertyEntry>, kexts: Array<KextSelection>, kernelPatches: Array<BinaryPatch>, 
+export type BuildPlan = { target: MacOsVersion, smbios: SmbiosPlan, ssdts: Array<SsdtPlan>, acpiPatches: Array<AcpiPatch>, acpiDeletes: Array<AcpiDelete>, acpiQuirks: { [key in string]: PlistScalar }, booterQuirks: { [key in string]: PlistScalar }, booterPatches: Array<BinaryPatch>, mmioWhitelist: Array<MmioEntry>, deviceProperties: Array<DevicePropertyEntry>, kexts: Array<KextSelection>, kernelPatches: Array<BinaryPatch>, 
 /**
  * AMD CPUs: physical cores per package for the AMD_Vanilla core-count
  * patches. The build pipeline downloads the pinned AMD_Vanilla

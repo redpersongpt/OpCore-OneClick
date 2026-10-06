@@ -201,7 +201,18 @@ fn write_booter(
     template: &Dictionary,
     plan: &BuildPlan,
 ) -> Result<(), AppError> {
-    array_mut(root, "Booter/MmioWhitelist")?.clear();
+    let mmio_template = entry_template(template, "Booter/MmioWhitelist")?;
+    let mut mmio = Vec::new();
+    for entry in &plan.mmio_whitelist {
+        let address = i64::try_from(entry.address)
+            .map_err(|_| invalid("Booter/MmioWhitelist", "address does not fit a plist integer"))?;
+        let mut item = Entry::new(&mmio_template, "Booter/MmioWhitelist");
+        item.set("Address", Value::Integer(address.into()))?
+            .set("Comment", comment(&entry.comment))?
+            .set("Enabled", Value::Boolean(entry.enabled))?;
+        mmio.push(item.finish());
+    }
+    *array_mut(root, "Booter/MmioWhitelist")? = mmio;
 
     let patch_template = entry_template(template, "Booter/Patch")?;
     let mut patches = Vec::new();
@@ -1362,6 +1373,7 @@ mod tests {
                 ("ResizeAppleGpuBars".to_string(), PlistScalar::Int(-1)),
             ]),
             booter_patches: Vec::new(),
+            mmio_whitelist: Vec::new(),
             device_properties: Vec::new(),
             kexts: Vec::new(),
             kernel_patches: Vec::new(),

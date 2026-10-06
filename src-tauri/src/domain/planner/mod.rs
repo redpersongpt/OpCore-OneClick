@@ -178,6 +178,7 @@ pub fn empty_plan(target: MacOsVersion) -> BuildPlan {
         acpi_quirks: SettingMap::new(),
         booter_quirks: SettingMap::new(),
         booter_patches: vec![],
+        mmio_whitelist: vec![],
         device_properties: vec![],
         kexts: vec![],
         kernel_patches: vec![],

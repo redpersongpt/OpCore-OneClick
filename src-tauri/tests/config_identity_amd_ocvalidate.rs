@@ -141,6 +141,7 @@ fn base_plan(model: &str, target: MacOsVersion) -> BuildPlan {
         acpi_quirks: SettingMap::new(),
         booter_quirks: SettingMap::new(),
         booter_patches: Vec::new(),
+        mmio_whitelist: Vec::new(),
         device_properties: Vec::new(),
         kexts: Vec::new(),
         kernel_patches: Vec::new(),
