@@ -1,0 +1,54 @@
+name: Host smoke
+
+on:
+  push:
+    branches: [main, overhaul]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: host-smoke-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  smoke:
+    name: Host smoke (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest, ubuntu-latest]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 45
+    env:
+      CARGO_BUILD_JOBS: 4
+      HOST_SMOKE_OUTPUT: ${{ github.workspace }}/src-tauri/target/host-smoke
+    defaults:
+      run:
+        shell: bash
+        working-directory: src-tauri
+    steps:
+      - uses: actions/checkout@v7
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+      - name: Install Linux dependencies
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf dmidecode pciutils usbutils
+      - name: Scan, build and validate
+        run: cargo test --locked --test host_smoke -- --ignored --nocapture
+      - name: Upload scan and EFI
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: host-smoke-${{ matrix.os }}
+          if-no-files-found: error
+          path: |
+            src-tauri/target/host-smoke/*.json
+            src-tauri/target/host-smoke/acpi/
+            src-tauri/target/host-smoke/firmware-tables/
+            src-tauri/target/host-smoke/builds/
