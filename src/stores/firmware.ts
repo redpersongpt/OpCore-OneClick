@@ -1,32 +1,83 @@
 import { create } from 'zustand';
-import type { FirmwareReport } from '../bridge/types';
-import { api } from '../bridge/invoke';
-import { parseError } from '../lib/parseError';
+import { api } from '../bridge/api';
+import { toAppError, type AppError } from '../bridge/errors';
+import type { BiosSetting, FirmwareReport, HardwareProfile, MacOsVersion } from '../bridge/types';
+import { compatKey } from './compat';
 
-interface FirmwareStore {
-  report: FirmwareReport | null;
-  loading: boolean;
-  error: string | null;
+interface FirmwareState {
+  settings: BiosSetting[] | null;
+  settingsKey: string | null;
+  settingsRequestKey: string | null;
+  settingsLoading: boolean;
+  settingsError: AppError | null;
 
-  probe: () => Promise<void>;
+  probe: FirmwareReport | null;
+  probeAttempted: boolean;
+  probeLoading: boolean;
+  probeError: AppError | null;
+
+  /** Checklist items the user ticked, by setting name. */
+  checked: Record<string, boolean>;
+
+  loadSettings: (profile: HardwareProfile, target: MacOsVersion) => Promise<void>;
+  runProbe: () => Promise<void>;
+  toggle: (name: string) => void;
+  clearSettings: () => void;
   clear: () => void;
 }
 
-export const useFirmware = create<FirmwareStore>((set) => ({
-  report: null,
-  loading: false,
-  error: null,
+export const useFirmware = create<FirmwareState>((set, get) => ({
+  settings: null,
+  settingsKey: null,
+  settingsRequestKey: null,
+  settingsLoading: false,
+  settingsError: null,
+  probe: null,
+  probeAttempted: false,
+  probeLoading: false,
+  probeError: null,
+  checked: {},
 
-  probe: async () => {
-    set({ loading: true, error: null, report: null });
+  loadSettings: async (profile, target) => {
+    const key = compatKey(profile, target);
+    set({ settingsLoading: true, settingsError: null, settingsRequestKey: key });
     try {
-      const report = await api.probeFirmware();
-      set({ report, loading: false });
+      const settings = await api.getBiosSettings(profile, target);
+      if (get().settingsRequestKey !== key) return;
+      set({ settings, settingsKey: key, settingsLoading: false });
     } catch (err) {
-      const message = parseError(err);
-      set({ error: message, loading: false });
+      if (get().settingsRequestKey !== key) return;
+      set({ settingsError: toAppError(err), settingsLoading: false });
     }
   },
 
-  clear: () => set({ report: null, loading: false, error: null }),
+  runProbe: async () => {
+    if (get().probeLoading) return;
+    set({ probeLoading: true, probeError: null, probeAttempted: true });
+    try {
+      const probe = await api.probeFirmware();
+      set({ probe, probeLoading: false });
+    } catch (err) {
+      set({ probeError: toAppError(err), probeLoading: false });
+    }
+  },
+
+  toggle: (name) => set((s) => ({ checked: { ...s.checked, [name]: !s.checked[name] } })),
+
+  clearSettings: () =>
+    set({ settings: null, settingsKey: null, settingsRequestKey: null, settingsLoading: false, settingsError: null }),
+
+  clear: () =>
+    set({
+      settings: null,
+      settingsKey: null,
+      settingsRequestKey: null,
+      settingsLoading: false,
+      settingsError: null,
+      probe: null,
+      probeAttempted: false,
+      probeLoading: false,
+      probeError: null,
+      checked: {},
+    }),
 }));

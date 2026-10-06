@@ -127,9 +127,7 @@ impl MacOsVersion {
             }
         }
         let token = lower
-            .split(|c: char| !(c.is_ascii_digit() || c == '.'))
-            .filter(|t| !t.is_empty() && t.chars().next().is_some_and(|c| c.is_ascii_digit()))
-            .last()?
+            .split(|c: char| !(c.is_ascii_digit() || c == '.')).rfind(|t| !t.is_empty() && t.chars().next().is_some_and(|c| c.is_ascii_digit()))?
             .to_string();
         let mut parts = token.split('.');
         let major: u32 = parts.next()?.parse().ok()?;

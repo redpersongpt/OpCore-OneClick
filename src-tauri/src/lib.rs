@@ -27,8 +27,11 @@ pub fn run() {
             let app_handle = app.handle().clone();
 
             let app_data = app.path().app_data_dir()?;
-            let app_cache = app.path().app_cache_dir().unwrap_or_else(|_| app_data.join("cache"));
-            let paths = AppPaths::new(&app_data, &app_cache);
+            // Builds and recovery images are large: keep them out of the
+            // roaming profile on Windows.
+            let local_data = app.path().app_local_data_dir().unwrap_or_else(|_| app_data.clone());
+            let app_cache = app.path().app_cache_dir().unwrap_or_else(|_| local_data.join("cache"));
+            let paths = AppPaths::new(&local_data, &app_cache);
             // Scratch extraction space never needs to survive a restart.
             let _ = std::fs::remove_dir_all(&paths.work);
             let _ = std::fs::create_dir_all(&paths.work);

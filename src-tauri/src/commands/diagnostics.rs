@@ -124,22 +124,22 @@ pub async fn save_support_log(
 }
 
 #[tauri::command]
-pub async fn clear_app_cache(app: AppHandle) -> Result<(), AppError> {
-    let app_data = app
-        .path()
-        .app_data_dir()
-        .map_err(|e| AppError::new("PATH_ERROR", format!("Cannot resolve app data dir: {}", e)))?;
+pub async fn clear_app_cache(paths: tauri::State<'_, crate::paths::AppPaths>) -> Result<(), AppError> {
+    if crate::commands::recovery::download_in_progress() || crate::commands::disk::flash_in_progress() {
+        return Err(AppError::new(
+            "BUSY",
+            "A recovery download or USB write is running. Wait for it to finish before clearing the cache.",
+        )
+        .recoverable());
+    }
 
-    for cache_dir in ["builds", "recovery", "cache"] {
-        let dir = app_data.join(cache_dir);
+    for dir in [&paths.builds, &paths.recovery, &paths.cache, &paths.work] {
         if dir.exists() {
-            std::fs::remove_dir_all(&dir).map_err(|e| {
-                AppError::new(
-                    "IO_ERROR",
-                    format!("Failed to clear {} cache directory: {}", cache_dir, e),
-                )
+            std::fs::remove_dir_all(dir).map_err(|e| {
+                AppError::new("IO_ERROR", format!("Failed to clear {}: {}", dir.display(), e))
             })?;
         }
+        std::fs::create_dir_all(dir)?;
     }
 
     info!("Application cache cleared");

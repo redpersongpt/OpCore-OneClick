@@ -1,193 +1,175 @@
-import { useEffect, useState, useCallback } from 'react';
-import { motion } from 'motion/react';
-import { useWizard } from '../stores/wizard';
+import { useEffect } from 'react';
+import { Usb } from 'lucide-react';
+import { DiskList } from '../components/deploy/DiskList';
+import { FlashConfirmDialog } from '../components/deploy/FlashConfirmDialog';
+import { FlashProgressView } from '../components/deploy/FlashProgressView';
+import { RecoveryPanel } from '../components/deploy/RecoveryPanel';
+import { ErrorPanel } from '../components/feedback/ErrorPanel';
+import { EmptyState } from '../components/feedback/States';
+import { ExportEfiButton } from '../components/review/ExportEfiButton';
+import { Banner } from '../components/ui/Banner';
+import { Button } from '../components/ui/Button';
+import { PageHeader, StepActions } from '../components/ui/Section';
+import { useT } from '../i18n';
+import { diskBlock, minimumDiskBytes } from '../lib/disk';
+import { macosLabel } from '../lib/macos';
+import { toNum } from '../lib/num';
+import { useBuild } from '../stores/build';
+import { useDeploy } from '../stores/deploy';
 import { useHardware } from '../stores/hardware';
-import { useEfi } from '../stores/efi';
-import { useCompatibility } from '../stores/compatibility';
-import { useDisk } from '../stores/disk';
-import { EmptyState } from '../components/feedback/EmptyState';
-import { DriveSelection } from '../components/deploy/DriveSelection';
-import { FlashReview } from '../components/deploy/FlashReview';
-import { FlashProgress } from '../components/deploy/FlashProgress';
-import { RecoverySection } from '../components/deploy/RecoverySection';
-import { Badge } from '../components/ui/Badge';
-import { Separator } from '../components/ui/Separator';
-import { makeDemoFlashConfirmation, makeDemoUsbDevices } from '../lib/demoData';
-import { HardDrive, AlertCircle } from 'lucide-react';
+import { useWizard } from '../stores/wizard';
 
-type DeployView = 'select' | 'review' | 'flashing';
-
-const containerVariants = {
-  hidden: { opacity: 0, y: 10 },
-  show: {
-    opacity: 1,
-    y: 0,
-    transition: {
-      duration: 0.28,
-      staggerChildren: 0.06,
-    },
-  },
-};
-
-const itemVariants = {
-  hidden: { opacity: 0, y: 8 },
-  show: { opacity: 1, y: 0, transition: { duration: 0.24 } },
-};
+const DISK_POLL_MS = 5000;
 
 export default function Deploy() {
-  const { goNext, markCompleted } = useWizard();
-  const { isDemo } = useHardware();
-  const { buildResult } = useEfi();
-  const { report: compatReport } = useCompatibility();
-  const {
-    flash,
-    selectedDevice,
-    setDevices,
-    setFlashConfirmation,
-    error: diskError,
-  } = useDisk();
+  const t = useT();
+  const result = useBuild((s) => s.result);
+  const isDemo = useHardware((s) => s.isDemo);
+  const d = useDeploy();
+  const complete = useWizard((s) => s.complete);
+  const goTo = useWizard((s) => s.goTo);
 
-  const [view, setView] = useState<DeployView>('select');
-
-  const targetOs = compatReport?.recommendedOs ?? 'Ventura';
+  const target = result?.target ?? null;
+  const { loadPrivileges, refreshDisks, loadRecoveryInfo } = d;
+  const needPrivileges = d.privileges === null && d.privilegesError === null;
+  const needDisks = !d.disksLoaded && !d.disksLoading;
+  const needRecoveryInfo = target !== null && d.recoveryInfoFor !== target && !d.recoveryDownloading;
 
   useEffect(() => {
-    if (isDemo) {
-      setDevices(makeDemoUsbDevices());
-    }
-  }, [isDemo, setDevices]);
+    if (needPrivileges) void loadPrivileges();
+  }, [needPrivileges, loadPrivileges]);
 
-  const handleRefreshDevices = useCallback(async () => {
-    if (isDemo) {
-      setDevices(makeDemoUsbDevices());
-    }
-  }, [isDemo, setDevices]);
+  useEffect(() => {
+    if (needDisks && !isDemo) void refreshDisks();
+  }, [needDisks, isDemo, refreshDisks]);
 
-  const handlePrepareDemoFlash = useCallback(async () => {
-    if (!selectedDevice) return;
-    setFlashConfirmation(makeDemoFlashConfirmation(selectedDevice));
-  }, [selectedDevice, setFlashConfirmation]);
+  useEffect(() => {
+    if (needRecoveryInfo && target) void loadRecoveryInfo(target);
+  }, [needRecoveryInfo, target, loadRecoveryInfo]);
 
-  const handleDriveSelected = useCallback((_device: string) => {
-    // Selection is stored in disk store; move to review
-    setView('review');
-  }, []);
+  // Nothing plugged in yet: look again every few seconds until a drive shows up.
+  const waitingForDrive = d.disksLoaded && d.disksError === null && d.disks.length === 0;
+  const busy = d.flashStatus === 'running' || d.recoveryDownloading || d.preparing;
+  useEffect(() => {
+    if (!waitingForDrive || isDemo || busy) return;
+    const timer = window.setInterval(() => void refreshDisks(), DISK_POLL_MS);
+    return () => window.clearInterval(timer);
+  }, [waitingForDrive, isDemo, busy, refreshDisks]);
 
-  const handleFlashConfirm = useCallback(
-    async (token: string) => {
-      if (!buildResult) return;
-      setView('flashing');
-      if (isDemo) {
-        return;
-      }
-      await flash(buildResult.efiPath, token);
-    },
-    [buildResult, flash, isDemo],
-  );
+  if (!result || !target) {
+    return (
+      <EmptyState title={t('review.empty')} action={<Button onClick={() => goTo('build')}>{t('review.goBuild')}</Button>} />
+    );
+  }
 
-  const handleComplete = () => {
-    markCompleted('deploy');
-    goNext();
+  const efiPath = result.efiPath;
+  const recovery = d.includeRecovery ? target : null;
+  const info = d.recoveryInfoFor === target ? d.recoveryInfo : null;
+  const recoveryReady = !d.includeRecovery || (info?.available === true && info.verified && info.version === target);
+  const minBytes = minimumDiskBytes(d.includeRecovery, toNum(info?.sizeBytes));
+  const disk = d.disks.find((x) => x.devicePath === d.selected) ?? null;
+  const diskOk = disk !== null && diskBlock(disk, minBytes) === null;
+  const canWrite = !isDemo && diskOk && recoveryReady && !busy;
+
+  const prepare = () => void d.prepare(efiPath, recovery);
+  // A failed write may have repartitioned the drive: list it again before the next attempt.
+  const afterFailure = () => {
+    d.resetFlash();
+    void refreshDisks();
   };
 
-  // No build result
-  if (!buildResult) {
+  if (d.flashStatus !== 'idle') {
     return (
-      <EmptyState
-        icon={<HardDrive size={28} />}
-        title="No EFI build found"
-        description="Go back to Build to generate your EFI configuration first."
-      />
+      <>
+        <PageHeader title={t('deploy.title')} subtitle={t('deploy.subtitle', { version: macosLabel(target) })} />
+        <FlashProgressView
+          status={d.flashStatus}
+          progress={d.flashProgress}
+          phases={d.flashPhases}
+          error={d.flashError}
+          withRecovery={recovery !== null}
+        />
+        <StepActions
+          left={
+            d.flashStatus === 'failed' ? <Button onClick={afterFailure}>{t('common.back')}</Button> : undefined
+          }
+        >
+          {d.flashStatus === 'failed' && (
+            <Button
+              variant="primary"
+              onClick={() => {
+                afterFailure();
+                prepare();
+              }}
+            >
+              {t('flash.tryAgain')}
+            </Button>
+          )}
+          {d.flashStatus === 'done' && (
+            <Button variant="primary" onClick={() => complete('deploy')}>
+              {t('common.continue')}
+            </Button>
+          )}
+        </StepActions>
+      </>
     );
   }
 
   return (
-    <motion.div variants={containerVariants} initial="hidden" animate="show">
-      <motion.h2 variants={itemVariants} className="text-xl font-semibold text-[--text-primary] mb-1">
-        Deploy
-      </motion.h2>
-      <motion.p variants={itemVariants} className="text-sm text-[--text-tertiary] mb-6">
-        Select a USB drive and flash your EFI configuration.
-      </motion.p>
+    <>
+      <PageHeader title={t('deploy.title')} subtitle={t('deploy.subtitle', { version: macosLabel(target) })} />
+      <div className="space-y-4">
+        {isDemo && (
+          <Banner tone="warning" title={t('deploy.demoTitle')}>
+            {t('deploy.demoBody')}
+          </Banner>
+        )}
+        {d.privileges && !d.privileges.elevated && (
+          <Banner tone={d.privileges.canElevate ? 'info' : 'warning'} title={d.privileges.canElevate ? t('deploy.elevate') : t('deploy.needAdmin')}>
+            {d.privileges.detail}
+          </Banner>
+        )}
+        {d.privilegesError && <ErrorPanel error={d.privilegesError} title={t('deploy.privilegesFailed')} compact />}
 
-      {isDemo && (
-        <motion.div
-          variants={itemVariants}
-          className="flex items-center justify-between rounded-lg border border-[--color-blue-3] bg-[--color-blue-1] px-4 py-3 mb-4"
-        >
-          <div className="flex items-start gap-2">
-            <AlertCircle size={14} className="text-[--color-blue-6] mt-0.5 shrink-0" />
-            <div>
-              <p className="text-[0.8125rem] text-[--color-blue-7] font-medium">Deploy demo is active</p>
-              <p className="text-[0.6875rem] text-[--color-blue-6] mt-0.5">
-                Drive inventory, flash review, and progress states are simulated locally on macOS.
-              </p>
-            </div>
+        <RecoveryPanel target={target} disabled={isDemo || busy} />
+        {!isDemo && <DiskList minBytes={minBytes} disabled={busy} />}
+        {d.prepareError && <ErrorPanel error={d.prepareError} title={t('deploy.prepareFailed')} compact />}
+
+        <div className="rounded-lg border border-line bg-panel px-4 py-3">
+          <p className="text-sm text-fg-2">{t('deploy.exportInstead')}</p>
+          <div className="mt-2">
+            <ExportEfiButton efiPath={efiPath} />
           </div>
-          <Badge variant="info" size="sm" dot>
-            Demo
-          </Badge>
-        </motion.div>
-      )}
+        </div>
+      </div>
 
-      {diskError && view !== 'flashing' && (
-        <motion.p variants={itemVariants} className="text-[0.75rem] text-[--color-red-6] mb-4">
-          {diskError}
-        </motion.p>
-      )}
+      <StepActions
+        left={
+          <>
+            <Button onClick={() => goTo('review')} disabled={busy}>
+              {t('common.back')}
+            </Button>
+            <Button variant="ghost" onClick={() => complete('deploy')} disabled={busy}>
+              {t('deploy.skip')}
+            </Button>
+          </>
+        }
+      >
+        {!recoveryReady && !isDemo && <span className="text-sm text-fg-3">{t('deploy.needRecovery')}</span>}
+        <Button variant="danger" icon={<Usb />} onClick={prepare} disabled={!canWrite} loading={d.preparing}>
+          {t('deploy.write')}
+        </Button>
+      </StepActions>
 
-      {/* Main view area */}
-      <motion.div variants={itemVariants}>
-        {view === 'select' && (
-          <motion.div
-            key="deploy-select"
-            initial={{ opacity: 0, x: -10 }}
-            animate={{ opacity: 1, x: 0 }}
-            transition={{ duration: 0.22, ease: 'easeOut' }}
-          >
-            <DriveSelection onSelect={handleDriveSelected} refreshAction={isDemo ? handleRefreshDevices : undefined} />
-          </motion.div>
-        )}
-
-        {view === 'review' && selectedDevice && (
-          <motion.div
-            key="deploy-review"
-            initial={{ opacity: 0, x: 10 }}
-            animate={{ opacity: 1, x: 0 }}
-            transition={{ duration: 0.22, ease: 'easeOut' }}
-          >
-            <FlashReview
-              efiPath={buildResult.efiPath}
-              onConfirm={handleFlashConfirm}
-              onBack={() => {
-                setFlashConfirmation(null);
-                setView('select');
-              }}
-              prepareAction={isDemo ? handlePrepareDemoFlash : undefined}
-              demoMode={isDemo}
-            />
-          </motion.div>
-        )}
-
-        {view === 'flashing' && (
-          <motion.div
-            key="deploy-flashing"
-            initial={{ opacity: 0, scale: 0.98 }}
-            animate={{ opacity: 1, scale: 1 }}
-            transition={{ duration: 0.22, ease: 'easeOut' }}
-          >
-            <FlashProgress onComplete={handleComplete} demoMode={isDemo} />
-          </motion.div>
-        )}
-      </motion.div>
-
-      {/* Recovery section (always available at bottom) */}
-      {view !== 'flashing' && (
-        <>
-          <Separator className="my-6" />
-          <RecoverySection targetOs={targetOs} demoMode={isDemo} />
-        </>
-      )}
-    </motion.div>
+      <FlashConfirmDialog
+        confirmation={d.confirmation}
+        disk={disk}
+        disks={d.disks}
+        onCancel={d.dismissConfirmation}
+        onRenew={prepare}
+        renewing={d.preparing}
+        onConfirm={() => void d.flash(efiPath)}
+      />
+    </>
   );
 }

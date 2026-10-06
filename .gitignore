@@ -1,5 +1,5 @@
 node_modules/
-build/
+/build/
 dist/
 dist-electron/
 src-tauri/target/

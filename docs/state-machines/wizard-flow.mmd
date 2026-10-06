@@ -1,0 +1,45 @@
+stateDiagram-v2
+    %% Wizard steps (src/stores/wizard.ts). Steps unlock in order: finishing a
+    %% step marks it completed and opens the next one, and the sidebar can jump
+    %% back to any step up to the first one that is not completed. Navigation
+    %% is locked while a scan, build, recovery download or flash is running.
+    [*] --> welcome
+
+    welcome --> scan : start (or resume a saved session)
+    scan --> hardware : scan finished, profile imported or demo
+    hardware --> compatibility : profile confirmed
+    compatibility --> bios : target macOS chosen
+    bios --> build : checklist read
+    build --> review : build_efi succeeded
+    review --> deploy : continue
+    deploy --> complete : USB written, or finished without a USB drive
+
+    complete --> welcome : start over
+
+    hardware --> scan : rescan / import (reopens hardware and later)
+    compatibility --> hardware : profile edited (reopens compatibility and later)
+    bios --> compatibility : target changed (reopens compatibility and later)
+    review --> build : build options changed (reopens build and later)
+
+    note right of scan
+        Windows / Linux: scan_hardware on this machine.
+        Any host: import_profile from a JSON
+        exported on the target PC.
+    end note
+
+    note right of compatibility
+        check_compatibility lists the macOS versions
+        this hardware can run (10.13 to 26) and why
+        newer ones are not offered.
+    end note
+
+    note right of build
+        plan_build previews the plan before any download.
+        build_efi downloads, assembles and validates.
+    end note
+
+    note right of deploy
+        download_recovery, then
+        flash_prepare_confirmation and flash_usb.
+        Writing is disabled in demo mode.
+    end note

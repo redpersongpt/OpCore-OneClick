@@ -1,155 +1,184 @@
-import { useEffect, useState } from 'react';
-import { motion, AnimatePresence } from 'motion/react';
-import { useWizard } from '../stores/wizard';
+import { useEffect, type ReactNode } from 'react';
+import { Cpu, FileInput, FlaskConical, PencilLine, RefreshCw, ScanSearch } from 'lucide-react';
+import { ErrorPanel } from '../components/feedback/ErrorPanel';
+import { LoadingState } from '../components/feedback/States';
+import { Badge } from '../components/ui/Badge';
+import { Banner } from '../components/ui/Banner';
+import { Button } from '../components/ui/Button';
+import { Progress } from '../components/ui/Progress';
+import { PageHeader, Section, StepActions } from '../components/ui/Section';
+import { useProfileDialogs } from '../hooks/useProfileDialogs';
+import { useT } from '../i18n';
+import { formatPercent } from '../lib/format';
+import { profileHeadline } from '../lib/profile';
+import { profileSource } from '../lib/verdict';
+import { runScan, startDemo, startManual } from '../stores/flow';
 import { useHardware } from '../stores/hardware';
-import Logo from '../components/Logo';
-import { DEMO_HARDWARE } from '../lib/demoData';
-import { Loader2, AlertCircle } from 'lucide-react';
+import { TASK_KINDS, useTasks } from '../stores/tasks';
+import { useWizard } from '../stores/wizard';
 
 export default function Scan() {
-  const { goNext, markCompleted } = useWizard();
-  const { hardware, scanning, error, scan, setHardware, isDemo } = useHardware();
+  const t = useT();
+  const profile = useHardware((s) => s.profile);
+  const detected = useHardware((s) => s.detected);
+  const scanning = useHardware((s) => s.scanning);
+  const scanError = useHardware((s) => s.scanError);
+  const scanAttempted = useHardware((s) => s.scanAttempted);
+  const ioError = useHardware((s) => s.ioError);
+  const isDemo = useHardware((s) => s.isDemo);
+  const complete = useWizard((s) => s.complete);
+  const scanTask = useTasks((s) => s.latest(TASK_KINDS.scan));
+  const { busy, doImport } = useProfileDialogs();
 
-  useEffect(() => {
-    if (!hardware && !scanning) {
-      scan();
-    }
-  }, [hardware, scanning, scan]);
-
-  // Auto-fallback to demo on error
-  useEffect(() => {
-    if (error && !hardware) {
-      setHardware(DEMO_HARDWARE, true);
-    }
-  }, [error, hardware, setHardware]);
-
-  const handleContinue = () => {
-    markCompleted('scan');
-    goNext();
+  const scan = async () => {
+    if (await runScan()) complete('scan');
   };
 
-  // Scanning
+  useEffect(() => {
+    // Runs once per session: scanAttempted flips synchronously when the scan starts.
+    if (!profile && !scanning && !scanAttempted) void scan();
+  }, [profile, scanning, scanAttempted]);
+
   if (scanning) {
+    const running = scanTask?.status === 'running' ? scanTask : null;
     return (
-      <motion.div
-        className="flex flex-col items-center py-20"
-        initial={{ opacity: 0 }}
-        animate={{ opacity: 1 }}
-        transition={{ duration: 0.3 }}
-      >
-        <motion.div
-          animate={{ rotate: 360 }}
-          transition={{ repeat: Infinity, duration: 1.5, ease: 'linear' }}
-        >
-          <Loader2 size={24} className="text-[#6e6e76]" />
-        </motion.div>
-        <motion.p
-          className="text-[13px] text-[#6e6e76] mt-4"
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          transition={{ delay: 0.3 }}
-        >
-          Detecting hardware...
-        </motion.p>
-      </motion.div>
+      <>
+        <PageHeader title={t('scan.title')} subtitle={t('scan.subtitle')} />
+        <LoadingState message={running?.message || t('scan.scanning')}>
+          <div className="w-64">
+            <Progress value={running?.progress ?? null} label={t('scan.scanning')} />
+            {formatPercent(running?.progress) && (
+              <p className="mt-1 text-xs tabular-nums text-fg-3">{formatPercent(running?.progress)}</p>
+            )}
+          </div>
+        </LoadingState>
+      </>
     );
   }
 
-  if (!hardware) return null;
+  const alternatives = (
+    <div className="grid grid-cols-2 gap-3">
+      <OptionCard
+        icon={<PencilLine size={16} />}
+        title={t('scan.manualTitle')}
+        body={t('scan.manualBody')}
+        action={
+          <Button size="sm" onClick={startManual}>
+            {t('scan.manual')}
+          </Button>
+        }
+      />
+      <OptionCard
+        icon={<FileInput size={16} />}
+        title={t('scan.importTitle')}
+        body={t('scan.importBody')}
+        action={
+          <Button size="sm" onClick={() => void doImport()} loading={busy === 'import'}>
+            {t('scan.import')}
+          </Button>
+        }
+      />
+    </div>
+  );
 
-  const rows: { label: string; value: string; sub?: string }[] = [
-    { label: 'CPU', value: hardware.cpu.name, sub: hardware.cpu.generation ?? '' },
-    ...(hardware.motherboard.chipset
-      ? [{ label: 'Chipset', value: hardware.motherboard.chipset }]
-      : []),
-    ...hardware.gpu.map((g) => ({
-      label: g.isIgpu ? 'iGPU' : 'dGPU',
-      value: g.name,
-      sub: g.vendor,
-    })),
-    ...(hardware.audio.length > 0
-      ? [{ label: 'Audio', value: hardware.audio[0].codec ?? hardware.audio[0].name }]
-      : []),
-    ...hardware.network.map((n) => ({
-      label: n.deviceType === 'ethernet' ? 'LAN' : 'Wi-Fi',
-      value: n.chipset ?? n.name,
-    })),
-    ...(hardware.input.length > 0
-      ? [{
-          label: 'Input',
-          value: hardware.input.map((device) => device.name).join(', '),
-          sub: hardware.input.map((device) => device.deviceType.toUpperCase()).join(', '),
-        }]
-      : []),
-    { label: 'RAM', value: `${Math.round(hardware.memory.totalMb / 1024)} GB`, sub: `${hardware.memory.slots.length} slots` },
-    ...(hardware.storage.length > 0
-      ? [{
-          label: 'Disk',
-          value: hardware.storage[0].name,
-          sub: hardware.storage[0].mediaType ?? hardware.storage[0].interfaceType,
-        }]
-      : []),
-    { label: 'Form', value: hardware.isLaptop ? 'Laptop' : 'Desktop' },
-  ];
+  if (!profile) {
+    return (
+      <>
+        <PageHeader title={t('scan.title')} subtitle={t('scan.subtitle')} />
+        <div className="space-y-4">
+          {scanError ? (
+            <ErrorPanel
+              error={scanError}
+              title={t('scan.failed')}
+              actions={
+                <Button size="sm" variant="primary" icon={<RefreshCw />} onClick={() => void scan()}>
+                  {t('common.retry')}
+                </Button>
+              }
+            />
+          ) : (
+            <Section>
+              <div className="flex items-center gap-3">
+                <ScanSearch size={18} className="text-fg-3" aria-hidden />
+                <p className="flex-1 text-base text-fg-2">{t('scan.idle')}</p>
+                <Button variant="primary" onClick={() => void scan()}>
+                  {t('scan.start')}
+                </Button>
+              </div>
+            </Section>
+          )}
+          {ioError && <ErrorPanel error={ioError} title={t('scan.importFailed')} compact />}
+          <p className="pt-2 text-sm font-medium text-fg-2">{t('scan.otherOptions')}</p>
+          {alternatives}
+          <div className="flex items-center justify-between rounded-md border border-dashed border-line px-3.5 py-2.5">
+            <p className="text-sm text-fg-3">{t('scan.demoBody')}</p>
+            <Button size="sm" variant="ghost" icon={<FlaskConical />} onClick={startDemo}>
+              {t('scan.demo')}
+            </Button>
+          </div>
+        </div>
+      </>
+    );
+  }
+
+  const warnings = detected?.warnings ?? [];
 
   return (
-    <motion.div
-      initial={{ opacity: 0, y: 12 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.35 }}
-    >
-      {isDemo && (
-        <motion.div
-          className="flex items-center gap-2 rounded-[5px] bg-[#1a1a1d] border border-[#2e2e32] px-3 py-2 mb-5"
-          initial={{ opacity: 0, height: 0 }}
-          animate={{ opacity: 1, height: 'auto' }}
-          transition={{ duration: 0.3 }}
-        >
-          <AlertCircle size={13} className="text-[#f59e0b] shrink-0" />
-          <p className="text-[11px] text-[#6e6e76]">
-            Demo mode — hardware scan requires Windows or Linux.
-          </p>
-        </motion.div>
-      )}
-
-      <h2 className="text-[17px] font-semibold text-[#f0f0f2] mb-1">Hardware</h2>
-      <p className="text-[12px] text-[#6e6e76] mb-5">
-        {hardware.motherboard.manufacturer} {hardware.motherboard.product}
-      </p>
-
-      <div className="rounded-[6px] border border-[#1a1a1d] bg-[#0d0d0f] divide-y divide-[#1a1a1d] mb-6 overflow-hidden">
-        {rows.map((row, i) => (
-          <motion.div
-            key={i}
-            className="flex items-center px-3.5 py-2.5"
-            initial={{ opacity: 0, x: -10 }}
-            animate={{ opacity: 1, x: 0 }}
-            transition={{ delay: 0.05 * i, duration: 0.25 }}
-          >
-            <span className="text-[11px] text-[#3e3e44] w-12 shrink-0 uppercase tracking-wide">{row.label}</span>
-            <span className="text-[12px] text-[#dadadf] flex-1">{row.value}</span>
-            {row.sub && (
-              <span className="text-[11px] text-[#3e3e44]">{row.sub}</span>
-            )}
-          </motion.div>
-        ))}
+    <>
+      <PageHeader title={t('scan.title')} subtitle={t('scan.doneSubtitle')} />
+      <div className="space-y-4">
+        {isDemo && <Banner tone="warning" title={t('scan.demoActive')}>{t('scan.demoActiveBody')}</Banner>}
+        {/* A failed re-scan keeps the previous profile; say so instead of failing silently. */}
+        {scanError && <ErrorPanel error={scanError} title={t('scan.rescanFailed')} compact />}
+        <Section>
+          <div className="flex items-center gap-3">
+            <Cpu size={18} className="text-fg-3" aria-hidden />
+            <div className="min-w-0 flex-1">
+              <p className="truncate text-base font-medium text-fg">{profileHeadline(profile) || t('hardware.unnamedCpu')}</p>
+              <p className="text-sm text-fg-3">
+                {t(`source.${profileSource(profile.source)}`)}
+                {profile.source === 'scan' && ` · ${t('scan.confidence', { value: formatPercent(profile.scanConfidence) ?? '?' })}`}
+              </p>
+            </div>
+            <Badge tone="success" dot>
+              {t('scan.ready')}
+            </Badge>
+          </div>
+        </Section>
+        {warnings.length > 0 && (
+          <Banner tone="warning" title={t('scan.warnings')}>
+            <ul className="list-disc space-y-0.5 pl-4">
+              {warnings.map((w) => (
+                <li key={w}>{w}</li>
+              ))}
+            </ul>
+          </Banner>
+        )}
       </div>
-
-      <motion.div
-        className="flex justify-end"
-        initial={{ opacity: 0 }}
-        animate={{ opacity: 1 }}
-        transition={{ delay: 0.4 }}
+      <StepActions
+        left={
+          <Button icon={<RefreshCw />} onClick={() => void scan()}>
+            {t('scan.rescan')}
+          </Button>
+        }
       >
-        <motion.button
-          onClick={handleContinue}
-          className="h-8 px-3.5 rounded-[6px] bg-[#f0f0f2] text-[#09090b] text-[13px] font-medium hover:bg-[#dadadf] transition-colors duration-100"
-          whileHover={{ scale: 1.02 }}
-          whileTap={{ scale: 0.98 }}
-        >
-          Continue
-        </motion.button>
-      </motion.div>
-    </motion.div>
+        <Button variant="primary" onClick={() => complete('scan')}>
+          {t('common.continue')}
+        </Button>
+      </StepActions>
+    </>
+  );
+}
+
+function OptionCard({ icon, title, body, action }: { icon: ReactNode; title: string; body: string; action: ReactNode }) {
+  return (
+    <div className="flex flex-col rounded-lg border border-line bg-panel px-4 py-3.5">
+      <span className="text-fg-3" aria-hidden>
+        {icon}
+      </span>
+      <p className="mt-2 text-base font-medium text-fg">{title}</p>
+      <p className="mt-0.5 flex-1 text-sm text-fg-3">{body}</p>
+      <div className="mt-3">{action}</div>
+    </div>
   );
 }

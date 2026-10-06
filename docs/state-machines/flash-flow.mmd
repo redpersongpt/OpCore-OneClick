@@ -1,0 +1,39 @@
+stateDiagram-v2
+    %% USB write (commands/disk.rs, platform::flash, safety/flash_auth.rs).
+    %% Phases match FlashProgress.phase emitted as `flash:progress`.
+    [*] --> listing
+
+    listing --> selected : user picks a disk
+    listing --> listing : system disk (blocked_reason set, not selectable)
+
+    selected --> confirming : flash_prepare_confirmation
+    confirming --> selected : token expired (5 min) / user cancels
+
+    confirming --> prepare : flash_usb(token)
+
+    prepare --> failed : token invalid, used or expired
+    prepare --> failed : disk identity changed / now a system disk
+    prepare --> failed : no elevation
+    prepare --> partition : checks passed
+
+    partition --> format
+    format --> copy_efi
+    copy_efi --> copy_recovery : recovery image selected
+    copy_efi --> verify : no recovery image
+    copy_recovery --> verify
+    verify --> complete : files match the source
+    verify --> failed : mismatch
+
+    partition --> failed : tool error / cancel
+    format --> failed : tool error / cancel
+    copy_efi --> failed : I/O error / cancel
+    copy_recovery --> failed : I/O error / cancel
+
+    complete --> [*]
+    failed --> listing : retry (needs a new token)
+
+    note right of confirming
+        Token = HMAC-SHA256 over disk identity,
+        EFI hash and recovery choice, bound to
+        the app session, single use.
+    end note

@@ -1,463 +1,249 @@
 import { useCallback, useEffect, useState } from 'react';
-import { getVersion } from '@tauri-apps/api/app';
-import { open as openUrl } from '@tauri-apps/plugin-shell';
 import { save } from '@tauri-apps/plugin-dialog';
-import {
-  ExternalLink, FileDown, Loader2, RefreshCw, Settings2, Trash2,
-  Bug, Download, CheckCircle, AlertCircle, ArrowUpCircle,
-} from 'lucide-react';
-import { Modal } from '../components/ui/Modal';
-import { Button } from '../components/ui/Button';
+import { Bug, Download, ExternalLink, FileDown, LifeBuoy, RefreshCw, Trash2 } from 'lucide-react';
+import { api } from '../bridge/api';
+import { toAppError, type AppError } from '../bridge/errors';
+import { ErrorPanel } from '../components/feedback/ErrorPanel';
 import { Badge } from '../components/ui/Badge';
-import { api } from '../bridge/invoke';
-import { parseError } from '../lib/parseError';
+import { Banner } from '../components/ui/Banner';
+import { Button } from '../components/ui/Button';
+import { Field, Select } from '../components/ui/Field';
+import { Modal } from '../components/ui/Modal';
+import { KeyValue, Section } from '../components/ui/Section';
+import { LANGUAGES, useI18n, type Lang } from '../i18n';
+import { collectDiagnostics } from '../lib/diagnostics';
+import { openExternal, RELEASES_URL, REPO_URL } from '../lib/external';
+import { buildIssueUrl } from '../lib/issue';
+import { useApp } from '../stores/app';
+import { useBuild } from '../stores/build';
+import { useCompat } from '../stores/compat';
+import { useDeploy } from '../stores/deploy';
+import { afterCacheCleared } from '../stores/flow';
+import { useHardware } from '../stores/hardware';
+import { useWizard } from '../stores/wizard';
 
-interface SettingsProps {
-  open: boolean;
-  onClose: () => void;
-  onOpenTroubleshoot?: () => void;
-}
+type Busy = 'export' | 'cache' | 'recovery' | 'state' | 'report' | null;
 
-const GITHUB_URL = 'https://github.com/redpersongpt/OpCore-OneClick';
-const GITHUB_API_LATEST = 'https://api.github.com/repos/redpersongpt/OpCore-OneClick/releases/latest';
+export default function Settings() {
+  const { t, lang, setLang } = useI18n();
+  const open = useApp((s) => s.settingsOpen);
+  const setOpen = useApp((s) => s.openSettings);
+  const openTroubleshoot = useApp((s) => s.openTroubleshoot);
+  const info = useApp((s) => s.info);
+  const update = useApp((s) => s.update);
+  const updateChecking = useApp((s) => s.updateChecking);
+  const updateError = useApp((s) => s.updateError);
+  const checkUpdates = useApp((s) => s.checkUpdates);
+  const locked = useWizard((s) => s.locks.length > 0);
 
-interface UpdateInfo {
-  available: boolean;
-  latestVersion: string;
-  currentVersion: string;
-  releaseUrl: string;
-  releaseNotes: string;
-  publishedAt: string;
-}
-
-export default function Settings({ open, onClose, onOpenTroubleshoot }: SettingsProps) {
-  const [appVersion, setAppVersion] = useState('5.0.0');
   const [sessionId, setSessionId] = useState<string | null>(null);
-  const [logTail, setLogTail] = useState('');
-  const [loadingLog, setLoadingLog] = useState(false);
-  const [exporting, setExporting] = useState(false);
-  const [clearingCache, setClearingCache] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [log, setLog] = useState('');
+  const [logLoading, setLogLoading] = useState(false);
+  const [busy, setBusy] = useState<Busy>(null);
   const [status, setStatus] = useState<string | null>(null);
+  const [error, setError] = useState<AppError | null>(null);
 
-  // Update checker
-  const [updateInfo, setUpdateInfo] = useState<UpdateInfo | null>(null);
-  const [checkingUpdate, setCheckingUpdate] = useState(false);
-  const [updateError, setUpdateError] = useState<string | null>(null);
-
-  const loadDiagnostics = useCallback(async () => {
-    setLoadingLog(true);
-    setError(null);
-
+  const loadLog = useCallback(async () => {
+    setLogLoading(true);
     try {
-      const [version, nextSessionId, tail] = await Promise.all([
-        getVersion(),
-        api.logGetSessionId(),
-        api.logGetTail(200),
-      ]);
-      setAppVersion(version);
-      setSessionId(nextSessionId);
-      setLogTail(tail);
+      const [sid, tail] = await Promise.all([api.logGetSessionId(), api.logGetTail(200)]);
+      setSessionId(sid);
+      setLog(tail);
     } catch (err) {
-      setError(parseError(err));
+      setLog('');
+      setError(toAppError(err));
     } finally {
-      setLoadingLog(false);
-    }
-  }, []);
-
-  const checkForUpdates = useCallback(async () => {
-    setCheckingUpdate(true);
-    setUpdateError(null);
-
-    try {
-      const currentVersion = await getVersion();
-      const response = await fetch(GITHUB_API_LATEST);
-
-      if (!response.ok) {
-        throw new Error(`GitHub API returned ${response.status}`);
-      }
-
-      const release = await response.json();
-      const latestTag: string = release.tag_name?.replace(/^v/, '') ?? '0.0.0';
-
-      const isNewer = compareVersions(latestTag, currentVersion) > 0;
-
-      setUpdateInfo({
-        available: isNewer,
-        latestVersion: latestTag,
-        currentVersion,
-        releaseUrl: release.html_url ?? `${GITHUB_URL}/releases/latest`,
-        releaseNotes: release.body?.slice(0, 500) ?? '',
-        publishedAt: release.published_at ?? '',
-      });
-    } catch (err) {
-      setUpdateError(parseError(err));
-    } finally {
-      setCheckingUpdate(false);
+      setLogLoading(false);
     }
   }, []);
 
   useEffect(() => {
     if (!open) return;
-    void loadDiagnostics();
-    void checkForUpdates();
-  }, [open, loadDiagnostics, checkForUpdates]);
-
-  const handleExportDiagnostics = async () => {
-    setExporting(true);
-    setError(null);
     setStatus(null);
+    setError(null);
+    void loadLog();
+  }, [open, loadLog]);
 
+  const run = async (kind: Exclude<Busy, null>, action: () => Promise<string | null>) => {
+    setBusy(kind);
+    setStatus(null);
+    setError(null);
     try {
-      const targetPath = await save({
-        defaultPath: `opcore-support-${new Date().toISOString().slice(0, 10)}.log`,
+      const message = await action();
+      if (message) setStatus(message);
+    } catch (err) {
+      setError(toAppError(err));
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  const exportLog = () =>
+    run('export', async () => {
+      const path = await save({
+        defaultPath: `opcore-oneclick-support-${new Date().toISOString().slice(0, 10)}.log`,
+        filters: [{ name: t('settings.logFile'), extensions: ['log', 'txt'] }],
       });
+      if (!path) return null;
+      await api.saveSupportLog(path);
+      return t('settings.logSaved', { path });
+    });
 
-      if (!targetPath) return;
-
-      await api.saveSupportLog(targetPath);
-      setStatus(`Saved diagnostics to ${targetPath}`);
-    } catch (err) {
-      setError(parseError(err));
-    } finally {
-      setExporting(false);
-    }
-  };
-
-  const handleClearCache = async () => {
-    setClearingCache(true);
-    setError(null);
-    setStatus(null);
-
-    try {
+  const clearCache = () =>
+    run('cache', async () => {
       await api.clearAppCache();
-      setStatus('Cleared generated builds, cached recovery assets, and local download cache.');
-    } catch (err) {
-      setError(parseError(err));
-    } finally {
-      setClearingCache(false);
-    }
-  };
+      afterCacheCleared();
+      return t('settings.cacheCleared');
+    });
 
-  const handleSendReport = async () => {
-    let diagData = '';
-    try {
-      const [version, sid, tail] = await Promise.all([
-        getVersion(),
-        api.logGetSessionId(),
-        api.logGetTail(200),
-      ]);
-      // Filter out noisy TRACE lines, keep only INFO/WARN/ERROR
-      const filteredLog = tail
-        .split('\n')
-        .filter((line) => /\[(INFO|WARN|ERROR)\]/.test(line))
-        .slice(-20)
-        .join('\n');
+  const clearRecovery = () =>
+    run('recovery', async () => {
+      await api.clearRecoveryCache();
+      useDeploy.getState().resetRecovery();
+      return t('settings.recoveryCleared');
+    });
 
-      diagData = [
-        `OpCore-OneClick v${version}`,
-        `Session: ${sid}`,
-        `Platform: ${navigator.platform}`,
-        `Date: ${new Date().toISOString()}`,
-        '',
-        filteredLog || '(no significant log entries)',
-      ].join('\n');
-    } catch {
-      diagData = 'Failed to collect diagnostics';
-    }
+  const forgetSession = () =>
+    run('state', async () => {
+      await api.clearState();
+      useApp.getState().dismissPersisted();
+      return t('settings.sessionCleared');
+    });
 
-    // Keep URL under GitHub's ~8000 char limit
-    if (diagData.length > 1500) {
-      diagData = diagData.slice(0, 1500) + '\n... (truncated)';
-    }
-
-    const title = encodeURIComponent('Bug Report: [describe your issue]');
-    const body = encodeURIComponent(
-      [
-        '## Description',
-        '<!-- Describe the issue in detail -->',
-        '',
-        '## Steps to Reproduce',
-        '1. ',
-        '2. ',
-        '3. ',
-        '',
-        '## Expected Behavior',
-        '',
-        '## Diagnostics (auto-generated)',
-        '```',
-        diagData,
-        '```',
-      ].join('\n'),
-    );
-
-    const url = `${GITHUB_URL}/issues/new?title=${title}&body=${body}&labels=bug`;
-    try {
-      await openUrl(url);
-    } catch {
-      window.open(url, '_blank');
-    }
-  };
-
-  const handleOpenRelease = async () => {
-    if (!updateInfo) return;
-    try {
-      await openUrl(updateInfo.releaseUrl);
-    } catch {
-      window.open(updateInfo.releaseUrl, '_blank');
-    }
-  };
+  const report = () =>
+    run('report', async () => {
+      const diagnostics = await collectDiagnostics({
+        info,
+        profile: useHardware.getState().profile,
+        report: useCompat.getState().report,
+        result: useBuild.getState().result,
+      });
+      await openExternal(
+        buildIssueUrl({ title: t('settings.issueTitle'), description: t('settings.issueDescription'), diagnostics }),
+      );
+      return null;
+    });
 
   return (
     <Modal
       open={open}
-      onClose={onClose}
-      title="Settings"
-      width="max-w-3xl"
-      footer={
-        <Button variant="secondary" onClick={onClose}>
-          Close
-        </Button>
-      }
+      onClose={() => setOpen(false)}
+      title={t('settings.title')}
+      width="max-w-2xl"
+      footer={<Button onClick={() => setOpen(false)}>{t('common.close')}</Button>}
     >
-      <div className="space-y-5">
-        {/* Application info */}
-        <section className="rounded-lg border border-[--border-subtle] bg-[--surface-1] px-4 py-3">
-          <div className="flex items-start justify-between gap-4">
-            <div>
-              <p className="text-[0.875rem] font-medium text-[--text-primary]">Application</p>
-              <p className="text-[0.75rem] text-[--text-tertiary] mt-1">
-                Inspect diagnostics, export support logs, and clear cached build artifacts.
-              </p>
-            </div>
-            <Badge variant="info" size="sm" dot>
-              v{appVersion}
-            </Badge>
-          </div>
-          {sessionId && (
-            <p className="mt-3 text-[0.6875rem] font-mono text-[--text-tertiary]">
-              Session {sessionId}
-            </p>
-          )}
-        </section>
+      <div className="space-y-4">
+        <Section title={t('settings.general')}>
+          <Field label={t('settings.language')} className="max-w-xs">
+            {(id) => (
+              <Select<Lang>
+                id={id}
+                value={lang}
+                options={LANGUAGES.map((l) => ({ value: l.id, label: l.label }))}
+                onChange={setLang}
+              />
+            )}
+          </Field>
+        </Section>
 
-        {/* Update checker */}
-        <section className="rounded-lg border border-[--border-subtle] bg-[--surface-1] px-4 py-3">
-          <div className="flex items-start justify-between gap-4">
-            <div className="flex-1">
-              <p className="text-[0.8125rem] font-medium text-[--text-primary] flex items-center gap-2">
-                <ArrowUpCircle size={14} className="text-[--text-tertiary]" />
-                Updates
-              </p>
-              {checkingUpdate && (
-                <p className="text-[0.6875rem] text-[--text-tertiary] mt-1.5 flex items-center gap-1.5">
-                  <Loader2 size={12} className="animate-spin" />
-                  Checking for updates...
-                </p>
-              )}
-              {updateError && (
-                <p className="text-[0.6875rem] text-[--color-red-5] mt-1.5">
-                  Could not check for updates: {updateError}
-                </p>
-              )}
-              {updateInfo && !checkingUpdate && (
-                updateInfo.available ? (
-                  <div className="mt-2">
-                    <div className="flex items-center gap-2 mb-1.5">
-                      <Badge variant="warning" size="sm" dot>
-                        v{updateInfo.latestVersion} available
-                      </Badge>
-                      <span className="text-[0.625rem] text-[--text-tertiary]">
-                        (you have v{updateInfo.currentVersion})
-                      </span>
-                    </div>
-                    {updateInfo.releaseNotes && (
-                      <p className="text-[0.6875rem] text-[--text-tertiary] leading-snug line-clamp-3 mb-2">
-                        {updateInfo.releaseNotes.split('\n').slice(0, 3).join(' ')}
-                      </p>
-                    )}
-                    <Button
-                      variant="primary"
-                      size="sm"
-                      onClick={() => void handleOpenRelease()}
-                      leadingIcon={<Download size={13} />}
-                    >
-                      Download Update
-                    </Button>
-                  </div>
-                ) : (
-                  <p className="text-[0.6875rem] text-[#22c55e] mt-1.5 flex items-center gap-1.5">
-                    <CheckCircle size={12} />
-                    You're on the latest version (v{updateInfo.currentVersion})
-                  </p>
-                )
-              )}
-            </div>
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={() => void checkForUpdates()}
-              loading={checkingUpdate}
-              leadingIcon={!checkingUpdate ? <RefreshCw size={13} /> : undefined}
-            >
-              Check
-            </Button>
-          </div>
-        </section>
-
-        {/* Diagnostics + Cache row */}
-        <section className="grid grid-cols-2 gap-3">
-          <div className="rounded-lg border border-[--border-subtle] bg-[--surface-1] px-4 py-3">
-            <p className="text-[0.8125rem] font-medium text-[--text-primary]">Diagnostics</p>
-            <p className="text-[0.6875rem] text-[--text-tertiary] mt-1 leading-snug">
-              Export the current session logs and environment details for debugging.
-            </p>
-            <div className="mt-4 flex gap-2">
-              <Button
-                variant="secondary"
-                onClick={handleExportDiagnostics}
-                loading={exporting}
-                leadingIcon={!exporting ? <FileDown size={14} /> : undefined}
-              >
-                Export Diagnostics
-              </Button>
-            </div>
-          </div>
-
-          <div className="rounded-lg border border-[--border-subtle] bg-[--surface-1] px-4 py-3">
-            <p className="text-[0.8125rem] font-medium text-[--text-primary]">Cache</p>
-            <p className="text-[0.6875rem] text-[--text-tertiary] mt-1 leading-snug">
-              Remove generated EFIs, cached recovery downloads, and local resource downloads.
-            </p>
-            <div className="mt-4 flex gap-2">
-              <Button
-                variant="secondary"
-                onClick={handleClearCache}
-                loading={clearingCache}
-                leadingIcon={!clearingCache ? <Trash2 size={14} /> : undefined}
-              >
-                Clear Cache
-              </Button>
-            </div>
-          </div>
-        </section>
-
-        {/* Send Report + Troubleshoot */}
-        <section className="grid grid-cols-2 gap-3">
-          <div className="rounded-lg border border-[--border-subtle] bg-[--surface-1] px-4 py-3">
-            <p className="text-[0.8125rem] font-medium text-[--text-primary] flex items-center gap-2">
-              <Bug size={14} className="text-[--color-red-5]" />
-              Report Issue
-            </p>
-            <p className="text-[0.6875rem] text-[--text-tertiary] mt-1 leading-snug">
-              Open a GitHub issue with your session logs automatically attached.
-            </p>
-            <div className="mt-4">
-              <Button
-                variant="secondary"
-                onClick={() => void handleSendReport()}
-                leadingIcon={<AlertCircle size={14} />}
-              >
-                Send Bug Report
-              </Button>
-            </div>
-          </div>
-
-          <div className="rounded-lg border border-[--border-subtle] bg-[--surface-1] px-4 py-3">
-            <p className="text-[0.8125rem] font-medium text-[--text-primary] flex items-center gap-2">
-              <Bug size={14} className="text-[--text-tertiary]" />
-              Troubleshoot
-            </p>
-            <p className="text-[0.6875rem] text-[--text-tertiary] mt-1 leading-snug">
-              Common Hackintosh issues, symptoms, and step-by-step fixes.
-            </p>
-            <div className="mt-4">
-              <Button
-                variant="secondary"
-                onClick={() => {
-                  onClose();
-                  onOpenTroubleshoot?.();
-                }}
-                leadingIcon={<ExternalLink size={14} />}
-              >
-                Open Troubleshoot
-              </Button>
-            </div>
-          </div>
-        </section>
-
-        {/* Log Viewer */}
-        <section className="rounded-lg border border-[--border-subtle] bg-[--surface-1] overflow-hidden">
-          <div className="flex items-center justify-between border-b border-[--border-subtle] px-4 py-3">
-            <div>
-              <p className="text-[0.8125rem] font-medium text-[--text-primary]">Log Viewer</p>
-              <p className="text-[0.6875rem] text-[--text-tertiary] mt-0.5">
-                Last 200 lines from the active log file.
-              </p>
-            </div>
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={() => void loadDiagnostics()}
-              leadingIcon={loadingLog ? <Loader2 size={14} className="animate-spin" /> : <RefreshCw size={14} />}
-            >
-              Refresh
-            </Button>
-          </div>
-          <div className="max-h-[320px] overflow-auto px-4 py-3">
-            <pre className="whitespace-pre-wrap break-words font-mono text-[0.6875rem] leading-5 text-[--text-secondary]">
-              {loadingLog ? 'Loading logs...' : logTail || 'No log output available.'}
-            </pre>
-          </div>
-        </section>
-
-        {/* About */}
-        <section className="rounded-lg border border-[--border-subtle] bg-[--surface-1] px-4 py-3">
-          <div className="flex items-start justify-between gap-4">
-            <div>
-              <p className="text-[0.8125rem] font-medium text-[--text-primary]">About</p>
-              <p className="text-[0.6875rem] text-[--text-tertiary] mt-1 leading-snug">
-                OpCore-OneClick is a Tauri-based Hackintosh EFI generator built around
-                OpenCore.
-              </p>
-            </div>
-            <Settings2 size={16} className="text-[--text-tertiary] shrink-0" />
-          </div>
-          <a
-            href={GITHUB_URL}
-            target="_blank"
-            rel="noreferrer"
-            className="mt-4 inline-flex items-center gap-2 text-[0.75rem] text-[--color-blue-6] hover:text-[--color-blue-5]"
+        <Section title={t('settings.about')}>
+          <KeyValue label={t('settings.version')}>{info ? `v${info.version}` : '—'}</KeyValue>
+          <KeyValue label="OpenCore">{info?.opencoreVersion ?? '—'}</KeyValue>
+          <KeyValue label={t('settings.host')}>{info ? `${info.hostOs} / ${info.arch}` : '—'}</KeyValue>
+          <KeyValue label={t('settings.session')} mono>
+            {sessionId ?? '—'}
+          </KeyValue>
+          <button
+            type="button"
+            onClick={() => void openExternal(REPO_URL)}
+            className="mt-2 inline-flex items-center gap-1 text-sm text-accent-fg hover:underline"
           >
-            Project on GitHub
-            <ExternalLink size={13} />
-          </a>
-        </section>
+            {t('settings.repo')} <ExternalLink size={11} aria-hidden />
+          </button>
+        </Section>
 
-        {status && (
-          <div className="rounded-lg border border-[--color-green-3] bg-[--color-green-1] px-4 py-3 text-[0.75rem] text-[--color-green-7]">
-            {status}
-          </div>
-        )}
+        <Section
+          title={t('settings.updates')}
+          actions={
+            <Button size="sm" variant="ghost" icon={<RefreshCw />} onClick={() => void checkUpdates()} loading={updateChecking}>
+              {t('settings.checkNow')}
+            </Button>
+          }
+        >
+          {updateError ? (
+            <ErrorPanel error={updateError} title={t('settings.updateFailed')} compact />
+          ) : update ? (
+            update.updateAvailable ? (
+              <div className="space-y-2">
+                <div className="flex items-center gap-2">
+                  <Badge tone="info" dot>
+                    {t('settings.updateAvailable', { version: update.latest ?? '?' })}
+                  </Badge>
+                  <span className="text-sm text-fg-3">{t('settings.current', { version: update.current })}</span>
+                </div>
+                {update.notes && <p className="line-clamp-4 text-sm whitespace-pre-line text-fg-2">{update.notes}</p>}
+                <Button size="sm" variant="primary" icon={<Download />} onClick={() => void openExternal(update.url ?? RELEASES_URL)}>
+                  {t('settings.openRelease')}
+                </Button>
+              </div>
+            ) : (
+              <p className="text-sm text-fg-2">{t('settings.upToDate', { version: update.current })}</p>
+            )
+          ) : (
+            <p className="text-sm text-fg-3">{updateChecking ? t('settings.checking') : t('settings.notChecked')}</p>
+          )}
+        </Section>
 
-        {error && (
-          <div className="rounded-lg border border-[--color-red-3] bg-[--color-red-1] px-4 py-3 text-[0.75rem] text-[--color-red-7]">
-            {error}
+        <Section title={t('settings.maintenance')}>
+          <div className="grid grid-cols-2 gap-2">
+            <Button icon={<FileDown />} onClick={() => void exportLog()} loading={busy === 'export'}>
+              {t('settings.exportLog')}
+            </Button>
+            <Button icon={<Bug />} onClick={() => void report()} loading={busy === 'report'}>
+              {t('settings.report')}
+            </Button>
+            <Button icon={<Trash2 />} onClick={() => void clearCache()} loading={busy === 'cache'} disabled={locked}>
+              {t('settings.clearCache')}
+            </Button>
+            <Button icon={<Trash2 />} onClick={() => void clearRecovery()} loading={busy === 'recovery'} disabled={locked}>
+              {t('settings.clearRecovery')}
+            </Button>
+            <Button icon={<Trash2 />} onClick={() => void forgetSession()} loading={busy === 'state'}>
+              {t('settings.forgetSession')}
+            </Button>
+            <Button
+              icon={<LifeBuoy />}
+              onClick={() => {
+                setOpen(false);
+                openTroubleshoot(true);
+              }}
+            >
+              {t('nav.troubleshoot')}
+            </Button>
           </div>
-        )}
+          {locked && <p className="mt-2 text-xs text-fg-3">{t('settings.lockedHint')}</p>}
+          {status && <Banner tone="success" className="mt-3">{status}</Banner>}
+          {error && (
+            <div className="mt-3">
+              <ErrorPanel error={error} compact />
+            </div>
+          )}
+        </Section>
+
+        <Section
+          title={t('settings.log')}
+          description={t('settings.logHint')}
+          actions={
+            <Button size="sm" variant="ghost" icon={<RefreshCw />} onClick={() => void loadLog()} loading={logLoading}>
+              {t('common.refresh')}
+            </Button>
+          }
+        >
+          <pre className="max-h-64 overflow-auto rounded-md border border-line bg-bg p-3 font-mono text-2xs leading-4 whitespace-pre-wrap break-words text-fg-2">
+            {logLoading ? t('common.loading') : log || t('settings.logEmpty')}
+          </pre>
+        </Section>
       </div>
     </Modal>
   );
-}
-
-/** Compare two semver strings. Returns >0 if a > b, <0 if a < b, 0 if equal. */
-function compareVersions(a: string, b: string): number {
-  const pa = a.split('.').map(Number);
-  const pb = b.split('.').map(Number);
-  for (let i = 0; i < Math.max(pa.length, pb.length); i++) {
-    const na = pa[i] ?? 0;
-    const nb = pb[i] ?? 0;
-    if (na !== nb) return na - nb;
-  }
-  return 0;
 }

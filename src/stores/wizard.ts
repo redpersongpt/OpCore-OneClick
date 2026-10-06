@@ -1,95 +1,102 @@
 import { create } from 'zustand';
 
-export type Step =
-  | 'welcome'
-  | 'scan'
-  | 'compatibility'
-  | 'prerequisites'
-  | 'bios'
-  | 'build'
-  | 'review'
-  | 'deploy'
-  | 'complete';
-
-const STEP_ORDER: Step[] = [
+export const STEPS = [
   'welcome',
   'scan',
+  'hardware',
   'compatibility',
-  'prerequisites',
   'bios',
   'build',
   'review',
   'deploy',
   'complete',
-];
+] as const;
 
-interface WizardStore {
-  step: Step;
-  history: Step[];
-  completedSteps: Set<Step>;
+export type Step = (typeof STEPS)[number];
 
-  goTo: (step: Step) => void;
-  goBack: () => void;
-  goNext: () => void;
-  markCompleted: (step: Step) => void;
-  reset: () => void;
+/** Long-running operations that lock navigation while they run. */
+export type LockReason = 'scan' | 'build' | 'flash' | 'recovery';
 
-  canGoBack: () => boolean;
-  canGoNext: () => boolean;
-  stepIndex: () => number;
-  totalSteps: () => number;
+export function stepIndex(step: Step): number {
+  return STEPS.indexOf(step);
 }
 
-export const useWizard = create<WizardStore>((set, get) => ({
+/** Index of the first step that is not completed (steps unlock in order). */
+export function firstIncompleteIndex(completed: readonly Step[]): number {
+  const idx = STEPS.findIndex((s) => !completed.includes(s));
+  return idx === -1 ? STEPS.length - 1 : idx;
+}
+
+interface WizardState {
+  step: Step;
+  /** Always a prefix of STEPS (invalidation removes everything after a point). */
+  completed: Step[];
+  locks: LockReason[];
+
+  canVisit: (step: Step) => boolean;
+  isLocked: () => boolean;
+  goTo: (step: Step) => boolean;
+  /** Mark `step` done and (by default) move to the next one. */
+  complete: (step: Step, advance?: boolean) => void;
+  /** Forget completion of `step` and everything after it. */
+  invalidateFrom: (step: Step) => void;
+  lock: (reason: LockReason) => void;
+  unlock: (reason: LockReason) => void;
+  restore: (step: Step, completed: Step[]) => void;
+  reset: () => void;
+}
+
+export const useWizard = create<WizardState>((set, get) => ({
   step: 'welcome',
-  history: [],
-  completedSteps: new Set(),
+  completed: [],
+  locks: [],
 
-  goTo: (step) =>
-    set((state) => ({
-      step,
-      history: [...state.history, state.step],
-    })),
+  canVisit: (step) => stepIndex(step) <= firstIncompleteIndex(get().completed),
 
-  goBack: () =>
-    set((state) => {
-      const prev = state.history.at(-1);
-      if (!prev) return state;
-      return {
-        step: prev,
-        history: state.history.slice(0, -1),
-      };
-    }),
+  isLocked: () => get().locks.length > 0,
 
-  goNext: () => {
-    const { step } = get();
-    const idx = STEP_ORDER.indexOf(step);
-    if (idx < STEP_ORDER.length - 1) {
-      get().goTo(STEP_ORDER[idx + 1]);
+  goTo: (step) => {
+    const state = get();
+    if (step === state.step) return true;
+    if (state.locks.length > 0 || !state.canVisit(step)) return false;
+    set({ step });
+    return true;
+  },
+
+  complete: (step, advance = true) => {
+    const state = get();
+    if (stepIndex(step) > firstIncompleteIndex(state.completed)) return;
+    const completed = STEPS.filter((s) => state.completed.includes(s) || s === step);
+    const next = STEPS[Math.min(stepIndex(step) + 1, STEPS.length - 1)];
+    set({ completed, step: advance ? next : state.step });
+  },
+
+  invalidateFrom: (step) => {
+    const state = get();
+    const cut = stepIndex(step);
+    const completed = state.completed.filter((s) => stepIndex(s) < cut);
+    const limit = firstIncompleteIndex(completed);
+    const current = stepIndex(state.step) > limit ? STEPS[limit] : state.step;
+    set({ completed, step: current });
+  },
+
+  lock: (reason) => {
+    const { locks } = get();
+    if (!locks.includes(reason)) set({ locks: [...locks, reason] });
+  },
+
+  unlock: (reason) => set({ locks: get().locks.filter((l) => l !== reason) }),
+
+  restore: (step, completed) => {
+    const ordered = STEPS.filter((s) => completed.includes(s));
+    const prefix: Step[] = [];
+    for (const s of ordered) {
+      if (stepIndex(s) !== prefix.length) break;
+      prefix.push(s);
     }
+    const limit = firstIncompleteIndex(prefix);
+    set({ completed: prefix, step: stepIndex(step) > limit ? STEPS[limit] : step });
   },
 
-  markCompleted: (step) =>
-    set((state) => {
-      const next = new Set(state.completedSteps);
-      next.add(step);
-      return { completedSteps: next };
-    }),
-
-  reset: () =>
-    set({
-      step: 'welcome',
-      history: [],
-      completedSteps: new Set(),
-    }),
-
-  canGoBack: () => get().history.length > 0,
-  canGoNext: () => {
-    const idx = STEP_ORDER.indexOf(get().step);
-    return idx < STEP_ORDER.length - 1;
-  },
-  stepIndex: () => STEP_ORDER.indexOf(get().step),
-  totalSteps: () => STEP_ORDER.length,
+  reset: () => set({ step: 'welcome', completed: [], locks: [] }),
 }));
-
-export { STEP_ORDER };

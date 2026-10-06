@@ -3,10 +3,10 @@ name = "opcore-oneclick"
 version = "5.0.0"
 description = "Hackintosh EFI generator — build OpenCore configurations from detected hardware"
 authors = ["redpersongpt"]
-license = "MIT"
+license = "Apache-2.0"
 repository = "https://github.com/redpersongpt/OpCore-OneClick"
 edition = "2021"
-rust-version = "1.77.2"
+rust-version = "1.88"
 
 [lib]
 name = "app_lib"

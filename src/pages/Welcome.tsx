@@ -1,93 +1,105 @@
+import { History, Monitor, ShieldCheck, Usb } from 'lucide-react';
 import { motion } from 'motion/react';
-import { useWizard } from '../stores/wizard';
-import { useHardware } from '../stores/hardware';
-import { useCompatibility } from '../stores/compatibility';
-import { useFirmware } from '../stores/firmware';
-import { useEfi } from '../stores/efi';
-import { useDisk } from '../stores/disk';
-import { useTasks } from '../stores/tasks';
 import Logo from '../components/Logo';
+import { Button } from '../components/ui/Button';
+import { Section } from '../components/ui/Section';
+import { useI18n } from '../i18n';
+import { formatDateTime } from '../lib/format';
+import { macosLabel } from '../lib/macos';
+import { toNum } from '../lib/num';
+import { useApp } from '../stores/app';
+import { resume, startOver } from '../stores/flow';
+import { useHardware } from '../stores/hardware';
+import { firstIncompleteIndex, STEPS, useWizard } from '../stores/wizard';
 
 export default function Welcome() {
-  const { goNext, markCompleted } = useWizard();
-  const clearHardware = useHardware((s) => s.clear);
-  const clearCompatibility = useCompatibility((s) => s.clear);
-  const clearFirmware = useFirmware((s) => s.clear);
-  const clearEfi = useEfi((s) => s.clear);
-  const clearDisk = useDisk((s) => s.clear);
-  const clearTasks = useTasks((s) => s.clear);
+  const { t, locale } = useI18n();
+  const persisted = useApp((s) => s.persisted);
+  const dismissPersisted = useApp((s) => s.dismissPersisted);
+  const info = useApp((s) => s.info);
+  const hasSession = useHardware((s) => s.profile !== null);
+  const locked = useWizard((s) => s.locks.length > 0);
+  const complete = useWizard((s) => s.complete);
+  const goTo = useWizard((s) => s.goTo);
+  const completed = useWizard((s) => s.completed);
 
-  const handleStart = () => {
-    clearTasks();
-    clearDisk();
-    clearEfi();
-    clearFirmware();
-    clearCompatibility();
-    clearHardware();
-    markCompleted('welcome');
-    goNext();
+  // Back to where the user left off (the first step that is not done yet).
+  const continueSession = () => {
+    if (!completed.includes('welcome')) complete('welcome');
+    else goTo(STEPS[firstIncompleteIndex(completed)]);
   };
 
+  const savedAt = formatDateTime(toNum(persisted?.timestamp), locale);
+
   return (
-    <motion.div
-      className="flex flex-col items-center pt-16 pb-12"
-      initial={{ opacity: 0 }}
-      animate={{ opacity: 1 }}
-      transition={{ duration: 0.5 }}
-    >
-      {/* Glow behind logo */}
-      <motion.div
-        className="relative mb-8"
-        initial={{ opacity: 0, scale: 0.8 }}
-        animate={{ opacity: 1, scale: 1 }}
-        transition={{ duration: 0.7, ease: [0.22, 1, 0.36, 1] }}
-      >
-        <div className="absolute -inset-8 rounded-full bg-[#3b82f6]/[0.06] blur-2xl" />
-        <Logo size={72} className="relative text-[#e0e0e6]" animate />
+    <div className="flex flex-col items-center pt-8 pb-6 text-center">
+      <motion.div initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }} transition={{ duration: 0.4 }}>
+        <Logo size={72} className="text-fg" />
       </motion.div>
+      <h1 className="mt-6 text-2xl font-semibold tracking-tight text-fg">OpCore-OneClick</h1>
+      <p className="mt-2 max-w-md text-base leading-relaxed text-fg-3">{t('welcome.tagline')}</p>
 
-      <motion.h1
-        className="text-[20px] font-semibold text-[#f0f0f2] tracking-tight mb-1.5"
-        initial={{ opacity: 0, y: 10 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ delay: 0.4, duration: 0.5 }}
-      >
-        OpCore-OneClick
-      </motion.h1>
+      {persisted?.profile && (
+        <Section className="mt-8 w-full max-w-md text-left">
+          <div className="flex gap-3">
+            <History size={16} className="mt-0.5 shrink-0 text-accent-fg" aria-hidden />
+            <div className="min-w-0 flex-1">
+              <p className="text-base font-medium text-fg">{t('welcome.resumeTitle')}</p>
+              <p className="mt-0.5 truncate text-sm text-fg-2">
+                {persisted.profile.cpu.name || t('hardware.unnamedCpu')}
+                {persisted.target ? ` · ${macosLabel(persisted.target)}` : ''}
+              </p>
+              {savedAt && <p className="text-xs text-fg-3">{t('welcome.savedAt', { time: savedAt })}</p>}
+              <div className="mt-3 flex gap-2">
+                <Button size="sm" variant="primary" onClick={() => resume(persisted)} disabled={locked}>
+                  {t('welcome.resume')}
+                </Button>
+                <Button size="sm" variant="ghost" onClick={dismissPersisted}>
+                  {t('welcome.discard')}
+                </Button>
+              </div>
+            </div>
+          </div>
+        </Section>
+      )}
 
-      <motion.p
-        className="text-[12px] text-[#5a5a62] mb-10 text-center max-w-[280px] leading-relaxed"
-        initial={{ opacity: 0, y: 10 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ delay: 0.55, duration: 0.5 }}
-      >
-        Build OpenCore EFI configurations from your hardware. Detect, configure, deploy.
-      </motion.p>
+      <div className="mt-8 flex gap-2">
+        {hasSession ? (
+          <>
+            <Button variant="primary" onClick={continueSession}>
+              {t('welcome.continueSession')}
+            </Button>
+            <Button onClick={() => void startOver()} disabled={locked}>
+              {t('welcome.startOver')}
+            </Button>
+          </>
+        ) : (
+          <Button variant="primary" onClick={() => void startOver()} disabled={locked}>
+            {t('welcome.start')}
+          </Button>
+        )}
+      </div>
 
-      <motion.button
-        onClick={handleStart}
-        className="h-9 px-6 rounded-[7px] bg-[#f0f0f2] text-[#09090b] text-[13px] font-semibold hover:bg-white active:bg-[#c0c0c6] transition-all duration-150 shadow-[0_0_20px_rgba(59,130,246,0.15)]"
-        initial={{ opacity: 0, y: 10 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ delay: 0.7, duration: 0.5 }}
-        whileHover={{ scale: 1.03, boxShadow: '0 0 30px rgba(59,130,246,0.25)' }}
-        whileTap={{ scale: 0.97 }}
-      >
-        Get Started
-      </motion.button>
+      <ul className="mt-10 grid w-full max-w-lg grid-cols-3 gap-3 text-left">
+        {[
+          { icon: <Monitor size={15} />, title: t('welcome.feature.scan'), body: t('welcome.feature.scanBody') },
+          { icon: <ShieldCheck size={15} />, title: t('welcome.feature.build'), body: t('welcome.feature.buildBody') },
+          { icon: <Usb size={15} />, title: t('welcome.feature.usb'), body: t('welcome.feature.usbBody') },
+        ].map((f) => (
+          <li key={f.title} className="rounded-md border border-line bg-panel px-3 py-2.5">
+            <span className="text-fg-3" aria-hidden>
+              {f.icon}
+            </span>
+            <p className="mt-1.5 text-sm font-medium text-fg">{f.title}</p>
+            <p className="mt-0.5 text-xs leading-snug text-fg-3">{f.body}</p>
+          </li>
+        ))}
+      </ul>
 
-      <motion.div
-        className="mt-10 flex items-center gap-4 text-[10px] text-[#3a3a42]"
-        initial={{ opacity: 0 }}
-        animate={{ opacity: 1 }}
-        transition={{ delay: 1, duration: 0.6 }}
-      >
-        <span>Windows</span>
-        <span className="w-[3px] h-[3px] rounded-full bg-[#2a2a30]" />
-        <span>Linux</span>
-        <span className="w-[3px] h-[3px] rounded-full bg-[#2a2a30]" />
-        <span>Admin Required</span>
-      </motion.div>
-    </motion.div>
+      <p className="mt-8 text-xs text-fg-3">
+        {t('welcome.platforms')}
+        {info ? ` · v${info.version}` : ''}
+      </p>
+    </div>
   );
 }

@@ -1,28 +1,29 @@
-import React, { useEffect, useState } from 'react';
-import { motion } from 'motion/react';
-import { useWizard } from './stores/wizard';
-import { useTasks } from './stores/tasks';
-import { onTaskUpdate } from './bridge/events';
+import { useEffect, type ComponentType } from 'react';
+import { MotionConfig } from 'motion/react';
+import { ErrorBoundary } from './components/feedback/ErrorBoundary';
 import Shell from './components/layout/Shell';
-import { ErrorBoundary } from './components/feedback';
-import Welcome from './pages/Welcome';
-import Scan from './pages/Scan';
-import Compatibility from './pages/Compatibility';
-import Prerequisites from './pages/Prerequisites';
-import BiosSetup from './pages/BiosSetup';
+import { useBackendEvents } from './hooks/useBackendEvents';
+import { usePersistence } from './hooks/usePersistence';
+import Bios from './pages/Bios';
 import Build from './pages/Build';
-import Review from './pages/Review';
-import Deploy from './pages/Deploy';
+import Compatibility from './pages/Compatibility';
 import Complete from './pages/Complete';
+import Deploy from './pages/Deploy';
+import Hardware from './pages/Hardware';
+import Review from './pages/Review';
+import Scan from './pages/Scan';
 import Settings from './pages/Settings';
 import Troubleshoot from './pages/Troubleshoot';
+import Welcome from './pages/Welcome';
+import { useApp } from './stores/app';
+import { useWizard, type Step } from './stores/wizard';
 
-const pages: Record<string, React.ComponentType> = {
+const PAGES: Record<Step, ComponentType> = {
   welcome: Welcome,
   scan: Scan,
+  hardware: Hardware,
   compatibility: Compatibility,
-  prerequisites: Prerequisites,
-  bios: BiosSetup,
+  bios: Bios,
   build: Build,
   review: Review,
   deploy: Deploy,
@@ -31,43 +32,28 @@ const pages: Record<string, React.ComponentType> = {
 
 export default function App() {
   const step = useWizard((s) => s.step);
-  const handleTaskUpdate = useTasks((s) => s.handleUpdate);
-  const [settingsOpen, setSettingsOpen] = useState(false);
-  const [troubleshootOpen, setTroubleshootOpen] = useState(false);
+  const init = useApp((s) => s.init);
+
+  useBackendEvents();
+  usePersistence();
 
   useEffect(() => {
-    let unlisten: (() => void) | undefined;
-    onTaskUpdate(handleTaskUpdate).then((fn) => {
-      unlisten = fn;
-    });
-    return () => unlisten?.();
-  }, [handleTaskUpdate]);
+    void init();
+  }, [init]);
 
-  const Page = pages[step] ?? Welcome;
+  const Page = PAGES[step];
 
   return (
-    <>
-      <Shell onOpenSettings={() => setSettingsOpen(true)}>
-        <motion.div
-          key={step}
-          initial={{ opacity: 0, y: 6 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.2, ease: 'easeInOut' }}
-        >
-          <ErrorBoundary key={step}>
+    <MotionConfig reducedMotion="user">
+      <Shell>
+        <ErrorBoundary key={step}>
+          <div className="animate-fade-in">
             <Page />
-          </ErrorBoundary>
-        </motion.div>
+          </div>
+        </ErrorBoundary>
       </Shell>
-      <Settings
-        open={settingsOpen}
-        onClose={() => setSettingsOpen(false)}
-        onOpenTroubleshoot={() => setTroubleshootOpen(true)}
-      />
-      <Troubleshoot
-        open={troubleshootOpen}
-        onClose={() => setTroubleshootOpen(false)}
-      />
-    </>
+      <Settings />
+      <Troubleshoot />
+    </MotionConfig>
   );
 }

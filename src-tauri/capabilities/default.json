@@ -1,22 +1,20 @@
 {
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "default",
-  "description": "Capability for the main window",
+  "description": "Permissions for the main window: core defaults (events, app info), custom title bar controls, native dialogs, opening https links and frontend logging.",
   "windows": ["main"],
   "permissions": [
     "core:default",
-    "core:event:default",
-    "core:event:allow-listen",
-    "core:event:allow-emit",
-    "core:window:default",
-    "core:window:allow-close",
+    "core:window:allow-start-dragging",
     "core:window:allow-minimize",
     "core:window:allow-toggle-maximize",
-    "core:window:allow-start-dragging",
-    "shell:allow-open",
-    "dialog:allow-save",
+    "core:window:allow-close",
     "dialog:allow-open",
+    "dialog:allow-save",
     "dialog:allow-message",
+    "dialog:allow-ask",
+    "dialog:allow-confirm",
+    "shell:allow-open",
     "log:default"
   ]
 }

@@ -1,89 +1,102 @@
-import { motion } from 'motion/react';
-import { Settings2 } from 'lucide-react';
-import { useWizard, STEP_ORDER, type Step } from '../../stores/wizard';
+import { Check, LifeBuoy, Lock, Settings2 } from 'lucide-react';
+import { useT } from '../../i18n';
+import { useApp } from '../../stores/app';
+import { STEPS, firstIncompleteIndex, stepIndex, useWizard } from '../../stores/wizard';
 import Logo from '../Logo';
 
-const STEP_LABELS: Record<Step, string> = {
-  welcome: 'Start',
-  scan: 'Hardware',
-  compatibility: 'Compatibility',
-  prerequisites: 'Prerequisites',
-  bios: 'BIOS',
-  build: 'Build',
-  review: 'Review',
-  deploy: 'Deploy',
-  complete: 'Done',
-};
+export default function Sidebar() {
+  const t = useT();
+  const step = useWizard((s) => s.step);
+  const completed = useWizard((s) => s.completed);
+  const locks = useWizard((s) => s.locks);
+  const goTo = useWizard((s) => s.goTo);
+  const info = useApp((s) => s.info);
+  const updateAvailable = useApp((s) => s.update?.updateAvailable ?? false);
+  const openSettings = useApp((s) => s.openSettings);
+  const openTroubleshoot = useApp((s) => s.openTroubleshoot);
 
-interface SidebarProps {
-  onOpenSettings: () => void;
-}
-
-export default function Sidebar({ onOpenSettings }: SidebarProps) {
-  const { step, completedSteps, goTo, stepIndex } = useWizard();
+  const limit = firstIncompleteIndex(completed);
+  const locked = locks.length > 0;
 
   return (
-    <aside className="flex w-[180px] flex-col bg-[#0a0a0c] border-r border-[#151517]">
-      {/* Logo */}
+    <aside className="flex w-[184px] shrink-0 flex-col border-r border-line bg-sidebar">
       <div className="flex h-11 items-center gap-2 px-4" data-tauri-drag-region>
-        <Logo size={18} className="text-[#a0a0a8]" />
-        <span className="text-[11px] font-semibold text-[#4a4a52] tracking-[0.08em] uppercase">OpCore</span>
+        <Logo size={18} className="text-fg-2" />
+        <span className="text-xs font-semibold tracking-[0.08em] text-fg-3 uppercase" data-tauri-drag-region>
+          OpCore
+        </span>
       </div>
 
-      {/* Steps */}
-      <nav className="flex-1 py-2 px-2 overflow-y-auto">
-        {STEP_ORDER.map((s, idx) => {
-          const isCurrent = s === step;
-          const isCompleted = completedSteps.has(s);
-          const isPast = idx < stepIndex();
-          const isAccessible = isPast || isCurrent || isCompleted;
-          const stepNum = idx + 1;
-
-          return (
-            <button
-              key={s}
-              onClick={() => isAccessible && goTo(s)}
-              disabled={!isAccessible}
-              className={`relative flex w-full items-center gap-2 rounded-[5px] px-2 py-[6px] text-[11.5px] transition-all duration-150 mb-[1px] ${
-                isCurrent
-                  ? 'text-[#f0f0f2] font-medium'
-                  : isAccessible
-                    ? 'text-[#5a5a62] hover:text-[#8a8a92]'
-                    : 'text-[#2a2a30] cursor-not-allowed'
-              }`}
-            >
-              {/* Active indicator bar */}
-              {isCurrent && (
-                <motion.div
-                  layoutId="sidebar-active"
-                  className="absolute inset-0 rounded-[5px] bg-[#141416] border border-[#1e1e22]"
-                  transition={{ type: 'spring', stiffness: 350, damping: 30 }}
-                />
-              )}
-              <span className={`relative z-10 w-3.5 text-center text-[10px] tabular-nums ${
-                isCompleted && !isCurrent ? 'text-[#22c55e]' : isCurrent ? 'text-[#3b82f6]' : ''
-              }`}>
-                {isCompleted && !isCurrent ? '\u2713' : stepNum}
-              </span>
-              <span className="relative z-10">{STEP_LABELS[s]}</span>
-            </button>
-          );
-        })}
+      <nav aria-label={t('nav.steps')} className="flex-1 overflow-y-auto px-2 py-2">
+        <ol>
+          {STEPS.map((s, idx) => {
+            const current = s === step;
+            const done = completed.includes(s);
+            const reachable = stepIndex(s) <= limit;
+            const enabled = current || (reachable && !locked);
+            return (
+              <li key={s}>
+                <button
+                  type="button"
+                  onClick={() => goTo(s)}
+                  disabled={!enabled}
+                  aria-current={current ? 'step' : undefined}
+                  className={`mb-px flex w-full items-center gap-2.5 rounded-md px-2 py-1.5 text-left text-sm transition-colors ${
+                    current
+                      ? 'bg-panel-2 font-medium text-fg'
+                      : enabled
+                        ? 'text-fg-3 hover:bg-panel hover:text-fg-2'
+                        : 'cursor-not-allowed text-fg-4'
+                  }`}
+                >
+                  <span
+                    className={`flex size-4 shrink-0 items-center justify-center rounded-full text-2xs tabular-nums ${
+                      done && !current
+                        ? 'bg-ok-soft text-ok'
+                        : current
+                          ? 'bg-accent-soft text-accent-fg'
+                          : 'text-fg-4'
+                    }`}
+                    aria-hidden
+                  >
+                    {done && !current ? <Check size={10} strokeWidth={3} /> : idx + 1}
+                  </span>
+                  <span className="truncate">{t(`step.${s}`)}</span>
+                  {done && !current && <span className="sr-only">{t('nav.completed')}</span>}
+                </button>
+              </li>
+            );
+          })}
+        </ol>
+        {locked && (
+          <p className="mt-3 flex items-start gap-1.5 px-2 text-2xs leading-snug text-fg-3">
+            <Lock size={11} className="mt-px shrink-0" aria-hidden />
+            {t('nav.locked')}
+          </p>
+        )}
       </nav>
 
-      <div className="px-3 py-2">
-        <div className="h-[1px] bg-gradient-to-r from-transparent via-[#1e1e22] to-transparent mb-2" />
-        <div className="flex items-center justify-between">
-          <button
-            onClick={onOpenSettings}
-            className="flex h-8 w-8 items-center justify-center rounded-[6px] text-[#a0a0a8] transition-all duration-150 hover:bg-[#1e1e22] hover:text-[#f0f0f2] hover:shadow-[0_0_8px_rgba(255,255,255,0.06)] active:scale-95 cursor-pointer"
-            aria-label="Open settings"
-            title="Settings"
-          >
-            <Settings2 size={16} />
-          </button>
-          <span className="text-[9px] text-[#2a2a30] tracking-wide">v5.0.0</span>
-        </div>
+      <div className="space-y-1 border-t border-line px-2 py-2">
+        <button
+          type="button"
+          onClick={() => openTroubleshoot(true)}
+          className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-sm text-fg-3 hover:bg-panel hover:text-fg-2"
+        >
+          <LifeBuoy size={14} aria-hidden />
+          {t('nav.troubleshoot')}
+        </button>
+        <button
+          type="button"
+          onClick={() => openSettings(true)}
+          className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-sm text-fg-3 hover:bg-panel hover:text-fg-2"
+        >
+          <Settings2 size={14} aria-hidden />
+          {t('nav.settings')}
+          {updateAvailable && (
+            <span className="ml-auto rounded bg-accent-soft px-1 text-2xs text-accent-fg">{t('nav.update')}</span>
+          )}
+        </button>
+        <p className="px-2 pt-1 text-2xs text-fg-3">{info ? `v${info.version} · OpenCore ${info.opencoreVersion}` : ' '}</p>
       </div>
     </aside>
   );

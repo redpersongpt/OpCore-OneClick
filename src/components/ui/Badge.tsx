@@ -1,62 +1,47 @@
-import React, { type HTMLAttributes } from 'react';
+import type { ReactNode } from 'react';
 
-export type BadgeVariant = 'success' | 'warning' | 'danger' | 'info' | 'neutral';
-export type BadgeSize = 'sm' | 'md';
+export type Tone = 'success' | 'warning' | 'danger' | 'info' | 'neutral';
 
-export interface BadgeProps extends HTMLAttributes<HTMLSpanElement> {
-  variant?: BadgeVariant;
-  size?: BadgeSize;
-  dot?: boolean;
-  className?: string;
-  children?: React.ReactNode;
-}
-
-const variantClasses: Record<BadgeVariant, string> = {
-  success: 'bg-[--color-green-1] text-[--color-green-6] border border-[--color-green-3]',
-  warning: 'bg-[--color-amber-1] text-[--color-amber-6] border border-[--color-amber-3]',
-  danger:  'bg-[--color-red-1]   text-[--color-red-6]   border border-[--color-red-3]',
-  info:    'bg-[--color-blue-1]  text-[--color-blue-6]  border border-[--color-blue-3]',
-  neutral: 'bg-[--surface-2]     text-[--text-secondary] border border-[--border]',
+const TONES: Record<Tone, string> = {
+  success: 'bg-ok-soft text-ok-fg border-ok-line',
+  warning: 'bg-warn-soft text-warn-fg border-warn-line',
+  danger: 'bg-err-soft text-err-fg border-err-line',
+  info: 'bg-accent-soft text-accent-fg border-accent-line',
+  neutral: 'bg-panel-2 text-fg-2 border-line',
 };
 
-const dotColors: Record<BadgeVariant, string> = {
-  success: 'bg-[--color-green-5]',
-  warning: 'bg-[--color-amber-5]',
-  danger:  'bg-[--color-red-5]',
-  info:    'bg-[--color-blue-5]',
-  neutral: 'bg-[--color-gray-6]',
-};
-
-const sizeClasses: Record<BadgeSize, string> = {
-  sm: 'px-1.5 py-0.5 text-[0.625rem] gap-1 leading-none',
-  md: 'px-2 py-1 text-[0.6875rem] gap-1.5 leading-none',
+const DOTS: Record<Tone, string> = {
+  success: 'bg-ok',
+  warning: 'bg-warn',
+  danger: 'bg-err',
+  info: 'bg-accent',
+  neutral: 'bg-fg-3',
 };
 
 export function Badge({
-  variant = 'neutral',
-  size = 'md',
+  tone = 'neutral',
   dot = false,
   className = '',
+  title,
   children,
-  ...props
-}: BadgeProps) {
+}: {
+  tone?: Tone;
+  dot?: boolean;
+  className?: string;
+  title?: string;
+  children: ReactNode;
+}) {
   return (
     <span
-      className={[
-        'inline-flex items-center rounded font-medium tracking-wide uppercase',
-        variantClasses[variant],
-        sizeClasses[size],
-        className,
-      ].join(' ')}
-      {...props}
+      title={title}
+      className={`inline-flex items-center gap-1 rounded border px-1.5 py-0.5 text-2xs font-medium leading-none tracking-wide whitespace-nowrap ${TONES[tone]} ${className}`}
     >
-      {dot && (
-        <span
-          className={`inline-block rounded-full shrink-0 ${dotColors[variant]} ${size === 'sm' ? 'size-1' : 'size-1.5'}`}
-          aria-hidden
-        />
-      )}
+      {dot && <span className={`size-1.5 rounded-full ${DOTS[tone]}`} aria-hidden />}
       {children}
     </span>
   );
+}
+
+export function Dot({ tone, className = '' }: { tone: Tone; className?: string }) {
+  return <span className={`inline-block size-2 shrink-0 rounded-full ${DOTS[tone]} ${className}`} aria-hidden />;
 }

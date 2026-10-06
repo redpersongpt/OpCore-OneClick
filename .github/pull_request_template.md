@@ -5,10 +5,11 @@
 
 ## Validation
 
-- [ ] `npm run lint`
-- [ ] `npm test`
+- [ ] `npx tsc --noEmit`
+- [ ] `npx vitest run`
 - [ ] `npm run build`
-- [ ] `cd src-tauri && cargo test`
+- [ ] `cd src-tauri && cargo clippy --all-targets -- -D warnings`
+- [ ] `cd src-tauri && cargo test` (commit any regenerated files in `src/bridge/generated`)
 
 If you skipped anything, say why.
 
@@ -20,7 +21,8 @@ Add screenshots for UI changes, if relevant.
 
 Call out anything that touches:
 
-- disk flashing
+- disk listing or flashing
 - hardware detection
-- OpenCore generation
+- the build plan or config.plist generation
+- pinned downloads (versions, URLs, SHA-256)
 - recovery download/cache

@@ -24,21 +24,24 @@
       }
     ],
     "security": {
-      "csp": "default-src 'self'; img-src 'self' asset: https://asset.localhost; script-src 'self'; style-src 'self' 'unsafe-inline'; connect-src 'self' https://api.github.com"
+      "csp": "default-src 'self'; img-src 'self' data:; font-src 'self' data:; style-src 'self' 'unsafe-inline'; script-src 'self'; connect-src 'self' ipc: http://ipc.localhost https://api.github.com"
     }
   },
   "bundle": {
     "active": true,
-    "targets": ["nsis", "appimage", "deb"],
+    "targets": ["nsis", "appimage", "deb", "app", "dmg"],
+    "category": "Utility",
+    "shortDescription": "OpenCore EFI builder and macOS installer USB creator",
+    "homepage": "https://github.com/redpersongpt/OpCore-OneClick",
+    "license": "Apache-2.0",
+    "copyright": "Copyright 2026 OpCore-OneClick contributors",
     "icon": [
       "icons/32x32.png",
       "icons/128x128.png",
       "icons/128x128@2x.png",
+      "icons/icon.icns",
       "icons/icon.ico",
       "icons/icon.png"
-    ],
-    "resources": [
-      "resources/kexts/**/*"
     ],
     "windows": {
       "nsis": {
@@ -51,15 +54,18 @@
         "bundleMediaFramework": false
       },
       "deb": {
-        "depends": [
-          "libnss3",
-          "libatk1.0-0",
-          "libgtk-3-0",
-          "libasound2",
-          "libcups2",
-          "libwebkit2gtk-4.1-0"
-        ]
+        "depends": ["util-linux", "fdisk", "dosfstools", "pkexec | policykit-1"],
+        "recommends": ["pciutils", "udisks2"]
       }
+    },
+    "macOS": {
+      "minimumSystemVersion": "10.15",
+      "signingIdentity": "-"
+    }
+  },
+  "plugins": {
+    "shell": {
+      "open": "https://[^\\s]+"
     }
   }
 }

@@ -7,14 +7,34 @@ body:
   - type: markdown
     attributes:
       value: |
-        Thanks for filing a bug. Please make this reproducible.
+        Thanks for filing a bug. Please make it reproducible.
+        A support log helps most: Settings → Export support log, then attach the file below.
+        Settings → Report a problem opens a pre-filled issue with a summary of your hardware and build.
 
   - type: textarea
     id: summary
     attributes:
       label: What happened?
       description: Describe the failure in one or two paragraphs.
-      placeholder: The EFI build fails after kext download and the app shows...
+      placeholder: The EFI build fails after the kext downloads and the app shows...
+    validations:
+      required: true
+
+  - type: dropdown
+    id: step
+    attributes:
+      label: Where did it fail?
+      options:
+        - Hardware scan or profile import
+        - Hardware review (wrong or missing device)
+        - Compatibility / macOS version choice
+        - BIOS checklist
+        - EFI build
+        - Recovery download
+        - Writing the USB drive
+        - Booting the USB (OpenCore picker or macOS installer)
+        - After installing macOS (post-install)
+        - Somewhere else
     validations:
       required: true
 
@@ -25,8 +45,8 @@ body:
       placeholder: |
         1. Open the app
         2. Scan hardware
-        3. Go to Build
-        4. Click Start Build
+        3. Pick macOS Sequoia
+        4. Start the build
         5. Observe the failure
     validations:
       required: true
@@ -41,11 +61,29 @@ body:
   - type: dropdown
     id: host_os
     attributes:
-      label: Host OS
+      label: Host OS (where the app runs)
       options:
-        - Windows
+        - Windows 10/11
         - Linux
-        - macOS
+        - macOS (building for another PC)
+    validations:
+      required: true
+
+  - type: dropdown
+    id: target_macos
+    attributes:
+      label: Target macOS
+      options:
+        - macOS 26 Tahoe
+        - macOS 15 Sequoia
+        - macOS 14 Sonoma
+        - macOS 13 Ventura
+        - macOS 12 Monterey
+        - macOS 11 Big Sur
+        - macOS 10.15 Catalina
+        - macOS 10.14 Mojave
+        - macOS 10.13 High Sierra
+        - Not relevant
     validations:
       required: true
 
@@ -53,7 +91,8 @@ body:
     id: app_version
     attributes:
       label: App version
-      placeholder: 4.0.0
+      description: Shown in Settings → About.
+      placeholder: 6.0.0
     validations:
       required: true
 
@@ -74,7 +113,6 @@ body:
     id: logs
     attributes:
       label: Logs or screenshots
-      description: Paste the relevant error, log tail, or screenshots.
-      render: shell
+      description: Attach the exported support log, or paste the relevant error, log tail or screenshots. Remove anything you consider private first.
     validations:
       required: false

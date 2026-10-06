@@ -1,27 +1,21 @@
 {
   "compilerOptions": {
     "target": "ES2022",
-    "experimentalDecorators": true,
-    "useDefineForClassFields": false,
     "module": "ESNext",
-    "lib": [
-      "ES2022",
-      "DOM",
-      "DOM.Iterable"
-    ],
+    "lib": ["ES2022", "DOM", "DOM.Iterable"],
+    "types": ["node", "vite/client", "vitest/globals", "@testing-library/jest-dom"],
     "skipLibCheck": true,
     "moduleResolution": "bundler",
     "isolatedModules": true,
     "moduleDetection": "force",
-    "allowJs": true,
     "jsx": "react-jsx",
-    "paths": {
-      "@/*": [
-        "./*"
-      ]
-    },
+    "strict": true,
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
+    "noFallthroughCasesInSwitch": true,
     "allowImportingTsExtensions": true,
     "noEmit": true
   },
-  "exclude": ["dist-electron", "dist", "node_modules", "electron", "src-tauri", "test"]
+  "include": ["src", "vite.config.ts", "vitest.config.ts"],
+  "exclude": ["dist", "node_modules", "src-tauri"]
 }

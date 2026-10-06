@@ -1,0 +1,25 @@
+stateDiagram-v2
+    %% Long-running work tracked by tasks/registry.rs. Every change is emitted
+    %% as `task:update` (TaskUpdate). Kinds: hardware-scan, efi-build,
+    %% recovery-download, usb-flash.
+    [*] --> running : TaskRegistry.create(kind)
+
+    running --> running : progress / message update
+    running --> completed : work finished
+    running --> failed : error returned, or stalled past the kind's threshold
+    running --> cancelled : task_cancel(taskId)
+
+    completed --> [*]
+    failed --> [*]
+    cancelled --> [*]
+
+    note right of running
+        Commands check their CancellationToken
+        between steps and stop child processes
+        when it fires.
+    end note
+
+    note right of failed
+        Terminal states are final: later updates
+        for the same task are ignored.
+    end note

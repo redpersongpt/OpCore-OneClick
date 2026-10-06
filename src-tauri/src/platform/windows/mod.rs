@@ -1,2 +1,9 @@
+pub mod acpi_dump;
 pub mod disk;
+pub mod inventory;
+pub mod native;
+pub mod powershell;
+pub mod raw;
+pub mod registry;
 pub mod scanner;
+pub mod usb_ports;

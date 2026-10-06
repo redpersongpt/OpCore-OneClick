@@ -1,25 +1,25 @@
-import { type ReactNode } from 'react';
-import Sidebar from './Sidebar';
+import { useEffect, useRef, type ReactNode } from 'react';
+import { useWizard } from '../../stores/wizard';
 import Header from './Header';
+import Sidebar from './Sidebar';
 import TaskBar from './TaskBar';
 
-interface ShellProps {
-  children: ReactNode;
-  onOpenSettings: () => void;
-}
+export default function Shell({ children }: { children: ReactNode }) {
+  const step = useWizard((s) => s.step);
+  const mainRef = useRef<HTMLElement>(null);
 
-export default function Shell({ children, onOpenSettings }: ShellProps) {
+  // Every step starts at the top; the scroll container outlives the pages.
+  useEffect(() => {
+    if (mainRef.current) mainRef.current.scrollTop = 0;
+  }, [step]);
+
   return (
-    <div className="flex h-screen w-screen overflow-hidden bg-[#08080a] text-[#dadadf] rounded-lg">
-      <Sidebar onOpenSettings={onOpenSettings} />
-      <div className="flex flex-1 flex-col min-w-0">
+    <div className="flex h-screen w-screen overflow-hidden bg-bg text-fg">
+      <Sidebar />
+      <div className="flex min-w-0 flex-1 flex-col">
         <Header />
-        <main className="flex-1 overflow-y-auto relative">
-          {/* Subtle top glow */}
-          <div className="absolute inset-x-0 top-0 h-32 bg-gradient-to-b from-[#3b82f6]/[0.03] to-transparent pointer-events-none" />
-          <div className="relative mx-auto max-w-[600px] px-5 py-6">
-            {children}
-          </div>
+        <main ref={mainRef} className="relative flex-1 overflow-y-auto">
+          <div className="mx-auto max-w-[760px] px-6 py-6">{children}</div>
         </main>
         <TaskBar />
       </div>

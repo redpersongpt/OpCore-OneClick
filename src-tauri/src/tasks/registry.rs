@@ -8,7 +8,15 @@ use tokio::sync::RwLock;
 use crate::contracts::{TaskStatus, TaskUpdate};
 use crate::tasks::cancellation::CancellationToken;
 
+/// Finished tasks kept for `task_list` before the oldest are dropped.
+const MAX_FINISHED_TASKS: usize = 50;
+
 /// Tracks all active async operations with progress, cancellation, and watchdog.
+///
+/// Terminal states (completed, failed, cancelled) are final: later calls to
+/// `update_progress`, `complete`, `fail` or `cancel` for the same task are
+/// ignored, so a watchdog failure or a user cancel can never be turned back
+/// into a success.
 pub struct TaskRegistry {
     tasks: RwLock<HashMap<String, TaskState>>,
     tokens: RwLock<HashMap<String, CancellationToken>>,
@@ -21,16 +29,40 @@ struct TaskState {
     status: TaskStatus,
     progress: Option<f64>,
     message: Option<String>,
+    detail: Option<serde_json::Value>,
+    /// False while a step that must not be interrupted is running (disk writes).
+    cancellable: bool,
+    created: Instant,
     last_update: Instant,
 }
 
-/// Stall thresholds per task kind.
+impl TaskState {
+    fn is_running(&self) -> bool {
+        matches!(self.status, TaskStatus::Running)
+    }
+
+    fn to_update(&self) -> TaskUpdate {
+        TaskUpdate {
+            task_id: self.task_id.clone(),
+            kind: self.kind.clone(),
+            status: self.status,
+            progress: self.progress,
+            message: self.message.clone(),
+            detail: self.detail.clone(),
+        }
+    }
+}
+
+/// How long a running task may go without a progress update before the
+/// watchdog fails it. Long downloads report progress continuously, so these
+/// only catch genuinely hung operations.
 fn stall_threshold(kind: &str) -> Duration {
     match kind {
-        "usb-flash" => Duration::from_secs(900),      // 15 min
-        "partition-prep" => Duration::from_secs(300),  // 5 min
-        "recovery-download" => Duration::from_secs(120), // 2 min
-        _ => Duration::from_secs(60),                  // 1 min default
+        "usb-flash" => Duration::from_secs(30 * 60),
+        "efi-build" => Duration::from_secs(10 * 60),
+        "recovery-download" => Duration::from_secs(5 * 60),
+        "hardware-scan" => Duration::from_secs(3 * 60),
+        _ => Duration::from_secs(5 * 60),
     }
 }
 
@@ -68,10 +100,17 @@ impl TaskRegistry {
             status: TaskStatus::Running,
             progress: Some(0.0),
             message: None,
+            detail: None,
+            cancellable: true,
+            created: now,
             last_update: now,
         };
 
-        self.tasks.write().await.insert(task_id.clone(), state);
+        {
+            let mut tasks = self.tasks.write().await;
+            prune_finished(&mut tasks);
+            tasks.insert(task_id.clone(), state);
+        }
         self.tokens.write().await.insert(task_id.clone(), token.clone());
 
         self.emit_update(&task_id).await;
@@ -80,112 +119,167 @@ impl TaskRegistry {
 
     /// Update task progress (0.0 - 1.0) with optional message.
     pub async fn update_progress(&self, task_id: &str, progress: f64, message: Option<String>) {
-        let mut tasks = self.tasks.write().await;
-        if let Some(state) = tasks.get_mut(task_id) {
+        self.update(task_id, |state| {
             state.progress = Some(progress.clamp(0.0, 1.0));
             state.message = message;
-            state.last_update = Instant::now();
-        }
-        drop(tasks);
-        self.emit_update(task_id).await;
+        })
+        .await;
+    }
+
+    /// Update progress together with a structured detail payload (e.g. the
+    /// current build phase) that the frontend can render without parsing text.
+    pub async fn update_detail(
+        &self,
+        task_id: &str,
+        progress: f64,
+        message: Option<String>,
+        detail: serde_json::Value,
+    ) {
+        self.update(task_id, |state| {
+            state.progress = Some(progress.clamp(0.0, 1.0));
+            state.message = message;
+            state.detail = Some(detail);
+        })
+        .await;
+    }
+
+    /// Mark whether the running step may be cancelled. Disk writes turn this
+    /// off so a cancel request cannot leave a half-written disk marked as
+    /// cancelled while the work continues.
+    pub async fn set_cancellable(&self, task_id: &str, cancellable: bool) {
+        self.update(task_id, |state| state.cancellable = cancellable).await;
     }
 
     /// Mark task as completed.
     pub async fn complete(&self, task_id: &str) {
-        let mut tasks = self.tasks.write().await;
-        if let Some(state) = tasks.get_mut(task_id) {
-            state.status = TaskStatus::Completed;
-            state.progress = Some(1.0);
-            state.last_update = Instant::now();
-        }
-        drop(tasks);
-        self.emit_update(task_id).await;
-        self.tokens.write().await.remove(task_id);
+        self.finish(task_id, TaskStatus::Completed, None).await;
     }
 
     /// Mark task as failed.
     pub async fn fail(&self, task_id: &str, error: &str) {
-        let mut tasks = self.tasks.write().await;
-        if let Some(state) = tasks.get_mut(task_id) {
-            state.status = TaskStatus::Failed;
-            state.message = Some(error.to_string());
-            state.last_update = Instant::now();
-        }
-        drop(tasks);
-        self.emit_update(task_id).await;
-        self.tokens.write().await.remove(task_id);
+        self.finish(task_id, TaskStatus::Failed, Some(error.to_string())).await;
     }
 
-    /// Cancel a task by ID.
+    /// Cancel a running task. Returns false when the task is unknown, already
+    /// finished, or currently in a step that cannot be interrupted.
     pub async fn cancel(&self, task_id: &str) -> bool {
-        let tokens = self.tokens.read().await;
-        if let Some(token) = tokens.get(task_id) {
-            token.cancel();
-            drop(tokens);
-
-            let mut tasks = self.tasks.write().await;
-            if let Some(state) = tasks.get_mut(task_id) {
-                state.status = TaskStatus::Cancelled;
-                state.last_update = Instant::now();
-            }
-            drop(tasks);
-            self.emit_update(task_id).await;
-            self.tokens.write().await.remove(task_id);
-            true
-        } else {
-            false
-        }
-    }
-
-    /// List all current tasks.
-    pub async fn list(&self) -> Vec<TaskUpdate> {
-        let tasks = self.tasks.read().await;
-        tasks.values().map(|s| TaskUpdate {
-            task_id: s.task_id.clone(),
-            kind: s.kind.clone(),
-            status: s.status.clone(),
-            progress: s.progress,
-            message: s.message.clone(),
-            detail: None,
-        }).collect()
-    }
-
-    /// Watchdog: detect stalled tasks.
-    async fn check_stalled(&self) {
-        let now = Instant::now();
-        let mut stalled = Vec::new();
-
         {
             let tasks = self.tasks.read().await;
-            for state in tasks.values() {
-                if matches!(state.status, TaskStatus::Running) {
-                    let threshold = stall_threshold(&state.kind);
-                    if now.duration_since(state.last_update) > threshold {
-                        stalled.push(state.task_id.clone());
-                    }
-                }
+            match tasks.get(task_id) {
+                Some(state) if state.is_running() && state.cancellable => {}
+                _ => return false,
             }
         }
+        if let Some(token) = self.tokens.read().await.get(task_id) {
+            token.cancel();
+        }
+        self.finish(task_id, TaskStatus::Cancelled, Some("Cancelled by user".into())).await;
+        true
+    }
+
+    /// List all current tasks, oldest first.
+    pub async fn list(&self) -> Vec<TaskUpdate> {
+        let tasks = self.tasks.read().await;
+        let mut states: Vec<&TaskState> = tasks.values().collect();
+        states.sort_by_key(|s| s.created);
+        states.into_iter().map(TaskState::to_update).collect()
+    }
+
+    /// Apply a change to a running task and emit the update. No-op for
+    /// finished or unknown tasks.
+    async fn update(&self, task_id: &str, change: impl FnOnce(&mut TaskState)) {
+        let changed = {
+            let mut tasks = self.tasks.write().await;
+            match tasks.get_mut(task_id) {
+                Some(state) if state.is_running() => {
+                    change(state);
+                    state.last_update = Instant::now();
+                    true
+                }
+                _ => false,
+            }
+        };
+        if changed {
+            self.emit_update(task_id).await;
+        }
+    }
+
+    async fn finish(&self, task_id: &str, status: TaskStatus, message: Option<String>) {
+        let changed = {
+            let mut tasks = self.tasks.write().await;
+            match tasks.get_mut(task_id) {
+                Some(state) if state.is_running() => {
+                    if status == TaskStatus::Completed {
+                        state.progress = Some(1.0);
+                    }
+                    if message.is_some() {
+                        state.message = message;
+                    }
+                    state.status = status;
+                    state.last_update = Instant::now();
+                    true
+                }
+                _ => false,
+            }
+        };
+        if changed {
+            self.emit_update(task_id).await;
+            self.tokens.write().await.remove(task_id);
+        }
+    }
+
+    /// Watchdog: fail tasks that stopped reporting progress. The token is
+    /// cancelled first so the worker stops instead of finishing later.
+    async fn check_stalled(&self) {
+        let now = Instant::now();
+        let stalled: Vec<String> = {
+            let tasks = self.tasks.read().await;
+            tasks
+                .values()
+                .filter(|s| s.is_running() && s.cancellable)
+                .filter(|s| now.duration_since(s.last_update) > stall_threshold(&s.kind))
+                .map(|s| s.task_id.clone())
+                .collect()
+        };
 
         for task_id in stalled {
-            log::warn!("Task {} stalled, marking as failed", task_id);
-            self.fail(&task_id, "Operation stalled — no progress for too long").await;
+            log::warn!("Task {task_id} stalled, marking as failed");
+            if let Some(token) = self.tokens.read().await.get(&task_id) {
+                token.cancel();
+            }
+            self.finish(
+                &task_id,
+                TaskStatus::Failed,
+                Some("The operation stopped responding (no progress for too long).".into()),
+            )
+            .await;
         }
     }
 
     /// Emit a task:update event to the frontend.
     async fn emit_update(&self, task_id: &str) {
-        let tasks = self.tasks.read().await;
-        if let Some(state) = tasks.get(task_id) {
-            let update = TaskUpdate {
-                task_id: state.task_id.clone(),
-                kind: state.kind.clone(),
-                status: state.status.clone(),
-                progress: state.progress,
-                message: state.message.clone(),
-                detail: None,
-            };
+        let update = {
+            let tasks = self.tasks.read().await;
+            tasks.get(task_id).map(TaskState::to_update)
+        };
+        if let Some(update) = update {
             let _ = self.app.emit("task:update", &update);
         }
+    }
+}
+
+fn prune_finished(tasks: &mut HashMap<String, TaskState>) {
+    let mut finished: Vec<(Instant, String)> = tasks
+        .values()
+        .filter(|s| !s.is_running())
+        .map(|s| (s.last_update, s.task_id.clone()))
+        .collect();
+    if finished.len() <= MAX_FINISHED_TASKS {
+        return;
+    }
+    finished.sort();
+    let excess = finished.len() - MAX_FINISHED_TASKS;
+    for (_, id) in finished.into_iter().take(excess) {
+        tasks.remove(&id);
     }
 }

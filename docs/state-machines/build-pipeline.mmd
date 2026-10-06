@@ -1,0 +1,18 @@
+flowchart TD
+    %% commands/efi.rs::build_efi (task kind efi-build)
+    A[HardwareProfile + BuildOptions] --> B[planner::plan → BuildPlan]
+    B --> C[fetch_opencore: pinned release zip, SHA-256 checked]
+    C --> D[copy X64/EFI/BOOT and OC, prune unused drivers and tools]
+    D --> E[fetch_ocbinarydata: OpenCanopy resources, HfsPlus.efi]
+    E --> F{for each KextSelection}
+    F -->|fetched| G[install_bundle into EFI/OC/Kexts]
+    F -->|optional kext failed| H[skip and drop from plan]
+    F -->|required kext failed| X[build fails]
+    G --> I[write SSDTs: generated AML, OC samples, prebuilt tables]
+    H --> I
+    I --> J[kernel_add: Kernel → Add in dependency order]
+    J --> K[smbios_gen: serial, MLB, UUID, ROM via macserial]
+    K --> L[config_writer: fill this release's Docs/Sample.plist]
+    L --> M[ocvalidate + layout checks]
+    M -->|clean| N[BuildResult: builds/id/EFI]
+    M -->|errors| X

@@ -1,6 +1,119 @@
 # Changelog
 
-Project note: the app is now branded as `OpCore-OneClick`. Legacy repo/update coordinates and the persisted app-data path remain unchanged for continuity.
+All notable changes to OpCore-OneClick. Versions before 4.0.0 describe the
+earlier Electron app; 4.0.0 moved to Tauri and a new app-data location.
+
+## 6.0.0 — unreleased
+
+A rebuild of the backend around one idea: the scan produces a hardware
+profile, a planner turns that profile into a declarative build plan, and the
+EFI, the installer USB and every screen are derived from that plan.
+
+### EFI generation
+- OpenCore 1.0.8. `config.plist` is generated from that release's own
+  `Docs/Sample.plist` and validated with the `ocvalidate` from the same package,
+  so the config schema always matches the bootloader (1.0.8 added
+  `UEFI/Drivers[]/HideVerbose`).
+- New planner that follows the Dortania guide per platform: SMBIOS model,
+  kexts and their load order, SSDTs, ACPI patches, Booter/Kernel/UEFI quirks,
+  DeviceProperties, NVRAM and boot arguments. The Review step shows the whole
+  plan before anything is downloaded.
+- Hardware knowledge bases for CPUs (CPUID family/model), GPUs (PCI ids with
+  their macOS range), chipsets, Ethernet/Wi-Fi/Bluetooth/touchpad/storage
+  controllers, HDA codecs with AppleALC layouts, and Apple's SMBIOS models.
+- SSDTs are generated from the machine's own ACPI tables, which the scan now
+  saves, instead of relying only on prebuilt tables.
+- Kernel → Add order is computed from the downloaded bundles' dependencies.
+- SMBIOS serials, MLB, UUID and ROM come from `macserial`; an identity can be
+  kept across rebuilds so iServices stay stable.
+- All downloads are pinned to tested releases and verified by SHA-256 (NootRX,
+  which only publishes rolling builds, is validated structurally). Default
+  builds no longer call the GitHub API, so rate limits cannot break a build.
+  "Use latest releases" resolves newer versions and falls back to the pins.
+
+### Hardware and macOS coverage
+- macOS 10.13 High Sierra through macOS 26 Tahoe. macOS 27 runs on Apple
+  silicon only and is not offered.
+- Tahoe: Tahoe-capable SMBIOS selection (MacPro7,1, iMac20,x,
+  MacBookPro16,x), `SecureBootModel` `Disabled` for 14.4+ and Tahoe, current
+  Lilu/WhateverGreen, Intel Wi-Fi through itlwm with HeliPort, notes for the
+  removed AppleHDA.
+- Intel Penryn through Comet Lake, Ice Lake laptops, Rocket/Alder/Raptor Lake
+  desktops with a supported AMD GPU, and HEDT from X58 to X299.
+- AMD FX, Ryzen and Threadripper (Zen 1–5) with the current AMD_Vanilla patch
+  set and core-count patches; AMD Vega APUs through NootedRed; RX 6700-series
+  cards through NootRX.
+- macOS 13+ needs AVX2. Older CPUs stop at Monterey; CryptexFixup is the only
+  way past that, and its drawbacks are shown before it is used.
+- Skylake graphics run as Kaby Lake (device-id spoof) on Ventura and newer.
+- Unsupported GPUs (NVIDIA Turing and newer, AMD RDNA3/4, Navi 24) are
+  disabled so another GPU can drive the display.
+
+### Installer USB
+- The macOS recovery image is now written to the USB drive
+  (`com.apple.recovery.boot/BaseSystem.dmg` and `BaseSystem.chunklist`) next to
+  the EFI, so the drive boots straight into the installer.
+- Recovery board ids updated for every supported release; downloads resume
+  after interruptions and are verified against Apple's chunklist.
+- The flash confirmation now covers the EFI hash and the recovery image, and
+  the target disk is identified again right before it is erased.
+
+### Platforms
+- macOS host: import a profile exported on the target PC, build the EFI and
+  write the USB drive on a Mac. Profiles can be exported from any host.
+- Windows: the app runs as administrator, child processes no longer open
+  console windows, and the FAT32 partition is capped at 32 GB so large USB
+  drives format correctly.
+- Linux: the app no longer has to run as root; only the disk operations are
+  elevated through `pkexec`.
+
+### App
+- New Hardware step to check and correct the detected profile before the
+  compatibility check, and a build plan preview before anything is downloaded.
+- IPC types are generated from Rust (`src/bridge/generated`), so the frontend
+  and backend can no longer drift apart. This fixes the recovery progress bar
+  and the flash progress steps.
+
+### Build, CI and packaging
+- New CI workflow for pushes to `main` and pull requests: type check, unit
+  tests and production build of the frontend; `cargo clippy -D warnings` and
+  `cargo test` on Linux, Windows and macOS; a check that the generated
+  TypeScript bindings are committed.
+- Release workflow: Node 22 and current actions, a universal macOS `.dmg`
+  next to the AppImage, `.deb` and NSIS installer, `SHA256SUMS.txt`, build
+  provenance attestation, release notes taken from this file, safe re-runs,
+  and manual runs that build the requested tag.
+- Bundles: macOS `app`/`dmg` targets (macOS 10.15+), `.deb` dependencies on the
+  disk tools the app uses instead of Electron-era libraries.
+- Webview: the CSP allows Tauri's IPC origins and drops unused sources;
+  capabilities are reduced to what the UI uses, and opening links is limited to
+  `https://` URLs.
+
+### Removed
+- The empty embedded-kext bundle (`src-tauri/resources/kexts`) and the
+  obsolete `scripts/fetch-embedded-kexts.sh` with its checksum file. Kexts are
+  always downloaded from upstream and verified.
+
+## 5.0.0 - 2026-04-10
+
+- AMD builds now carry the detected core count into the AMD_Vanilla
+  `cpuid_cores_per_package` patches.
+- Unique SMBIOS serial, MLB, UUID and ROM per build instead of placeholders.
+- macOS version picker on the compatibility step; the choice drives the build.
+- Intel and Broadcom Bluetooth kexts, desktop Intel Wi-Fi, CPUFriend,
+  XHCI-unsupported, LucyRTL8125Ethernet, wider NVMeFix coverage, Ethernet kexts
+  chosen by chipset, SSDT-PLUG skipped on macOS 12.3+.
+- dGPU + iGPU desktops pass both GPUs to the generator (headless iGPU).
+- Troubleshooting screen, bug report from Settings, update check on start and a
+  post-install guide on the completion screen.
+- New app icon on all platforms.
+
+## 4.0.0 - 2026-04-09
+
+- Rewrite from Electron to Tauri v2: Rust backend and a redesigned React
+  frontend. The app-data location changed with the new app identifier.
+- Not carried over from 3.x: the command-line interface, the self-updating
+  installer, partition (non-USB) deployment and the embedded kext fallbacks.
 
 ## 3.2.8 - 2026-04-03
 

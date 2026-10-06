@@ -4,7 +4,15 @@
 
 pub mod aml;
 pub mod dsdt;
+mod namespace;
+mod parse;
 pub mod ssdt;
 
-pub use dsdt::parse_tables;
-pub use ssdt::{fallback_prebuilt, generate, GeneratedSsdt, SsdtKind};
+#[cfg(test)]
+mod tests;
+
+pub use dsdt::{load_tables, parse_dsdt, parse_tables, AcpiTable, AcpiTables};
+pub use ssdt::{
+    fallback_patches, fallback_prebuilt, fallback_prebuilt_acpi0007, generate,
+    generate_with_tables, is_not_needed, GeneratedSsdt, SsdtKind, ERR_INSUFFICIENT, ERR_NOT_NEEDED,
+};

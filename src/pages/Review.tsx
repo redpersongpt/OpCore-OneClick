@@ -1,334 +1,202 @@
-import { useEffect } from 'react';
-import { motion } from 'motion/react';
-import { useWizard } from '../stores/wizard';
-import { useHardware } from '../stores/hardware';
-import { useEfi } from '../stores/efi';
-import { LoadingState } from '../components/feedback/LoadingState';
-import { EmptyState } from '../components/feedback/EmptyState';
-import { Badge } from '../components/ui/Badge';
-import { WarningBanner } from '../components/ui/WarningBanner';
+import { useState } from 'react';
+import { Copy, RefreshCw } from 'lucide-react';
+import { ErrorPanel } from '../components/feedback/ErrorPanel';
+import { NotesList } from '../components/feedback/NotesList';
+import { EmptyState } from '../components/feedback/States';
+import { ExportEfiButton } from '../components/review/ExportEfiButton';
+import { IdentityCard } from '../components/review/IdentityCard';
+import { Badge, type Tone } from '../components/ui/Badge';
+import { Banner } from '../components/ui/Banner';
 import { Button } from '../components/ui/Button';
-import { makeDemoValidationResult } from '../lib/demoData';
-import type { ValidationIssue, KextResult } from '../bridge/types';
-import {
-  ChevronRight,
-  AlertCircle,
-  RotateCcw,
-  FileCode,
-  CheckCircle2,
-  XCircle,
-  Package,
-  Cpu,
-  Terminal,
-  Volume2,
-  Fingerprint,
-} from 'lucide-react';
+import { Checkbox } from '../components/ui/Field';
+import { KeyValue, PageHeader, Section, StepActions } from '../components/ui/Section';
+import { useT } from '../i18n';
+import { copyText } from '../lib/external';
+import { macosLabel } from '../lib/macos';
+import { ARTIFACT_TONE, NOTE_BADGE_TONE } from '../lib/tones';
+import { validationVerdict, type Verdict } from '../lib/verdict';
+import { useBuild } from '../stores/build';
+import { useWizard } from '../stores/wizard';
 
-const containerVariants = {
-  hidden: { opacity: 0, y: 10 },
-  show: {
-    opacity: 1,
-    y: 0,
-    transition: {
-      duration: 0.28,
-      staggerChildren: 0.06,
-    },
-  },
-};
-
-const itemVariants = {
-  hidden: { opacity: 0, y: 8 },
-  show: { opacity: 1, y: 0, transition: { duration: 0.24 } },
-};
-
-function SectionHeader({ icon: Icon, title }: { icon: typeof Cpu; title: string }) {
-  return (
-    <div className="flex items-center gap-2 px-4 py-2.5 bg-[--surface-2]">
-      <Icon size={13} className="text-[--text-tertiary]" />
-      <p className="text-[0.6875rem] font-medium text-[--text-tertiary] uppercase tracking-wide">
-        {title}
-      </p>
-    </div>
-  );
-}
-
-function InfoRow({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="flex items-center gap-4 px-4 py-2">
-      <span className="text-[0.75rem] text-[--text-tertiary] w-28 shrink-0">{label}</span>
-      <span className="text-[0.8125rem] text-[--text-primary] flex-1 truncate">{value}</span>
-    </div>
-  );
-}
-
-function KextRow({ kext }: { kext: KextResult }) {
-  const variant =
-    kext.status === 'downloaded' || kext.status === 'cached'
-      ? 'success'
-      : kext.status === 'failed'
-        ? 'danger'
-        : ('warning' as const);
-
-  return (
-    <div className="flex items-center gap-3 px-4 py-2">
-      <span className="text-[0.8125rem] text-[--text-primary] flex-1 truncate">{kext.name}</span>
-      {kext.version && (
-        <span className="text-[0.6875rem] text-[--text-tertiary] shrink-0">{kext.version}</span>
-      )}
-      <Badge variant={variant} size="sm">
-        {kext.status}
-      </Badge>
-    </div>
-  );
-}
-
-function ValidationRow({ issue }: { issue: ValidationIssue }) {
-  const variant = issue.severity === 'error' ? 'danger' : issue.severity === 'warning' ? 'warning' : 'info';
-  return (
-    <div className="flex items-start gap-3 px-4 py-2.5">
-      <Badge variant={variant} size="sm" className="mt-0.5 shrink-0">
-        {issue.severity}
-      </Badge>
-      <div className="flex-1 min-w-0">
-        <p className="text-[0.8125rem] text-[--text-primary] leading-snug">{issue.section}</p>
-        <p className="text-[0.6875rem] text-[--text-tertiary] mt-0.5 leading-snug">{issue.message}</p>
-        {issue.path && (
-          <p className="text-[0.625rem] font-mono text-[--text-tertiary] mt-0.5">{issue.path}</p>
-        )}
-      </div>
-    </div>
-  );
-}
+const VERDICT_TONE: Record<Verdict, Tone> = { passed: 'success', warnings: 'warning', failed: 'danger' };
 
 export default function Review() {
-  const { goNext, goTo, markCompleted } = useWizard();
-  const { isDemo } = useHardware();
-  const { buildResult, validationResult, validating, error, validate, clear, setValidationResult } = useEfi();
+  const t = useT();
+  const result = useBuild((s) => s.result);
+  const validation = useBuild((s) => s.validation);
+  const validating = useBuild((s) => s.validating);
+  const validateError = useBuild((s) => s.validateError);
+  const revalidate = useBuild((s) => s.revalidate);
+  const complete = useWizard((s) => s.complete);
+  const goTo = useWizard((s) => s.goTo);
+  const [override, setOverride] = useState(false);
+  const [copied, setCopied] = useState(false);
 
-  // Auto-validate on mount
-  useEffect(() => {
-    if (buildResult && !validationResult && !validating) {
-      if (isDemo) {
-        setValidationResult(makeDemoValidationResult());
-      } else {
-        void validate(buildResult.efiPath);
-      }
-    }
-  }, [buildResult, validationResult, validating, isDemo, setValidationResult, validate]);
-
-  const handleContinue = () => {
-    markCompleted('review');
-    goNext();
-  };
-
-  const handleRebuild = () => {
-    clear();
-    goTo('build');
-  };
-
-  // No build result
-  if (!buildResult) {
+  if (!result) {
     return (
       <EmptyState
-        icon={<FileCode size={28} />}
-        title="No EFI build found"
-        description="Go back to Build to generate your EFI configuration first."
+        title={t('review.empty')}
+        action={<Button onClick={() => goTo('build')}>{t('review.goBuild')}</Button>}
       />
     );
   }
 
-  // Validating
-  if (validating) {
-    return <LoadingState message="Validating EFI configuration..." />;
-  }
-
-  // Error
-  if (error && !isDemo) {
-    return (
-      <motion.div
-        className="flex flex-col items-center py-24"
-        initial={{ opacity: 0 }}
-        animate={{ opacity: 1 }}
-      >
-        <AlertCircle size={32} className="text-[--color-red-5] mb-4" />
-        <p className="text-sm text-[--text-primary] mb-2">Validation failed</p>
-        <p className="text-[0.75rem] text-[--text-tertiary] mb-6 max-w-md text-center">{error}</p>
-        <Button
-          variant="secondary"
-          size="sm"
-          onClick={() => validate(buildResult.efiPath)}
-          leadingIcon={<RotateCcw size={13} />}
-        >
-          Retry
-        </Button>
-      </motion.div>
-    );
-  }
-
-  const displayValidation = validationResult ?? (isDemo ? makeDemoValidationResult() : null);
-  const hasErrors = displayValidation?.issues.some((i) => i.severity === 'error') ?? false;
-  const hasWarnings = displayValidation?.issues.some((i) => i.severity === 'warning') ?? false;
+  const v = validation ?? result.validation;
+  const verdict = validationVerdict(v);
+  const canContinue = verdict !== 'failed' || override;
+  const notes = result.plan.notes;
+  const bootArgs = result.plan.bootArgs.join(' ');
 
   return (
-    <motion.div variants={containerVariants} initial="hidden" animate="show">
-      <motion.h2 variants={itemVariants} className="text-xl font-semibold text-[--text-primary] mb-1">
-        Review
-      </motion.h2>
-      <motion.p variants={itemVariants} className="text-sm text-[--text-tertiary] mb-6">
-        Review your EFI configuration before deployment.
-      </motion.p>
-
-      {isDemo && (
-        <motion.div
-          variants={itemVariants}
-          className="flex items-center justify-between rounded-lg border border-[--color-blue-3] bg-[--color-blue-1] px-4 py-3 mb-4"
+    <>
+      <PageHeader
+        title={t('review.title')}
+        subtitle={t('review.subtitle', { version: macosLabel(result.target), oc: result.opencoreVersion })}
+      />
+      <div className="space-y-4">
+        <Section
+          title={t('review.validation')}
+          actions={
+            <>
+              <Badge tone={VERDICT_TONE[verdict]} dot>
+                {t(`review.verdict.${verdict}`)}
+              </Badge>
+              <Button size="sm" variant="ghost" icon={<RefreshCw />} onClick={() => void revalidate()} loading={validating}>
+                {t('review.revalidate')}
+              </Button>
+            </>
+          }
         >
-          <div>
-            <p className="text-[0.8125rem] text-[--color-blue-7] font-medium">Offline validation snapshot</p>
-            <p className="text-[0.6875rem] text-[--color-blue-6] mt-0.5">
-              Review uses a local fixture so the macOS demo flow stays complete end to end.
-            </p>
+          <div className="space-y-3">
+            {!v.ocvalidateRan && <Banner tone="info">{t('review.noOcvalidate')}</Banner>}
+            {validateError && <ErrorPanel error={validateError} title={t('review.validateFailed')} compact />}
+            {v.issues.length === 0 ? (
+              <p className="text-sm text-fg-3">{t('review.noIssues')}</p>
+            ) : (
+              <ul className="space-y-2">
+                {v.issues.map((issue, i) => (
+                  <li key={`${issue.source}-${i}`} className="flex items-start gap-2.5">
+                    <Badge tone={NOTE_BADGE_TONE[issue.level]}>{t(`note.${issue.level}`)}</Badge>
+                    <div className="min-w-0 flex-1">
+                      <p className="text-base text-fg">{issue.message}</p>
+                      <p className="font-mono text-xs text-fg-3">
+                        {issue.source}
+                        {issue.path ? ` · ${issue.path}` : ''}
+                      </p>
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            )}
+            {v.ocvalidateOutput && (
+              <details>
+                <summary className="cursor-pointer text-sm text-fg-2 select-none">{t('review.ocvalidateOutput')}</summary>
+                <pre className="mt-2 max-h-64 overflow-auto rounded-md border border-line bg-bg p-3 font-mono text-xs leading-5 whitespace-pre-wrap text-fg-2">
+                  {v.ocvalidateOutput}
+                </pre>
+              </details>
+            )}
           </div>
-          <Badge variant="info" size="sm" dot>
-            Demo
-          </Badge>
-        </motion.div>
-      )}
+        </Section>
 
-      {/* Validation status */}
-      {displayValidation && (
-        <motion.div
-          variants={itemVariants}
-          className="flex items-center gap-3 rounded-lg bg-[--surface-1] border border-[--border-subtle] px-4 py-3 mb-4"
-        >
-          {displayValidation.valid ? (
-            <CheckCircle2 size={18} className="text-[--color-green-5] shrink-0" />
+        <IdentityCard identity={result.identity} secureBootModel={result.plan.smbios.secureBootModel} />
+
+        <Section title={t('review.boot')}>
+          <KeyValue label={t('plan.bootArgs')} mono>
+            <span className="inline-flex items-start gap-2">
+              <span className="break-all">{bootArgs || '—'}</span>
+              {bootArgs && (
+                <button
+                  type="button"
+                  onClick={async () => {
+                    if (await copyText(bootArgs)) {
+                      setCopied(true);
+                      window.setTimeout(() => setCopied(false), 1500);
+                    }
+                  }}
+                  className="rounded p-0.5 text-fg-3 hover:text-fg"
+                  aria-label={t('common.copy')}
+                >
+                  <Copy size={12} aria-hidden />
+                </button>
+              )}
+              {copied && <span className="font-sans text-xs text-ok">{t('common.copied')}</span>}
+            </span>
+          </KeyValue>
+          <KeyValue label={t('review.efiPath')} mono>
+            {result.efiPath}
+          </KeyValue>
+          <KeyValue label={t('review.buildId')} mono>
+            {result.buildId}
+          </KeyValue>
+        </Section>
+
+        <Section title={t('review.kexts', { count: result.kexts.length })} flush>
+          <ul className="divide-y divide-line">
+            {result.kexts.map((k) => (
+              <li key={`${k.catalogId}-${k.name}`} className="flex items-start gap-3 px-4 py-2">
+                <div className="w-52 shrink-0">
+                  <p className={`truncate font-mono text-sm ${k.enabled ? 'text-fg' : 'text-fg-3 line-through'}`}>{k.name}</p>
+                  {k.version && <p className="text-xs text-fg-3">{k.version}</p>}
+                </div>
+                <div className="min-w-0 flex-1 text-sm text-fg-2">
+                  {k.reason}
+                  {k.error && <p className="text-err-fg">{k.error}</p>}
+                </div>
+                <Badge tone={ARTIFACT_TONE[k.status]}>{t(`artifact.${k.status}`)}</Badge>
+              </li>
+            ))}
+          </ul>
+        </Section>
+
+        <Section title={t('review.ssdts', { count: result.ssdts.length })} flush>
+          {result.ssdts.length === 0 ? (
+            <p className="px-4 py-3 text-sm text-fg-3">—</p>
           ) : (
-            <XCircle size={18} className="text-[--color-red-5] shrink-0" />
+            <ul className="divide-y divide-line">
+              {result.ssdts.map((s) => (
+                <li key={s.fileName} className="flex items-start gap-3 px-4 py-2">
+                  <span className="w-52 shrink-0 truncate font-mono text-sm text-fg">{s.fileName}</span>
+                  <span className="min-w-0 flex-1 text-sm text-fg-2">{s.reason}</span>
+                  <Badge tone={ARTIFACT_TONE[s.status]}>{t(`artifact.${s.status}`)}</Badge>
+                </li>
+              ))}
+            </ul>
           )}
-          <div className="flex-1">
-            <p className="text-[0.8125rem] font-medium text-[--text-primary]">
-              {displayValidation.valid ? 'Validation Passed' : 'Validation Failed'}
-            </p>
-            <p className="text-[0.6875rem] text-[--text-tertiary]">
-              {displayValidation.sectionsPresent.length} sections present
-              {displayValidation.sectionsMissing.length > 0 &&
-                `, ${displayValidation.sectionsMissing.length} missing`}
-            </p>
-          </div>
-          <Badge
-            variant={displayValidation.valid ? 'success' : 'danger'}
-            size="sm"
-            dot
-          >
-            {displayValidation.valid ? 'Pass' : 'Fail'}
-          </Badge>
-        </motion.div>
-      )}
+        </Section>
 
-      {/* Warnings for errors */}
-      {hasErrors && (
-        <motion.div variants={itemVariants}>
-          <WarningBanner
-            variant="danger"
-            message="Validation found errors. The EFI may not boot. Consider rebuilding."
-            className="mb-3"
-          />
-        </motion.div>
-      )}
-      {!hasErrors && hasWarnings && (
-        <motion.div variants={itemVariants}>
-          <WarningBanner
-            variant="warning"
-            message="Validation found warnings. The EFI should boot but may have issues."
-            className="mb-3"
-          />
-        </motion.div>
-      )}
-
-      {/* EFI Report Card */}
-      <motion.div
-        variants={itemVariants}
-        className="rounded-lg border border-[--border-subtle] bg-[--surface-1] divide-y divide-[--border-subtle] mb-4 overflow-hidden"
-      >
-        {/* SMBIOS */}
-        <SectionHeader icon={Fingerprint} title="SMBIOS & OpenCore" />
-        <InfoRow label="OpenCore" value={buildResult.opencoreVersion} />
-        <InfoRow label="EFI Path" value={buildResult.efiPath} />
-
-        {/* SSDTs */}
-        {buildResult.ssdts.length > 0 && (
-          <>
-            <SectionHeader icon={Cpu} title="SSDTs" />
-            {buildResult.ssdts.map((ssdt, i) => (
-              <InfoRow key={i} label={`SSDT ${i + 1}`} value={ssdt} />
-            ))}
-          </>
+        {(notes.length > 0 || result.warnings.length > 0) && (
+          <Section title={t('review.notes')}>
+            <div className="space-y-3">
+              <NotesList notes={notes} />
+              {result.warnings.length > 0 && (
+                <ul className="list-disc space-y-0.5 pl-4 text-sm text-warn-fg">
+                  {result.warnings.map((w) => (
+                    <li key={w}>{w}</li>
+                  ))}
+                </ul>
+              )}
+            </div>
+          </Section>
         )}
 
-        {/* Boot Args */}
-        {buildResult.warnings.length > 0 && (
-          <>
-            <SectionHeader icon={Terminal} title="Notes" />
-            {buildResult.warnings.map((w, i) => (
-              <div key={i} className="px-4 py-2">
-                <p className="text-[0.75rem] text-[--color-amber-6] leading-snug">{w}</p>
-              </div>
-            ))}
-          </>
+        <Section title={t('review.export')} description={t('review.exportHint')}>
+          <ExportEfiButton efiPath={result.efiPath} />
+        </Section>
+
+        {verdict === 'failed' && (
+          <Banner tone="danger" title={t('review.failedTitle')}>
+            <p>{t('review.failedBody')}</p>
+            <Checkbox checked={override} onChange={setOverride} label={t('review.override')} />
+          </Banner>
         )}
-      </motion.div>
+      </div>
 
-      {/* Kexts */}
-      {buildResult.kexts.length > 0 && (
-        <motion.div
-          variants={itemVariants}
-          className="rounded-lg border border-[--border-subtle] bg-[--surface-1] divide-y divide-[--border-subtle] mb-4 overflow-hidden"
-        >
-          <SectionHeader icon={Package} title={`Kexts (${buildResult.kexts.length})`} />
-          {buildResult.kexts.map((k, i) => (
-            <KextRow key={i} kext={k} />
-          ))}
-        </motion.div>
-      )}
-
-      {/* Validation Issues */}
-      {displayValidation && displayValidation.issues.length > 0 && (
-        <motion.div
-          variants={itemVariants}
-          className="rounded-lg border border-[--border-subtle] bg-[--surface-1] divide-y divide-[--border-subtle] mb-4 overflow-hidden"
-        >
-          <div className="px-4 py-2.5 bg-[--surface-2]">
-            <p className="text-[0.6875rem] font-medium text-[--text-tertiary] uppercase tracking-wide">
-              Validation Issues ({displayValidation.issues.length})
-            </p>
-          </div>
-          {displayValidation.issues.map((issue, i) => (
-            <ValidationRow key={i} issue={issue} />
-          ))}
-        </motion.div>
-      )}
-
-      {/* Actions */}
-      <motion.div variants={itemVariants} className="flex justify-between mt-8">
-        <Button
-          variant="ghost"
-          size="md"
-          onClick={handleRebuild}
-          leadingIcon={<RotateCcw size={14} />}
-        >
-          Rebuild
+      <StepActions left={<Button onClick={() => goTo('build')}>{t('common.back')}</Button>}>
+        <Button variant="primary" disabled={!canContinue} onClick={() => complete('review')}>
+          {t('review.toDeploy')}
         </Button>
-        <Button
-          variant="primary"
-          size="md"
-          onClick={handleContinue}
-          disabled={hasErrors}
-          trailingIcon={<ChevronRight size={14} />}
-        >
-          Continue to Deploy
-        </Button>
-      </motion.div>
-    </motion.div>
+      </StepActions>
+    </>
   );
 }

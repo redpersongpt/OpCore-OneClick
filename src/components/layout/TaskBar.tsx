@@ -1,46 +1,78 @@
-import { useTasks } from '../../stores/tasks';
-import { Loader2, CheckCircle2, XCircle } from 'lucide-react';
+import { useEffect } from 'react';
+import { Ban, CheckCircle2, Loader2, X, XCircle } from 'lucide-react';
+import { api } from '../../bridge/api';
+import type { TaskUpdate } from '../../bridge/types';
+import { useT, type MessageKey } from '../../i18n';
+import { formatPercent } from '../../lib/format';
+import { CANCELLABLE_KINDS, TASK_KINDS, useTasks } from '../../stores/tasks';
+import { Button } from '../ui/Button';
+import { Progress } from '../ui/Progress';
+
+const KIND_LABEL: Record<string, MessageKey> = {
+  [TASK_KINDS.scan]: 'task.kind.scan',
+  [TASK_KINDS.build]: 'task.kind.build',
+  [TASK_KINDS.recovery]: 'task.kind.recovery',
+  [TASK_KINDS.flash]: 'task.kind.flash',
+};
+
+const AUTO_HIDE_MS = 4000;
 
 export default function TaskBar() {
-  const activeTask = useTasks((s) => s.activeTask);
+  const t = useT();
+  const task = useTasks((s) => s.visible());
+  const dismiss = useTasks((s) => s.dismiss);
 
-  if (!activeTask) return null;
+  useEffect(() => {
+    if (!task || task.status !== 'completed') return;
+    const timer = window.setTimeout(() => dismiss(task.taskId), AUTO_HIDE_MS);
+    return () => window.clearTimeout(timer);
+  }, [task, dismiss]);
 
-  const progress = activeTask.progress ?? 0;
-  const isComplete = activeTask.status === 'completed';
-  const isFailed = activeTask.status === 'failed';
+  if (!task) return null;
+
+  const kindLabel = KIND_LABEL[task.kind] ? t(KIND_LABEL[task.kind]) : task.kind;
+  const running = task.status === 'running';
+  const percent = formatPercent(task.progress);
 
   return (
-    <div className="border-t border-[#222225] bg-[#09090b] px-4 py-2">
+    <div className="shrink-0 border-t border-line bg-bg px-4 py-2" aria-live="polite">
       <div className="flex items-center gap-3">
-        {isComplete ? (
-          <CheckCircle2 size={14} className="text-[#22c55e] flex-shrink-0" />
-        ) : isFailed ? (
-          <XCircle size={14} className="text-[#ef4444] flex-shrink-0" />
-        ) : (
-          <Loader2 size={14} className="animate-spin text-[#3b82f6] flex-shrink-0" />
-        )}
-
-        <span className="text-[12px] text-[#a0a0a8] truncate flex-1">
-          {activeTask.message ?? activeTask.kind}
+        <StatusIcon task={task} />
+        <span className="min-w-0 flex-1 truncate text-sm text-fg-2">
+          <span className="font-medium text-fg">{kindLabel}</span>
+          {task.message ? ` — ${task.message}` : running ? '' : ` — ${t(`task.status.${task.status}`)}`}
         </span>
-
-        {!isComplete && !isFailed && (
-          <span className="text-[11px] text-[#6e6e76] tabular-nums">
-            {Math.round(progress * 100)}%
-          </span>
+        {running && percent && <span className="text-xs tabular-nums text-fg-3">{percent}</span>}
+        {running && CANCELLABLE_KINDS.includes(task.kind) && (
+          <Button size="sm" variant="ghost" onClick={() => void api.taskCancel(task.taskId).catch(() => undefined)}>
+            {t('common.cancel')}
+          </Button>
+        )}
+        {!running && (
+          <button
+            type="button"
+            onClick={() => dismiss(task.taskId)}
+            aria-label={t('common.dismiss')}
+            className="rounded p-1 text-fg-3 hover:bg-panel-2 hover:text-fg"
+          >
+            <X size={13} aria-hidden />
+          </button>
         )}
       </div>
-
-      {/* Progress bar */}
-      {!isComplete && !isFailed && (
-        <div className="mt-1.5 h-[2px] w-full rounded-full bg-[#1a1a1d] overflow-hidden">
-          <div
-            className="h-full rounded-full bg-[#3b82f6] transition-[width] duration-300 ease-out"
-            style={{ width: `${progress * 100}%` }}
-          />
-        </div>
-      )}
+      {running && <Progress value={task.progress} className="mt-1.5" label={kindLabel} />}
     </div>
   );
+}
+
+function StatusIcon({ task }: { task: TaskUpdate }) {
+  switch (task.status) {
+    case 'completed':
+      return <CheckCircle2 size={14} className="shrink-0 text-ok" aria-hidden />;
+    case 'failed':
+      return <XCircle size={14} className="shrink-0 text-err" aria-hidden />;
+    case 'cancelled':
+      return <Ban size={14} className="shrink-0 text-fg-3" aria-hidden />;
+    default:
+      return <Loader2 size={14} className="shrink-0 animate-spin text-accent" aria-hidden />;
+  }
 }
