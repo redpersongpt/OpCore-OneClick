@@ -19,8 +19,9 @@ use crate::safety::disks::windows::{parse_inventory, WindowsHost, INVENTORY_SCRI
 use crate::safety::disks::{self, drive_letter};
 use crate::safety::flash_plan::{
     diskpart_error_is_size, diskpart_error_is_transient, diskpart_flash_script, diskpart_rescan_script,
-    parse_diskpart_result, parse_partition_number, parse_volume_root, partition_capacity, windows_diskpart_ps,
-    windows_partition_query_ps, windows_partition_sizes, windows_volume_query_ps, DiskpartResult, FlashPhase,
+    format_error_is_transient, format_volume_ps, parse_diskpart_result, parse_format_volume_result,
+    parse_partition_number, parse_volume_root, partition_capacity, windows_diskpart_ps, windows_partition_query_ps,
+    windows_partition_sizes, windows_volume_query_ps, DiskpartResult, FlashPhase, FormatVolumeResult,
     WindowsIdentity, VOLUME_LABEL,
 };
 use crate::safety::payload::{
@@ -32,6 +33,8 @@ use crate::tasks::cancellation::CancellationToken;
 const PS_TIMEOUT: Duration = Duration::from_secs(90);
 const DISKPART_TIMEOUT: Duration = Duration::from_secs(600);
 const DISKPART_ATTEMPTS: usize = 3;
+const FORMAT_TIMEOUT: Duration = Duration::from_secs(180);
+const FORMAT_ATTEMPTS: usize = 3;
 
 /// Drive letters of the running app, its data and the temp folder.
 fn app_drives() -> Vec<char> {
@@ -133,19 +136,46 @@ async fn find_volume_root(disk: u32, partition: u32) -> Result<PathBuf, AppError
         .with_suggestion("Check that automatic mounting is enabled (mountvol /E) and try again."))
 }
 
-/// Erase, partition and format in one diskpart run, then locate the new
-/// volume through Get-Partition; returns the volume root.
+/// Format the new partition with the Storage cmdlet. DiskPart's `format`
+/// needs volume focus, which a freshly created partition does not have.
+async fn format_volume(disk: u32, partition: u32) -> Result<(), AppError> {
+    let ps = format_volume_ps(disk, partition, VOLUME_LABEL)?;
+    let mut last = String::new();
+    for attempt in 1..=FORMAT_ATTEMPTS {
+        let output = process::powershell(&ps, FORMAT_TIMEOUT).await?;
+        match parse_format_volume_result(&output.stdout) {
+            FormatVolumeResult::Ok => return Ok(()),
+            FormatVolumeResult::Failed(message) => {
+                warn!(attempt, "FAT32 format failed: {message}");
+                last = message;
+                if !format_error_is_transient(&last) || attempt == FORMAT_ATTEMPTS {
+                    break;
+                }
+                tokio::time::sleep(Duration::from_secs(2)).await;
+            }
+        }
+    }
+    Err(
+        AppError::new("FORMAT_FAILED", format!("Formatting the USB drive as FAT32 failed: {last}"))
+            .with_suggestion("Unplug and reconnect the USB drive, close Explorer windows showing it, and try again."),
+    )
+}
+
+/// Erase and partition with diskpart, format with Format-Volume, then locate
+/// the new volume through Get-Partition; returns the volume root.
 async fn prepare_volume(
     disk: u32,
     identity: &WindowsIdentity<'_>,
     size_mb: u64,
     report: &(dyn Fn(FlashPhase, f64, &str) + Send + Sync),
 ) -> Result<PathBuf, AppError> {
-    report(FlashPhase::Partition, 0.0, "Erasing the USB drive, creating a GPT partition and formatting it FAT32");
-    let script = diskpart_flash_script(disk, size_mb, VOLUME_LABEL)?;
-    diskpart_with_retries(disk, &script, Some(identity), "Erasing and formatting the USB drive").await?;
-    report(FlashPhase::Format, 0.5, "Waiting for the new FAT32 volume");
+    report(FlashPhase::Partition, 0.0, "Erasing the USB drive and creating a GPT partition");
+    let script = diskpart_flash_script(disk, size_mb)?;
+    diskpart_with_retries(disk, &script, Some(identity), "Erasing and partitioning the USB drive").await?;
+    report(FlashPhase::Partition, 1.0, "GPT partition created");
     let partition = find_partition(disk).await?;
+    report(FlashPhase::Format, 0.0, "Formatting the FAT32 volume");
+    format_volume(disk, partition).await?;
     let root = find_volume_root(disk, partition).await?;
     report(FlashPhase::Format, 1.0, "FAT32 volume ready");
     Ok(root)

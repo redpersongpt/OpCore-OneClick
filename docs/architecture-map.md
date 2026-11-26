@@ -208,7 +208,7 @@ Webview hardening:
 
 | Host | Scan | Flash |
 |---|---|---|
-| Windows 10/11 | CIM/WMI, PnP device data and the registry; ACPI tables read from the firmware | diskpart; the FAT32 partition is capped at 32 GB so Windows can format it |
+| Windows 10/11 | CIM/WMI, PnP device data and the registry; ACPI tables read from the firmware | diskpart for the GPT partition, `Format-Volume` for FAT32; the partition is capped at 32 GB so Windows can format it |
 | Linux | sysfs, `/proc` and in-process CPUID (no `lspci` or `dmidecode` needed); ACPI tables from `/sys/firmware/acpi/tables`, which only root can read, so a scan as a normal user skips them with a warning | One elevated script (`pkexec`) that checks the disk identity again, partitions, formats, copies and reads the files back |
 | macOS | Mainly builds for another PC from a profile exported on the target | `diskutil` behind the administrator prompt |
 

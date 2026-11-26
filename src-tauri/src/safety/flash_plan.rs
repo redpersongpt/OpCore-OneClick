@@ -99,19 +99,19 @@ pub fn partition_capacity(size_mb: u64) -> u64 {
     size_mb * MIB
 }
 
-/// One diskpart run: wipe the disk, convert it to GPT, create one Basic Data
-/// partition of `size_mb` MiB, quick-format it FAT32 and give it a drive
-/// letter (when none is free the volume is still reachable by its GUID path).
-pub fn diskpart_flash_script(disk: u32, size_mb: u64, label: &str) -> Result<String, AppError> {
-    let label = validate_fat_label(label)?;
+/// One diskpart run: wipe the disk, convert it to GPT (tolerated when the
+/// disk already is GPT), create one Basic Data partition of `size_mb` MiB and
+/// assign it. Formatting happens in a second step with `Format-Volume`:
+/// diskpart's `format` needs volume focus, which a fresh partition does not
+/// have even after `select partition` (see the 2.5.6/6.0.1 fixes).
+pub fn diskpart_flash_script(disk: u32, size_mb: u64) -> Result<String, AppError> {
     Ok([
         format!("select disk {disk}"),
         "attributes disk clear readonly noerr".to_string(),
         "online disk noerr".to_string(),
         "clean".to_string(),
-        "convert gpt".to_string(),
+        "convert gpt noerr".to_string(),
         format!("create partition primary size={size_mb}"),
-        format!("format fs=fat32 quick label={label}"),
         "assign noerr".to_string(),
         "exit".to_string(),
         String::new(),
@@ -201,6 +201,51 @@ pub fn parse_diskpart_result(stdout: &str) -> DiskpartResult {
         .unwrap_or(-1);
     let output = stdout.lines().filter(|l| !l.trim().starts_with("DISKPART-EXIT:")).collect::<Vec<_>>().join("\n");
     DiskpartResult::Finished { exit_code, output: output.trim().to_string() }
+}
+
+/// PowerShell that formats the Basic Data partition of `disk` as FAT32 with
+/// the Storage cmdlet. Unlike diskpart's `format`, this does not depend on the
+/// volume focus of a newly created partition.
+/// Prints `FORMAT_VOLUME_OK` or `FORMAT_VOLUME_FAILED: <message>`.
+pub fn format_volume_ps(disk: u32, partition: u32, label: &str) -> Result<String, AppError> {
+    let label = validate_fat_label(label)?;
+    Ok(format!(
+        "$p = @(Get-Partition -DiskNumber {disk} -PartitionNumber {partition} -ErrorAction SilentlyContinue)\n\
+         if ($p.Count -eq 0) {{ Write-Output 'FORMAT_VOLUME_FAILED: partition not found'; exit 0 }}\n\
+         $v = @($p[0] | Get-Volume -ErrorAction SilentlyContinue)\n\
+         if ($v.Count -eq 0) {{ Write-Output 'FORMAT_VOLUME_FAILED: volume not found'; exit 0 }}\n\
+         try {{ $v[0] | Format-Volume -FileSystem FAT32 -NewFileSystemLabel {label} -Confirm:$false -Force -ErrorAction Stop | Out-Null; Write-Output 'FORMAT_VOLUME_OK' }}\n\
+         catch {{ Write-Output ('FORMAT_VOLUME_FAILED: ' + $_.Exception.Message) }}\n",
+        label = ps_quote(label),
+    ))
+}
+
+/// A volume that is still appearing or held by Explorer is often retryable.
+pub fn format_error_is_transient(output: &str) -> bool {
+    let lower = output.to_lowercase();
+    lower.contains("being used by another process")
+        || lower.contains("access is denied")
+        || lower.contains("not found")
+        || lower.contains("not ready")
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum FormatVolumeResult {
+    Ok,
+    Failed(String),
+}
+
+pub fn parse_format_volume_result(stdout: &str) -> FormatVolumeResult {
+    for line in stdout.lines() {
+        let line = line.trim();
+        if line == "FORMAT_VOLUME_OK" {
+            return FormatVolumeResult::Ok;
+        }
+        if let Some(message) = line.strip_prefix("FORMAT_VOLUME_FAILED:") {
+            return FormatVolumeResult::Failed(message.trim().to_string());
+        }
+    }
+    FormatVolumeResult::Failed(format!("unexpected formatter output: {}", stdout.trim()))
 }
 
 /// PowerShell printing `PARTITION:<n>` for the first Basic Data partition.
@@ -515,13 +560,14 @@ mod tests {
 
     #[test]
     fn diskpart_scripts() {
-        let script = diskpart_flash_script(2, 32_000, "OPENCORE").unwrap();
+        let script = diskpart_flash_script(2, 32_000).unwrap();
         assert_eq!(
             script,
-            "select disk 2\r\nattributes disk clear readonly noerr\r\nonline disk noerr\r\nclean\r\nconvert gpt\r\n\
-             create partition primary size=32000\r\nformat fs=fat32 quick label=OPENCORE\r\nassign noerr\r\nexit\r\n"
+            "select disk 2\r\nattributes disk clear readonly noerr\r\nonline disk noerr\r\nclean\r\nconvert gpt noerr\r\n\
+             create partition primary size=32000\r\nassign noerr\r\nexit\r\n"
         );
-        assert!(diskpart_flash_script(2, 1000, "bad label").is_err());
+        // Formatting is done by Format-Volume, not by diskpart.
+        assert!(!script.contains("format"));
         assert!(diskpart_error_is_transient("Virtual Disk Service error:\nThe device is not ready.", 0));
         assert!(diskpart_error_is_transient("", 4));
         assert!(!diskpart_error_is_transient("DiskPart succeeded", 0));
@@ -529,15 +575,33 @@ mod tests {
     }
 
     #[test]
+    fn format_volume_script_and_result() {
+        let ps = format_volume_ps(2, 1, "OPENCORE").unwrap();
+        assert!(ps.contains("Get-Partition -DiskNumber 2 -PartitionNumber 1"));
+        assert!(ps.contains("Format-Volume -FileSystem FAT32 -NewFileSystemLabel 'OPENCORE'"));
+        assert!(ps.contains("FORMAT_VOLUME_OK"));
+        assert!(format_volume_ps(2, 1, "bad label").is_err());
+        assert_eq!(parse_format_volume_result("FORMAT_VOLUME_OK\n"), FormatVolumeResult::Ok);
+        match parse_format_volume_result("FORMAT_VOLUME_FAILED: access is denied\n") {
+            FormatVolumeResult::Failed(message) => assert_eq!(message, "access is denied"),
+            other => panic!("{other:?}"),
+        }
+        assert!(matches!(parse_format_volume_result("noise"), FormatVolumeResult::Failed(_)));
+        assert!(format_error_is_transient("The process cannot access the file because it is being used by another process"));
+        assert!(format_error_is_transient("FORMAT_VOLUME_FAILED: volume not found"));
+        assert!(!format_error_is_transient("FAT32 format is not supported"));
+    }
+
+    #[test]
     fn diskpart_powershell_wrapper() {
         let identity = WindowsIdentity { size_bytes: 30_752_000_000, serial: Some(" 4C53'01 ") };
-        let ps = windows_diskpart_ps(2, &diskpart_flash_script(2, 32_000, "OPENCORE").unwrap(), Some(&identity));
+        let ps = windows_diskpart_ps(2, &diskpart_flash_script(2, 32_000).unwrap(), Some(&identity));
         assert!(ps.starts_with("$d = Get-Disk -Number 2 "));
         assert!(ps.contains("$expectedSerial = '4C53''01'"));
         assert!(ps.contains("[uint64]$d.Size -ne 30752000000"));
         assert!(ps.contains(
-            "'select disk 2','attributes disk clear readonly noerr','online disk noerr','clean','convert gpt',\
-             'create partition primary size=32000','format fs=fat32 quick label=OPENCORE','assign noerr','exit'"
+            "'select disk 2','attributes disk clear readonly noerr','online disk noerr','clean','convert gpt noerr',\
+             'create partition primary size=32000','assign noerr','exit'"
         ));
         // The identity check comes before diskpart runs.
         assert!(ps.find("IDENTITY:changed").unwrap() < ps.find("diskpart.exe").unwrap());
@@ -550,9 +614,11 @@ mod tests {
     fn windows_scripts_fit_on_the_command_line() {
         // `process::powershell` refuses encoded scripts over 30 000 characters.
         let identity = WindowsIdentity { size_bytes: u64::MAX, serial: Some("WD-WCC4N0123456789012345678901234") };
-        let flash = windows_diskpart_ps(127, &diskpart_flash_script(127, 32_000, "OPENCORE").unwrap(), Some(&identity));
+        let flash = windows_diskpart_ps(127, &diskpart_flash_script(127, 32_000).unwrap(), Some(&identity));
+        let format = format_volume_ps(127, 1, "OPENCORE").unwrap();
         for script in [
             flash.as_str(),
+            format.as_str(),
             crate::safety::disks::windows::INVENTORY_SCRIPT,
             &windows_partition_query_ps(127),
             &windows_volume_query_ps(127, 12),
