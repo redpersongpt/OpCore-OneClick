@@ -3,6 +3,27 @@
 All notable changes to OpCore-OneClick. Versions before 4.0.0 describe the
 earlier Electron app; 4.0.0 moved to Tauri and a new app-data location.
 
+## 6.0.2 — 2026-11-26
+
+### Windows USB flash
+- DiskPart now only wipes, converts to GPT and creates/assigns the partition.
+  FAT32 formatting moved to the documented `Format-Volume` cmdlet: diskpart's
+  `format` requires *volume* focus, which a freshly created partition does not
+  have even after `select partition` ("No volume is selected"). This restores
+  the two-phase preparation the Electron app had in 2.7.17.
+- Formatting failures are now reported as `FORMAT_FAILED` and retried when the
+  volume is still appearing or held by Explorer.
+
+## 6.0.1 — 2026-11-25
+
+### Windows USB flash
+- Restored the explicit `select partition 1` before `format fs=fat32` in the
+  diskpart script. Without it, diskpart could keep focus on the disk and fail
+  with "No volume is selected" (the 2.5.6 fix was lost in the 6.0.0 rewrite).
+- Made `convert gpt` tolerant of disks that are already GPT (`noerr`), so a
+  previously converted drive no longer stops the flash with "The specified
+  disk is not formatted with MBR".
+
 ## 6.0.0 — 2026-10-06
 
 A rebuild of the backend around one idea: the scan produces a hardware
